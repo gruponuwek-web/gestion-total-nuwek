@@ -1,5 +1,5 @@
 /* ================== SEED / STORE ================== */
-const DV = 4;
+const DV = 5;
 function iso(y,m,d){return new Date(y,m-1,d).toISOString().split('T')[0];}
 function todayISO(){return new Date().toISOString().split('T')[0];}
 
@@ -152,7 +152,7 @@ class Store{
     ];
     services.forEach(sv=>{ sv.frentes=sv.frentes.map((n,i)=>({name:n,color:FRENTE_PALETTE[i%FRENTE_PALETTE.length]})); if(!sv.subLinks) sv.subLinks=[]; });
     (services.find(s=>s.id==='sv_mkt')||{}).subLinks=['Planeación / Copys','Material terminado'];
-    return {v:DV,staff,clients,services,tags,projects,frentes,etapas,tasks,comments,payments};
+    return {v:DV,staff:[],clients:[],services:[],tags:[],projects:[],frentes:[],etapas:[],tasks:[],comments:[],payments:[]};
   }
 
   /* getters */
@@ -248,9 +248,9 @@ class Store{
   removeServiceSubLink(sid,label){ const s=this.service(sid); if(s&&s.subLinks){ s.subLinks=s.subLinks.filter(l=>l!==label); this.save(); } }
   subLinksForProject(pid){ const p=this.project(pid); const s=p&&this.service(p.serviceId); return (s&&s.subLinks)||[]; }
   /* catálogos: personal */
-  addStaff(o){ const u=Object.assign({id:'u_'+Date.now(),type:'nuwek',active:true},o); this.d.staff.push(u); this.save(); return u; }
-  updateStaff(id,patch){ const u=this.d.staff.find(x=>x.id===id); if(u){Object.assign(u,patch); this.save();} }
-  toggleStaffActive(id){ const u=this.d.staff.find(x=>x.id===id); if(u){ u.active=(u.active===false); this.save(); } }
+  addStaff(o){ const u=Object.assign({id:'u_'+Date.now(),type:'nuwek',active:true},o); this.d.staff.push(u); this.save(); if(typeof dbSavePerson==='function') dbSavePerson(u); return u; }
+  updateStaff(id,patch){ const u=this.d.staff.find(x=>x.id===id); if(u){Object.assign(u,patch); this.save(); if(typeof dbSavePerson==='function') dbSavePerson(u);} }
+  toggleStaffActive(id){ const u=this.d.staff.find(x=>x.id===id); if(u){ u.active=(u.active===false); this.save(); if(typeof dbSavePerson==='function') dbSavePerson(u); } }
   activeStaff(){ return this.d.staff.filter(u=>u.active!==false); }
   /* catálogos: etiquetas */
   tagColor(name){ const t=(this.d.tags||[]).find(x=>x.name===name); return t?t.color:'#8a9a93'; }
@@ -2074,5 +2074,20 @@ function setLoginBgFile(input){ const f=input.files&&input.files[0]; if(!f) retu
 function resetLoginBg(){ if(confirm('¿Restaurar el fondo por defecto?')){ store.setSetting('loginBg',null); render(); } }
 function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMentions=[];subView='list';render();}
 
-/* init */
-render();
+/* init: cargar Personal desde Supabase y luego arrancar */
+async function boot(){
+  try{
+    if(typeof dbLoadPersonal==='function'){
+      const rows = await dbLoadPersonal();
+      store.d.staff = rows;      // el equipo viene de Supabase
+      store.save();               // cache local
+    }
+  }catch(e){
+    console.error('Error cargando Personal desde Supabase:', e);
+    const app=document.getElementById('app');
+    if(app) app.innerHTML='<div style="padding:48px;max-width:520px;margin:40px auto;font-family:Inter,sans-serif;color:#223c36;text-align:center"><h2>No se pudo conectar con la base de datos</h2><p style="color:#6b7d76">Revisa tu conexión a internet y recarga la página. Si el problema sigue, avísame. (Detalle técnico en la consola del navegador.)</p></div>';
+    return;
+  }
+  render();
+}
+boot();
