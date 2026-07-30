@@ -204,11 +204,11 @@ class Store{
   removeScorecard(pid,id){ const p=this.project(pid); if(!p)return; p.scorecards=(p.scorecards||[]).filter(x=>x.id!==id); this.save(); }
   updateLink(pid,lid,patch){ const p=this.project(pid); if(!p||!p.links)return; const l=p.links.find(x=>x.id===lid); if(l){Object.assign(l,patch); this.save();} }
   removeLink(pid,lid){ const p=this.project(pid); if(!p||!p.links)return; p.links=p.links.filter(x=>x.id!==lid); this.save(); }
-  addClient(o){ const c=Object.assign({id:'c_'+Date.now(),name:'',razon:'',rfc:'',location:'',web:'',ig:'',generalResponsibleId:null,people:[]},o); this.d.clients.push(c); this.save(); return c; }
-  updateClient(id,patch){ const c=this.client(id); if(c){Object.assign(c,patch); this.save();} }
-  addClientPerson(cid,o){ const c=this.client(cid); if(!c)return; const p=Object.assign({id:'p_'+Date.now(),type:'cliente',bossId:null},o); c.people.push(p); this.save(); return p; }
-  updateClientPerson(cid,pid,patch){ const c=this.client(cid); if(!c)return; const p=c.people.find(x=>x.id===pid); if(p){Object.assign(p,patch); this.save();} }
-  removeClientPerson(cid,pid){ const c=this.client(cid); if(!c)return; c.people=c.people.filter(x=>x.id!==pid); this.save(); }
+  addClient(o){ const c=Object.assign({id:'c_'+Date.now(),name:'',razon:'',rfc:'',location:'',web:'',ig:'',generalResponsibleId:null,people:[]},o); this.d.clients.push(c); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return c; }
+  updateClient(id,patch){ const c=this.client(id); if(c){Object.assign(c,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
+  addClientPerson(cid,o){ const c=this.client(cid); if(!c)return; const p=Object.assign({id:'p_'+Date.now(),type:'cliente',bossId:null},o); c.people.push(p); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return p; }
+  updateClientPerson(cid,pid,patch){ const c=this.client(cid); if(!c)return; const p=c.people.find(x=>x.id===pid); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
+  removeClientPerson(cid,pid){ const c=this.client(cid); if(!c)return; c.people=c.people.filter(x=>x.id!==pid); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); }
   addEtapa(pid,name,start,end){ const ord=this.etapasOf(pid).length+1; const e={id:uid('et_'),projectId:pid,name:name||('Etapa '+ord),start,end,order:ord}; this.d.etapas.push(e); this.save(); return e; }
   updateEtapa(eid,patch){ const e=this.d.etapas.find(x=>x.id===eid); if(e){Object.assign(e,patch); this.save();} }
   removeEtapa(eid){ this.d.etapas=this.d.etapas.filter(e=>e.id!==eid); this.save(); }
@@ -2081,6 +2081,11 @@ async function boot(){
       const rows = await dbLoadPersonal();
       store.d.staff = rows;      // el equipo viene de Supabase
       store.save();               // cache local
+    }
+    if(typeof dbLoadClientes==='function'){
+      const cli = await dbLoadClientes();
+      store.d.clients = cli;      // los clientes vienen de Supabase
+      store.save();
     }
   }catch(e){
     console.error('Error cargando Personal desde Supabase:', e);
