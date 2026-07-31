@@ -234,17 +234,17 @@ class Store{
   markCommentRead(cmId,uid){ const cm=this.d.comments.find(c=>c.id===cmId); if(cm&&(cm.mentions||[]).includes(uid)){ cm.readBy=cm.readBy||[]; if(!cm.readBy.includes(uid)) cm.readBy.push(uid); this.save(); } }
 
   /* catálogos: servicios */
-  addService(name,listPrice,opCost){ const s={id:'sv_'+Date.now(),name,listPrice:+listPrice||0,opCost:+opCost||0,frentes:[],tasks:[]}; this.d.services.push(s); this.save(); return s; }
-  updateService(id,patch){ const s=this.service(id); if(s){Object.assign(s,patch); this.save();} }
-  removeService(id){ this.d.services=this.d.services.filter(s=>s.id!==id); this.save(); }
+  addService(name,listPrice,opCost){ const s={id:'sv_'+Date.now(),name,listPrice:+listPrice||0,opCost:+opCost||0,frentes:[],tasks:[],subLinks:[]}; this.d.services.push(s); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); return s; }
+  updateService(id,patch){ const s=this.service(id); if(s){Object.assign(s,patch); this.save(); if(typeof dbSaveService==='function') dbSaveService(s);} }
+  removeService(id){ this.d.services=this.d.services.filter(s=>s.id!==id); this.save(); if(typeof dbDeleteService==='function') dbDeleteService(id); }
   serviceUsed(id){ return this.d.projects.some(p=>p.serviceId===id); }
-  addServiceFrente(sid,name,color){ const s=this.service(sid); if(s&&name&&!s.frentes.some(f=>f.name===name)){ s.frentes.push({name,color:color||FRENTE_PALETTE[s.frentes.length%FRENTE_PALETTE.length]}); this.save(); } }
-  updateServiceFrente(sid,oldName,newName,color){ const s=this.service(sid); if(!s)return; const f=s.frentes.find(x=>x.name===oldName); if(f){ f.name=newName||f.name; if(color)f.color=color; } (s.tasks||[]).forEach(t=>{ if(t[0]===oldName)t[0]=newName; }); this.save(); }
-  removeServiceFrente(sid,name){ const s=this.service(sid); if(s){ s.frentes=s.frentes.filter(f=>f.name!==name); s.tasks=(s.tasks||[]).filter(t=>t[0]!==name); this.save(); } }
-  addServiceTask(sid,frenteName,taskName,desc){ const s=this.service(sid); if(s&&taskName){ s.tasks=s.tasks||[]; s.tasks.push([frenteName,taskName,desc||'']); this.save(); } }
-  updateServiceTask(sid,idx,frenteName,taskName,desc){ const s=this.service(sid); if(s&&s.tasks[idx]){ s.tasks[idx]=[frenteName,taskName,desc||'']; this.save(); } }
-  removeServiceTask(sid,idx){ const s=this.service(sid); if(s&&s.tasks){ s.tasks.splice(idx,1); this.save(); } }
-  addServiceSubLink(sid,label){ const s=this.service(sid); if(s&&label){ s.subLinks=s.subLinks||[]; if(!s.subLinks.includes(label)){ s.subLinks.push(label); this.save(); } } }
+  addServiceFrente(sid,name,color){ const s=this.service(sid); if(s&&name&&!s.frentes.some(f=>f.name===name)){ s.frentes.push({name,color:color||FRENTE_PALETTE[s.frentes.length%FRENTE_PALETTE.length]}); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } }
+  updateServiceFrente(sid,oldName,newName,color){ const s=this.service(sid); if(!s)return; const f=s.frentes.find(x=>x.name===oldName); if(f){ f.name=newName||f.name; if(color)f.color=color; } (s.tasks||[]).forEach(t=>{ if(t[0]===oldName)t[0]=newName; }); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); }
+  removeServiceFrente(sid,name){ const s=this.service(sid); if(s){ s.frentes=s.frentes.filter(f=>f.name!==name); s.tasks=(s.tasks||[]).filter(t=>t[0]!==name); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } }
+  addServiceTask(sid,frenteName,taskName,desc){ const s=this.service(sid); if(s&&taskName){ s.tasks=s.tasks||[]; s.tasks.push([frenteName,taskName,desc||'']); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } }
+  updateServiceTask(sid,idx,frenteName,taskName,desc){ const s=this.service(sid); if(s&&s.tasks[idx]){ s.tasks[idx]=[frenteName,taskName,desc||'']; this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } }
+  removeServiceTask(sid,idx){ const s=this.service(sid); if(s&&s.tasks){ s.tasks.splice(idx,1); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } }
+  addServiceSubLink(sid,label){ const s=this.service(sid); if(s&&label){ s.subLinks=s.subLinks||[]; if(!s.subLinks.includes(label)){ s.subLinks.push(label); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); } } }
   removeServiceSubLink(sid,label){ const s=this.service(sid); if(s&&s.subLinks){ s.subLinks=s.subLinks.filter(l=>l!==label); this.save(); } }
   subLinksForProject(pid){ const p=this.project(pid); const s=p&&this.service(p.serviceId); return (s&&s.subLinks)||[]; }
   /* catálogos: personal */
@@ -2085,6 +2085,11 @@ async function boot(){
     if(typeof dbLoadClientes==='function'){
       const cli = await dbLoadClientes();
       store.d.clients = cli;      // los clientes vienen de Supabase
+      store.save();
+    }
+    if(typeof dbLoadServicios==='function'){
+      const svs = await dbLoadServicios();
+      store.d.services = svs;     // los servicios vienen de Supabase
       store.save();
     }
   }catch(e){
