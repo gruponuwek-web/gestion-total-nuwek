@@ -194,7 +194,7 @@ class Store{
   taskTime(t){ return (t.subtasks||[]).reduce((s,x)=>s+(x.timeSpent||0),0); }
 
   /* mutations */
-  addProject(p){ p.id='pr_'+Date.now(); this.d.projects.push(p); this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p); return p; }
+  addProject(p){ p.id='pr_'+Date.now(); this.d.projects.push(p); this.save(); return p; }
   updateProject(id,patch){ const p=this.project(id); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p);} }
   linksOf(pid){ const p=this.project(pid); return (p&&p.links)||[]; }
   addLink(pid,label,url){ const p=this.project(pid); if(!p)return; p.links=p.links||[]; p.links.push({id:'lk_'+Date.now(),label,url}); this.save(); }
@@ -579,11 +579,14 @@ function wizAddEt(){const n=val('w-et-name'),s=val('w-et-start'),e=val('w-et-end
 function wizDelEt(i){wiz.etapas.splice(i,1);render();}
 function wizAddFr(){const n=val('w-fr-name');if(!n)return;wiz.frentes.push({name:n,color:FRENTE_PALETTE[wiz.frentes.length%FRENTE_PALETTE.length]});render();}
 function wizDelFr(i){wiz.frentes.splice(i,1);render();}
-function wizCreate(){
+async function wizCreate(){
   wizSaveStep2 && (wiz.step===2&&wizSaveStep2());
   if(wiz.frentes.length===0){alert('Agrega al menos un frente.');return;}
   if((!wiz.price||wiz.price===0) && wiz.monthlyPay && wiz.months) wiz.price=wiz.monthlyPay*wiz.months;
   const p=store.addProject({clientId:wiz.clientId,serviceId:wiz.serviceId,name:store.service(wiz.serviceId).name,price:wiz.price,monthlyPay:wiz.monthlyPay,months:wiz.months,paymentDay:wiz.paymentDay,startDate:wiz.startDate,endDate:wiz.endDate,status:'active',alcances:wiz.alcances});
+  // Guardar el PROYECTO en Supabase y ESPERAR a que exista antes de crear sus frentes/etapas
+  // (frentes y etapas dependen del proyecto por llave foránea).
+  if(typeof dbSaveProject==='function'){ try{ await dbSaveProject(p); }catch(e){ console.error(e); } }
   store.generatePayments(p);
   wiz.frentes.forEach(f=>store.addFrente(p.id,f.name,f.color));
   wiz.etapas.forEach(e=>store.addEtapa(p.id,e.name,e.start,e.end));
