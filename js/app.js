@@ -230,8 +230,8 @@ class Store{
   removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
   updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
-  addComment(tid,uid,text,attachments,mentions){ this.d.comments.push({id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}); this.save(); }
-  markCommentRead(cmId,uid){ const cm=this.d.comments.find(c=>c.id===cmId); if(cm&&(cm.mentions||[]).includes(uid)){ cm.readBy=cm.readBy||[]; if(!cm.readBy.includes(uid)) cm.readBy.push(uid); this.save(); } }
+  addComment(tid,uid,text,attachments,mentions){ const cm={id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}; this.d.comments.push(cm); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
+  markCommentRead(cmId,uid){ const cm=this.d.comments.find(c=>c.id===cmId); if(cm&&(cm.mentions||[]).includes(uid)){ cm.readBy=cm.readBy||[]; if(!cm.readBy.includes(uid)) cm.readBy.push(uid); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); } }
 
   /* catálogos: servicios */
   addService(name,listPrice,opCost){ const s={id:'sv_'+Date.now(),name,listPrice:+listPrice||0,opCost:+opCost||0,frentes:[],tasks:[],subLinks:[]}; this.d.services.push(s); this.save(); if(typeof dbSaveService==='function') dbSaveService(s); return s; }
@@ -254,9 +254,9 @@ class Store{
   activeStaff(){ return this.d.staff.filter(u=>u.active!==false); }
   /* catálogos: etiquetas */
   tagColor(name){ const t=(this.d.tags||[]).find(x=>x.name===name); return t?t.color:'#8a9a93'; }
-  addTag(name,color){ if(name&&!this.d.tags.some(t=>t.name===name)){ this.d.tags.push({name,color:color||'#8a9a93'}); this.save(); } }
-  renameTag(oldN,newN,color){ if(!newN)return; const t=this.d.tags.find(x=>x.name===oldN); if(t){ t.name=newN; if(color)t.color=color; } this.d.tasks.forEach(tk=>{ tk.tags=(tk.tags||[]).map(x=>x===oldN?newN:x); }); this.save(); }
-  removeTag(name){ this.d.tags=this.d.tags.filter(t=>t.name!==name); this.save(); }
+  addTag(name,color){ if(name&&!this.d.tags.some(t=>t.name===name)){ const tg={name,color:color||'#8a9a93'}; this.d.tags.push(tg); this.save(); if(typeof dbSaveTag==='function') dbSaveTag(tg); } }
+  renameTag(oldN,newN,color){ if(!newN)return; const t=this.d.tags.find(x=>x.name===oldN); if(t){ t.name=newN; if(color)t.color=color; } this.d.tasks.forEach(tk=>{ tk.tags=(tk.tags||[]).map(x=>x===oldN?newN:x); }); this.save(); if(typeof dbRenameTag==='function') dbRenameTag(oldN,newN,color); if(typeof dbSaveTask==='function') this.d.tasks.forEach(tk=>{ if((tk.tags||[]).includes(newN)) dbSaveTask(tk); }); }
+  removeTag(name){ this.d.tags=this.d.tags.filter(t=>t.name!==name); this.save(); if(typeof dbDeleteTag==='function') dbDeleteTag(name); }
 }
 const store = new Store();
 
@@ -1842,7 +1842,7 @@ function confirmSubTime(tid,sid){const el=document.getElementById('stime-'+sid);
 function cancelSubTime(){timingSub=null;render();}
 function delSub(tid,sid){const s=store.task(tid).subtasks.find(x=>x.id===sid);if(confirm('¿Eliminar subtarea?')){const nm=s?s.name:'';store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
 function setSubView(v){subView=v;editingLink=null;render();}
-function logEvent(taskId, action){ if(!taskId||!action) return; store.d.log=store.d.log||[]; store.d.log.push({id:'lg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), userId:currentUser, taskId, action}); store.save(); }
+function logEvent(taskId, action){ if(!taskId||!action) return; store.d.log=store.d.log||[]; const e={id:'lg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), userId:currentUser, taskId, action}; store.d.log.push(e); store.save(); if(typeof dbSaveLog==='function') dbSaveLog(e); }
 function taskLogPanel(t){
   const entries=(store.d.log||[]).filter(e=>e.taskId===t.id).slice().sort((a,b)=>a.ts<b.ts?1:-1);
   if(!entries.length) return '<div class="muted" style="padding:6px 0">Sin movimientos registrados aún.</div>';
@@ -2103,6 +2103,9 @@ async function boot(){
       store.d.tasks = tk;               // tareas (con subtareas dentro)
       store.save();
     }
+    if(typeof dbLoadComentarios==='function'){ store.d.comments = await dbLoadComentarios(); store.save(); }
+    if(typeof dbLoadLog==='function'){ store.d.log = await dbLoadLog(); store.save(); }
+    if(typeof dbLoadTags==='function'){ store.d.tags = await dbLoadTags(); store.save(); }
   }catch(e){
     console.error('Error cargando Personal desde Supabase:', e);
     const app=document.getElementById('app');
