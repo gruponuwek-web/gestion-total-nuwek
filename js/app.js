@@ -168,11 +168,11 @@ class Store{
   commentsOf(tid){return this.d.comments.filter(c=>c.taskId===tid).sort((a,b)=>new Date(a.ts)-new Date(b.ts));}
   paymentsOf(pid){return this.d.payments.filter(p=>p.projectId===pid);}
   _genPayments(p){ const out=[]; if(!p.startDate)return out; const [y,mo]=p.startDate.split('-').map(Number); for(let m=0;m<(p.months||0);m++){ const dt=new Date(y,(mo-1)+m,p.paymentDay||1); const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); out.push({id:'pay_'+p.id+'_'+m,projectId:p.id,dueDate:ds,amount:p.monthlyPay||0,paid:false,paidDate:null}); } return out; }
-  generatePayments(p){ this.d.payments=this.d.payments.filter(x=>x.projectId!==p.id).concat(this._genPayments(p)); this.save(); }
-  togglePayment(payId){ const x=this.d.payments.find(p=>p.id===payId); if(x){ x.paid=!x.paid; x.paidDate=x.paid?todayISO():null; this.save(); } }
-  addPayment(pid,dueDate,amount){ this.d.payments.push({id:'pay_'+pid+'_'+Date.now(),projectId:pid,dueDate,amount:+amount||0,paid:false,paidDate:null}); this.save(); }
-  updatePayment(payId,patch){ const x=this.d.payments.find(p=>p.id===payId); if(x){ if(patch.amount!==undefined)patch.amount=+patch.amount||0; Object.assign(x,patch); this.save(); } }
-  removePayment(payId){ this.d.payments=this.d.payments.filter(p=>p.id!==payId); this.save(); }
+  generatePayments(p){ this.d.payments=this.d.payments.filter(x=>x.projectId!==p.id).concat(this._genPayments(p)); this.save(); if(typeof dbReplacePayments==='function') dbReplacePayments(p.id, this.paymentsOf(p.id)); }
+  togglePayment(payId){ const x=this.d.payments.find(p=>p.id===payId); if(x){ x.paid=!x.paid; x.paidDate=x.paid?todayISO():null; this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); } }
+  addPayment(pid,dueDate,amount){ const x={id:'pay_'+pid+'_'+Date.now(),projectId:pid,dueDate,amount:+amount||0,paid:false,paidDate:null}; this.d.payments.push(x); this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); }
+  updatePayment(payId,patch){ const x=this.d.payments.find(p=>p.id===payId); if(x){ if(patch.amount!==undefined)patch.amount=+patch.amount||0; Object.assign(x,patch); this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); } }
+  removePayment(payId){ this.d.payments=this.d.payments.filter(p=>p.id!==payId); this.save(); if(typeof dbDeletePayment==='function') dbDeletePayment(payId); }
   generatePaymentsCustom(pid,freq,count,total,startDate){
     this.d.payments=this.d.payments.filter(x=>x.projectId!==pid);
     const [y,mo,da]=startDate.split('-').map(Number);
@@ -186,7 +186,7 @@ class Store{
       const amt=(i===count-1)?Math.round((total-acc)*100)/100:base; acc+=base;
       this.d.payments.push({id:'pay_'+pid+'_'+i+'_'+Date.now(),projectId:pid,dueDate:ds,amount:amt,paid:false,paidDate:null});
     }
-    this.save();
+    this.save(); if(typeof dbReplacePayments==='function') dbReplacePayments(pid, this.paymentsOf(pid));
   }
 
   /* etapa deducida por fecha */
@@ -2126,6 +2126,7 @@ async function boot(){
     if(typeof dbLoadComentarios==='function'){ store.d.comments = await dbLoadComentarios(); store.save(); }
     if(typeof dbLoadLog==='function'){ store.d.log = await dbLoadLog(); store.save(); }
     if(typeof dbLoadTags==='function'){ store.d.tags = await dbLoadTags(); store.save(); }
+    if(typeof dbLoadPagos==='function'){ store.d.payments = await dbLoadPagos(); store.save(); }
   }catch(e){
     console.error('Error cargando Personal desde Supabase:', e);
     const app=document.getElementById('app');
