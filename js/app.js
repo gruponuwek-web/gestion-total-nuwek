@@ -1434,7 +1434,7 @@ function quickModal(){
           <div id="pers-photo-prev" class="pers-photo" style="${u.photo?`background-image:url('${u.photo}')`:''}">${u.photo?'':esc((u.name||'?')[0])}</div>
           <div><input type="hidden" id="qm-photo" value="${u.photo||''}">
             <input type="file" accept="image/*" id="qm-photo-file" onchange="persPhotoPick(this)" style="font-size:.8rem">
-            <div class="hint">Foto JPG/PNG · se comprime sola</div></div>
+            <div class="hint" id="qm-photo-hint">Foto JPG/PNG · se comprime sola</div></div>
         </div>
         <div class="field row"><div><label>Nombre (acceso y todo el sistema)</label><input id="qm-fname" value="${esc(u.firstName||u.name||'')}" placeholder="Carlos"></div>
           <div><label>Segundo nombre (opcional)</label><input id="qm-sname" value="${esc(u.secondName||'')}" placeholder="Alberto"></div></div>
@@ -1623,8 +1623,21 @@ function persTab(id){
 }
 function persPhotoPick(input){
   const f=input.files&&input.files[0]; if(!f) return;
-  compressImage(f,(url)=>{ const hid=document.getElementById('qm-photo'); if(hid)hid.value=url;
-    const pv=document.getElementById('pers-photo-prev'); if(pv){pv.style.backgroundImage=`url('${url}')`;pv.textContent='';} });
+  compressImage(f,(dataUrl)=>{
+    const pv=document.getElementById('pers-photo-prev'); const hid=document.getElementById('qm-photo'); const hint=document.getElementById('qm-photo-hint');
+    if(pv){ pv.style.backgroundImage=`url('${dataUrl}')`; pv.textContent=''; }   // preview inmediato
+    if(typeof dbUploadImage==='function'){
+      if(hint) hint.textContent='Subiendo foto…';
+      dbUploadImage(dataUrlToBlob(dataUrl),'personal').then(pubUrl=>{
+        if(hid) hid.value=pubUrl;                                               // se guarda la URL, no el base64
+        if(hint) hint.textContent='Foto lista ✓';
+      }).catch(e=>{
+        if(hid) hid.value=dataUrl;                                             // fallback: base64 local
+        if(hint) hint.textContent='No se pudo subir al Storage; se guardará localmente.';
+        console.error('Error subiendo foto:', e);
+      });
+    } else { if(hid) hid.value=dataUrl; }
+  });
 }
 function readPerson(){
   const pass=(val('qm-pass')||'').trim();
@@ -2069,7 +2082,14 @@ function selectCalDay(ds){calDay=(calDay===ds?null:ds);render();}
 function setRole(r){role=r;view=(r==='colab')?'op_pendientes':'clientes';selProject=null;modalTask=null;opSelTask=null;render();}
 function setUser(id){currentUser=id;opSelTask=null;render();}
 function setLoginBgUrl(){ const u=(val('bg-url')||'').trim(); if(!u){alert('Pega una URL de imagen.');return;} store.setSetting('loginBg',u); render(); }
-function setLoginBgFile(input){ const f=input.files&&input.files[0]; if(!f) return; compressImage(f,(url)=>{ try{ store.setSetting('loginBg',url); render(); }catch(e){ alert('La imagen es muy pesada para el espacio local. Prueba con una más chica o usa una URL.'); } }); }
+function setLoginBgFile(input){ const f=input.files&&input.files[0]; if(!f) return;
+  compressImage(f,(dataUrl)=>{
+    if(typeof dbUploadImage==='function'){
+      dbUploadImage(dataUrlToBlob(dataUrl),'login').then(pubUrl=>{ store.setSetting('loginBg',pubUrl); render(); })
+        .catch(e=>{ console.error('Error subiendo fondo:',e); try{ store.setSetting('loginBg',dataUrl); render(); }catch(_){ alert('No se pudo subir la imagen.'); } });
+    } else { try{ store.setSetting('loginBg',dataUrl); render(); }catch(e){ alert('La imagen es muy pesada. Prueba con una más chica o usa una URL.'); } }
+  });
+}
 function resetLoginBg(){ if(confirm('¿Restaurar el fondo por defecto?')){ store.setSetting('loginBg',null); render(); } }
 function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMentions=[];subView='list';render();}
 
