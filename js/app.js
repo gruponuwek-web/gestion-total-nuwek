@@ -218,18 +218,18 @@ class Store{
   updateFrente(fid,patch){ const f=this.d.frentes.find(x=>x.id===fid); if(f){Object.assign(f,patch); this.save(); if(typeof dbSaveFrente==='function') dbSaveFrente(f);} }
   removeFrente(fid){ this.d.frentes=this.d.frentes.filter(f=>f.id!==fid); this.save(); if(typeof dbDeleteFrente==='function') dbDeleteFrente(fid); }
   moveFrente(pid,fid,dir){ const list=this.frentesOf(pid); const i=list.findIndex(f=>f.id===fid); const j=i+dir; if(j<0||j>=list.length) return; const a=list[i],b=list[j]; const t=a.order; a.order=b.order; b.order=t; this.save(); if(typeof dbSaveFrente==='function'){dbSaveFrente(a);dbSaveFrente(b);} }
-  addTask(t){ t.id=uid('t_'); t.subtasks=t.subtasks||[]; t.links=t.links||[]; this.d.tasks.push(t); this.save(); return t; }
-  taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); }
-  taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); } }
-  taskDelLink(tid,idx){ const t=this.task(tid); if(t&&t.links){ t.links.splice(idx,1); this.save(); } }
-  addSubtask(tid,st){ const t=this.task(tid); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; if(st.durMin==null) st.durMin=30; t.subtasks.push(st); this.save(); }
-  subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); } }
-  subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); } }
-  subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); } }
-  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){Object.assign(s,patch); this.save();} }
-  removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); }
-  removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); }
-  updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save();} }
+  addTask(t){ t.id=uid('t_'); t.subtasks=t.subtasks||[]; t.links=t.links||[]; this.d.tasks.push(t); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); return t; }
+  taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
+  taskDelLink(tid,idx){ const t=this.task(tid); if(t&&t.links){ t.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
+  addSubtask(tid,st){ const t=this.task(tid); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; if(st.durMin==null) st.durMin=30; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
+  subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
+  subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
+  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){Object.assign(s,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
+  updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   addComment(tid,uid,text,attachments,mentions){ this.d.comments.push({id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}); this.save(); }
   markCommentRead(cmId,uid){ const cm=this.d.comments.find(c=>c.id===cmId); if(cm&&(cm.mentions||[]).includes(uid)){ cm.readBy=cm.readBy||[]; if(!cm.readBy.includes(uid)) cm.readBy.push(uid); this.save(); } }
 
@@ -2096,6 +2096,11 @@ async function boot(){
       store.d.projects = pr.projects;   // proyectos
       store.d.frentes  = pr.frentes;    // frentes
       store.d.etapas   = pr.etapas;     // etapas
+      store.save();
+    }
+    if(typeof dbLoadTareas==='function'){
+      const tk = await dbLoadTareas();
+      store.d.tasks = tk;               // tareas (con subtareas dentro)
       store.save();
     }
   }catch(e){
