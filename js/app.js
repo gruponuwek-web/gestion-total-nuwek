@@ -194,8 +194,8 @@ class Store{
   taskTime(t){ return (t.subtasks||[]).reduce((s,x)=>s+(x.timeSpent||0),0); }
 
   /* mutations */
-  addProject(p){ p.id='pr_'+Date.now(); this.d.projects.push(p); this.save(); return p; }
-  updateProject(id,patch){ const p=this.project(id); if(p){Object.assign(p,patch); this.save();} }
+  addProject(p){ p.id='pr_'+Date.now(); this.d.projects.push(p); this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p); return p; }
+  updateProject(id,patch){ const p=this.project(id); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p);} }
   linksOf(pid){ const p=this.project(pid); return (p&&p.links)||[]; }
   addLink(pid,label,url){ const p=this.project(pid); if(!p)return; p.links=p.links||[]; p.links.push({id:'lk_'+Date.now(),label,url}); this.save(); }
   scorecardsOf(pid){ const p=this.project(pid); return (p&&p.scorecards)||[]; }
@@ -209,15 +209,15 @@ class Store{
   addClientPerson(cid,o){ const c=this.client(cid); if(!c)return; const p=Object.assign({id:'p_'+Date.now(),type:'cliente',bossId:null},o); c.people.push(p); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return p; }
   updateClientPerson(cid,pid,patch){ const c=this.client(cid); if(!c)return; const p=c.people.find(x=>x.id===pid); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
   removeClientPerson(cid,pid){ const c=this.client(cid); if(!c)return; c.people=c.people.filter(x=>x.id!==pid); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); }
-  addEtapa(pid,name,start,end){ const ord=this.etapasOf(pid).length+1; const e={id:uid('et_'),projectId:pid,name:name||('Etapa '+ord),start,end,order:ord}; this.d.etapas.push(e); this.save(); return e; }
-  updateEtapa(eid,patch){ const e=this.d.etapas.find(x=>x.id===eid); if(e){Object.assign(e,patch); this.save();} }
-  removeEtapa(eid){ this.d.etapas=this.d.etapas.filter(e=>e.id!==eid); this.save(); }
-  moveEtapa(pid,eid,dir){ const list=this.etapasOf(pid); const i=list.findIndex(e=>e.id===eid); const j=i+dir; if(j<0||j>=list.length) return; const a=list[i],b=list[j]; const t=a.order; a.order=b.order; b.order=t; this.save(); }
+  addEtapa(pid,name,start,end){ const ord=this.etapasOf(pid).length+1; const e={id:uid('et_'),projectId:pid,name:name||('Etapa '+ord),start,end,order:ord}; this.d.etapas.push(e); this.save(); if(typeof dbSaveEtapa==='function') dbSaveEtapa(e); return e; }
+  updateEtapa(eid,patch){ const e=this.d.etapas.find(x=>x.id===eid); if(e){Object.assign(e,patch); this.save(); if(typeof dbSaveEtapa==='function') dbSaveEtapa(e);} }
+  removeEtapa(eid){ this.d.etapas=this.d.etapas.filter(e=>e.id!==eid); this.save(); if(typeof dbDeleteEtapa==='function') dbDeleteEtapa(eid); }
+  moveEtapa(pid,eid,dir){ const list=this.etapasOf(pid); const i=list.findIndex(e=>e.id===eid); const j=i+dir; if(j<0||j>=list.length) return; const a=list[i],b=list[j]; const t=a.order; a.order=b.order; b.order=t; this.save(); if(typeof dbSaveEtapa==='function'){dbSaveEtapa(a);dbSaveEtapa(b);} }
   subtasksInEtapa(pid,e){ let n=0; this.tasksOf(pid).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.date&&s.date>=e.start&&s.date<=e.end)n++; })); return n; }
-  addFrente(pid,name,color){ const ord=this.frentesOf(pid).length+1; const f={id:uid('fr_'),projectId:pid,name,color:color||FRENTE_PALETTE[(ord-1)%FRENTE_PALETTE.length],order:ord}; this.d.frentes.push(f); this.save(); return f; }
-  updateFrente(fid,patch){ const f=this.d.frentes.find(x=>x.id===fid); if(f){Object.assign(f,patch); this.save();} }
-  removeFrente(fid){ this.d.frentes=this.d.frentes.filter(f=>f.id!==fid); this.save(); }
-  moveFrente(pid,fid,dir){ const list=this.frentesOf(pid); const i=list.findIndex(f=>f.id===fid); const j=i+dir; if(j<0||j>=list.length) return; const a=list[i],b=list[j]; const t=a.order; a.order=b.order; b.order=t; this.save(); }
+  addFrente(pid,name,color){ const ord=this.frentesOf(pid).length+1; const f={id:uid('fr_'),projectId:pid,name,color:color||FRENTE_PALETTE[(ord-1)%FRENTE_PALETTE.length],order:ord}; this.d.frentes.push(f); this.save(); if(typeof dbSaveFrente==='function') dbSaveFrente(f); return f; }
+  updateFrente(fid,patch){ const f=this.d.frentes.find(x=>x.id===fid); if(f){Object.assign(f,patch); this.save(); if(typeof dbSaveFrente==='function') dbSaveFrente(f);} }
+  removeFrente(fid){ this.d.frentes=this.d.frentes.filter(f=>f.id!==fid); this.save(); if(typeof dbDeleteFrente==='function') dbDeleteFrente(fid); }
+  moveFrente(pid,fid,dir){ const list=this.frentesOf(pid); const i=list.findIndex(f=>f.id===fid); const j=i+dir; if(j<0||j>=list.length) return; const a=list[i],b=list[j]; const t=a.order; a.order=b.order; b.order=t; this.save(); if(typeof dbSaveFrente==='function'){dbSaveFrente(a);dbSaveFrente(b);} }
   addTask(t){ t.id=uid('t_'); t.subtasks=t.subtasks||[]; t.links=t.links||[]; this.d.tasks.push(t); this.save(); return t; }
   taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); }
   taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); } }
@@ -585,13 +585,9 @@ function wizCreate(){
   if((!wiz.price||wiz.price===0) && wiz.monthlyPay && wiz.months) wiz.price=wiz.monthlyPay*wiz.months;
   const p=store.addProject({clientId:wiz.clientId,serviceId:wiz.serviceId,name:store.service(wiz.serviceId).name,price:wiz.price,monthlyPay:wiz.monthlyPay,months:wiz.months,paymentDay:wiz.paymentDay,startDate:wiz.startDate,endDate:wiz.endDate,status:'active',alcances:wiz.alcances});
   store.generatePayments(p);
-  const frMap={};
-  wiz.frentes.forEach(f=>{const nf=store.addFrente(p.id,f.name); nf.color=f.color; frMap[f.name]=nf.id;});
+  wiz.frentes.forEach(f=>store.addFrente(p.id,f.name,f.color));
   wiz.etapas.forEach(e=>store.addEtapa(p.id,e.name,e.start,e.end));
-  if(wiz.loadTemplate){ const sv=store.service(wiz.serviceId); const firstEt=store.etapasOf(p.id)[0];
-    sv.tasks.forEach(([fn,tn,td])=>{ const fid=frMap[fn]; if(!fid)return; const dd=firstEt?firstEt.start:wiz.startDate;
-      store.addTask({projectId:p.id,frenteId:fid,name:tn,subtitle:store.client(wiz.clientId).name,description:td||'',tags:[],workLink:'',deliverables:[],responsibleId:(store.activeStaff()[0]||store.d.staff[0]).id,status:'to-do',dueDate:dd,viaticos:0,
-        subtasks:[{id:'s_'+Math.random().toString(36).slice(2),name:'Planeación',done:false,personId:(store.activeStaff()[0]||store.d.staff[0]).id,invitados:[],date:dd,time:'10:00',timeSpent:0}]}); }); }
+  // Nota: las TAREAS se conectarán en el Sub-paso B (módulo de Tareas).
   store.save(); openProject(p.id);
 }
 function val(id){const e=document.getElementById(id);return e?e.value:'';}
@@ -2090,6 +2086,13 @@ async function boot(){
     if(typeof dbLoadServicios==='function'){
       const svs = await dbLoadServicios();
       store.d.services = svs;     // los servicios vienen de Supabase
+      store.save();
+    }
+    if(typeof dbLoadProyectos==='function'){
+      const pr = await dbLoadProyectos();
+      store.d.projects = pr.projects;   // proyectos
+      store.d.frentes  = pr.frentes;    // frentes
+      store.d.etapas   = pr.etapas;     // etapas
       store.save();
     }
   }catch(e){
