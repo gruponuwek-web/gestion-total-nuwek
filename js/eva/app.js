@@ -929,34 +929,95 @@ function rangoSemana(){
   return dias;
 }
 
+/* ============================================================
+   ESTADO DE CADA EVENTO
+   La idea es saber de un vistazo que ya se cerro y que falta,
+   sin tener que abrir cada cosa.
+
+     (nada)  pendiente, todavia no toca
+     circulo hecho pero falta capturar algo
+     palomita hecho y completo
+     tache   no se realizo
+     alerta  hay un problema de calendario
+   ============================================================ */
+
+/* Una capacitacion esta completa si ya se dio Y se anotaron
+   los alcances y la asistencia. */
+function estadoCapacitacion(c){
+  if(c.estatus === 'cancelada') return { m:'\u2715', cl:'nores', t:'Cancelada' };
+  if(c.estatus !== 'realizada')  return { m:'',        cl:'',      t:'Programada' };
+  var falta = [];
+  if(!String(c.alcances||'').trim()) falta.push('los alcances');
+  if(!DB.asistencias.filter(function(a){return a.capacitacionId===c.id;}).length) falta.push('la asistencia');
+  if(c.durReal == null) falta.push('la duracion real');
+  if(falta.length) return { m:'\u25d0', cl:'incompleto', t:'Dada, pero falta: '+falta.join(', ') };
+  return { m:'\u2713', cl:'hecho', t:'Dada y capturada' };
+}
+
+/* Una sesion de coacheo esta completa segun la calificacion de
+   captura que ya calculabamos (minuta, retro, compromisos...). */
+function estadoSesion(s){
+  if(noRealizada(s))        return { m:'\u2715', cl:'nores', t:'No se realizo'+(s.motivoNoRealizada? ': '+s.motivoNoRealizada : '') };
+  if(sesionEnConflicto(s))  return { m:'\u26a0', cl:'conf',  t:'Fuera de la ventana de su capacitacion' };
+  if(sesionBloqueada(s))    return { m:'\u26a0', cl:'conf',  t:'Cae en tiempo bloqueado' };
+  if(s.estatus !== 'realizada') return { m:'', cl:'', t:'Programada' };
+  var q = calificaSesion(s);
+  if(q && q.total >= 100) return { m:'\u2713', cl:'hecho', t:'Realizada y capturada' };
+  var falta = (q ? q.det.filter(function(d){return !d.ok;}).map(function(d){return d.l.toLowerCase();}) : []);
+  return { m:'\u25d0', cl:'incompleto', t:'Realizada, pero falta: '+(falta.join(', ')||'capturar') };
+}
+
+/* Un compromiso se considera cerrado cuando ya se califico. */
+function estadoCompromiso(c){
+  if(c.estatus === 'pendiente'){
+    if(compVencido(c)) return { m:'\u26a0', cl:'conf', t:'Vencido y sin calificar' };
+    return { m:'', cl:'', t:'Pendiente' };
+  }
+  var e = COMP_EST[c.estatus] || {};
+  if(c.estatus === 'cumplido')    return { m:'\u2713', cl:'hecho', t:'Cumplido al '+compPct(c)+'%' };
+  if(c.estatus === 'no_cumplido') return { m:'\u2715', cl:'nores', t:'No cumplido' };
+  return { m:'\u25d0', cl:'incompleto', t:(e.l||'Parcial')+' \u00b7 '+compPct(c)+'%' };
+}
+
 function eventosDe(fecha){
   var evs=[], t=tabAg();
   if(t==='todo'||t==='cap'){
     fc(DB.capacitaciones).filter(function(c){return c.fecha===fecha;}).forEach(function(c){
-      evs.push({tipo:'cap', hora:c.hora, ttl:tem(c.temaId).nombre, sub:cli(c.clienteId).nombre+' · '+c.subtema, id:c.id, fn:'abrirCapacitacion'});
+      var e = estadoCapacitacion(c);
+      evs.push({tipo:'cap', hora:c.hora, ttl:tem(c.temaId).nombre,
+                sub:cli(c.clienteId).nombre+' \u00b7 '+c.subtema, id:c.id, fn:'abrirCapacitacion',
+                marca:e.m, extra:e.cl, tip:e.t});
     });
   }
   if(t==='todo'||t==='coa'){
     fc(DB.sesiones).filter(function(s){return s.fechaProg===fecha;}).forEach(function(s){
+      var e = estadoSesion(s);
       evs.push({tipo:'coa', hora:s.horaProg, ttl:ven(s.vendedorId).nombre+' '+ven(s.vendedorId).apellidos,
-                sub:cli(s.clienteId).nombre+' · S'+s.nSesion, id:s.id, fn:'abrirSesion', est:s.estatus,
-                conf:sesionEnConflicto(s), nr:noRealizada(s)});
+                sub:cli(s.clienteId).nombre+' \u00b7 S'+s.nSesion, id:s.id, fn:'abrirSesion', est:s.estatus,
+                marca:e.m, extra:e.cl, tip:e.t});
     });
   }
   if(t==='todo'||t==='blo'){
     /* los del coach seleccionado; el supervisor ve todos */
     bloqueosDe(fecha, esSupervisor()? null : UI.user).forEach(function(b){
       evs.push({tipo:'blo', hora:(b.todoElDia?'':b.horaIni), ttl:tituloBloqueo(b),
-                sub:(esSupervisor()&&b.personaId!==UI.user? per(b.personaId).nombre+' · ':'')+horarioBloqueo(b),
-                id:b.id, fn:'abrirBloqueo', mio:bloqueoMio(b)});
+                sub:(esSupervisor()&&b.personaId!==UI.user? per(b.personaId).nombre+' \u00b7 ':'')+horarioBloqueo(b),
+                id:b.id, fn:'abrirBloqueo', mio:bloqueoMio(b), marca:'', extra:'', tip:'Tiempo bloqueado'});
     });
   }
   if(t==='todo'||t==='com'){
     fc(DB.compromisos).filter(function(c){return c.fecha===fecha;}).forEach(function(c){
-      evs.push({tipo:'com', hora:'', ttl:c.descripcion, sub:nomV(c.vendedorId), id:c.id, fn:'abrirCompromiso'});
+      var e = estadoCompromiso(c);
+      evs.push({tipo:'com', hora:'', ttl:c.descripcion, sub:nomV(c.vendedorId), id:c.id, fn:'abrirCompromiso',
+                marca:e.m, extra:e.cl, tip:e.t});
     });
   }
   return evs.sort(function(a,b){ return (a.hora||'zz')<(b.hora||'zz')?-1:1; });
+}
+
+/* cuantos eventos de ese dia siguen sin cerrar */
+function pendientesDe(fecha){
+  return eventosDe(fecha).filter(function(e){ return e.tipo!=='blo' && !e.marca; }).length;
 }
 
 /* ---------- modo de vista: semana o mes ---------- */
@@ -1031,14 +1092,23 @@ function vistaAgenda(){
     '</div></div>';
 
   /* --- leyenda de colores (misma que Google Calendar) --- */
-  out += '<div class="row wrap mb" style="gap:14px;padding:9px 13px;background:var(--blanco);border:1px solid var(--linea);border-radius:11px">'+
-    '<span class="eyebrow" style="margin-right:2px">Colores</span>'+
-    '<span class="row" style="gap:6px"><span class="dot" style="background:var(--verde)"></span><span class="small">Capacitación</span></span>'+
-    '<span class="row" style="gap:6px"><span class="dot" style="background:var(--ambar)"></span><span class="small">Coacheo</span></span>'+
-    '<span class="row" style="gap:6px"><span class="dot" style="background:var(--morado)"></span><span class="small">Compromiso</span></span>'+
-    '<span class="row" style="gap:6px"><span class="dot" style="background:var(--tinta-3)"></span><span class="small">Bloqueo</span></span>'+
-    '<span class="small muted" style="margin-left:auto">Mismos colores que en Google Calendar</span>'+
-    '</div>';
+  out += '<div class="leyenda mb">'+
+    '<div class="row wrap" style="gap:14px">'+
+      '<span class="eyebrow" style="margin-right:2px">Colores</span>'+
+      '<span class="row" style="gap:6px"><span class="dot" style="background:var(--verde)"></span><span class="small">Capacitación</span></span>'+
+      '<span class="row" style="gap:6px"><span class="dot" style="background:var(--ambar)"></span><span class="small">Coacheo</span></span>'+
+      '<span class="row" style="gap:6px"><span class="dot" style="background:var(--morado)"></span><span class="small">Compromiso</span></span>'+
+      '<span class="row" style="gap:6px"><span class="dot" style="background:var(--tinta-3)"></span><span class="small">Bloqueo</span></span>'+
+      '<span class="small muted" style="margin-left:auto">Mismos colores que en Google Calendar</span>'+
+    '</div>'+
+    '<div class="row wrap mt-s" style="gap:14px;padding-top:8px;border-top:1px solid var(--linea)">'+
+      '<span class="eyebrow" style="margin-right:2px">Estado</span>'+
+      '<span class="row small" style="gap:5px"><span class="mk-leg" style="color:var(--tinta-3)">·</span> Pendiente</span>'+
+      '<span class="row small" style="gap:5px"><span class="mk-leg" style="color:var(--verde)">\u2713</span> Hecho y capturado</span>'+
+      '<span class="row small" style="gap:5px"><span class="mk-leg" style="color:var(--naranja)">\u25d0</span> Hecho, falta capturar</span>'+
+      '<span class="row small" style="gap:5px"><span class="mk-leg" style="color:var(--tinta-3)">\u2715</span> No se realizó</span>'+
+      '<span class="row small" style="gap:5px"><span class="mk-leg" style="color:var(--rojo)">\u26a0</span> Necesita atención</span>'+
+    '</div></div>';
 
   var dominio = [];
 
@@ -1052,12 +1122,10 @@ function vistaAgenda(){
         '<div class="wday-h"><div class="d">'+DIAS3[dd.getDay()]+'</div><div class="n">'+dd.getDate()+'</div></div>';
       if(!evs.length) out += '<div style="padding:12px 9px;color:var(--tinta-3);font-size:11px">—</div>';
       evs.forEach(function(e){
-        var tach = (e.tipo==='coa' && e.est==='realizada') ? 'opacity:.6' : '';
-        var extra = e.conf? ' conf' : (e.nr? ' nores' : '');
-        out += '<div class="ev '+e.tipo+extra+' clik" style="'+tach+'" onclick="'+e.fn+'(\''+e.id+'\')">'+
-          (e.hora?'<div class="h">'+esc(e.hora)+(e.conf?' \u26a0\ufe0f':'')+'</div>':'')+
+        out += '<div class="ev '+e.tipo+(e.extra? ' '+e.extra:'')+' clik" title="'+esc(e.tip||'')+'" onclick="'+e.fn+'(\''+e.id+'\')">'+
+          (e.hora||e.marca ? '<div class="h">'+(e.marca?'<span class="mk">'+e.marca+'</span>':'')+esc(e.hora||'')+'</div>' : '')+
           '<div class="t">'+esc(e.ttl)+'</div>'+
-          '<div class="t" style="font-weight:400;opacity:.75">'+(e.nr?'No se realizó':esc(e.sub))+'</div></div>';
+          '<div class="t sub2">'+esc(e.sub)+'</div></div>';
       });
       out += '</div>';
     });
@@ -1077,13 +1145,19 @@ function vistaAgenda(){
         var fuera = (dd.getMonth()!==rm.mes);
         out += '<div class="mday'+(d===h?' hoy':'')+(fuera?' fuera':'')+'">'+
           '<div class="mday-h"><span class="n">'+dd.getDate()+'</span>'+
-          (evs.length? '<span class="cnt">'+evs.length+'</span>' : '')+'</div>';
+          (evs.length
+            ? (function(){
+                var pend = evs.filter(function(x){ return x.tipo!=='blo' && !x.marca; }).length;
+                return pend
+                  ? '<span class="cnt pend" title="'+pend+' sin cerrar">'+pend+'</span>'
+                  : '<span class="cnt listo" title="Todo cerrado">\u2713</span>';
+              })()
+            : '')+'</div>';
         evs.slice(0,3).forEach(function(e){
-          var tach = (e.tipo==='coa' && e.est==='realizada') ? 'opacity:.55' : '';
-          var extra = e.conf? ' conf' : (e.nr? ' nores' : '');
-          var tip = (e.hora?e.hora+' · ':'')+e.ttl+' — '+e.sub+(e.conf?' · ⚠️ fuera de ventana':'')+(e.nr?' · no se realizó':'');
-          out += '<div class="mev '+e.tipo+extra+' clik" style="'+tach+'" title="'+esc(tip)+'" onclick="event.stopPropagation();'+e.fn+'(\''+e.id+'\')">'+
-            (e.conf?'⚠️ ':'')+(e.hora?'<b>'+esc(e.hora.slice(0,5))+'</b> ':'')+esc(e.ttl)+'</div>';
+          var tip = (e.hora? e.hora+' · ':'')+e.ttl+' — '+e.sub+(e.tip? ' · '+e.tip : '');
+          out += '<div class="mev '+e.tipo+(e.extra? ' '+e.extra:'')+' clik" title="'+esc(tip)+'" onclick="event.stopPropagation();'+e.fn+'(\''+e.id+'\')">'+
+            (e.marca? '<span class="mk">'+e.marca+'</span>' : '')+
+            (e.hora?'<b>'+esc(e.hora.slice(0,5))+'</b> ':'')+esc(e.ttl)+'</div>';
         });
         if(evs.length>3) out += '<div class="mmas clik" onclick="irASemanaDe(\''+d+'\')">+'+(evs.length-3)+' más</div>';
         out += '</div>';
@@ -1102,6 +1176,24 @@ function vistaAgenda(){
     totCoa += ss.length; ss.forEach(function(s){ minCoa += (s.durProg||0); });
     totCom += fc(DB.compromisos).filter(function(c){return c.fecha===d;}).length;
   });
+  /* cuantas cosas siguen sin cerrar en el periodo */
+  var pendPer = 0, hechosPer = 0;
+  dominio.forEach(function(d){
+    eventosDe(d).forEach(function(e){
+      if(e.tipo==='blo') return;
+      if(e.marca) hechosPer++; else pendPer++;
+    });
+  });
+  if(hechosPer + pendPer){
+    out += '<div class="row wrap mt" style="gap:10px;align-items:center;padding:10px 13px;background:var(--blanco);border:1px solid var(--linea);border-radius:11px">'+
+      '<span class="eyebrow">Avance del periodo</span>'+
+      '<div class="f" style="min-width:120px"><div class="bar '+(pendPer===0?'v':'a')+'" style="margin:0">'+
+        '<i style="width:'+pct(hechosPer, hechosPer+pendPer)+'%"></i></div></div>'+
+      '<span class="small"><b>'+hechosPer+'</b> cerrados'+(pendPer? ' \u00b7 <b style="color:var(--ambar-osc)">'+pendPer+' por atender</b>':'')+'</span>'+
+      (pendPer===0? '<span class="tag t-v">Todo al d\u00eda</span>':'')+
+      '</div>';
+  }
+
   var etq = modo==='semana' ? 'Carga de la semana' : 'Carga del mes';
   out += '<div class="eyebrow mt" style="margin-bottom:9px">'+etq+'</div><div class="grid g4">'+
     kpi('Capacitaciones', totCap, '', min2hhmm(minCap)+' de grupo', null)+
@@ -1124,11 +1216,14 @@ function vistaAgenda(){
   filas.slice(0,60).forEach(function(f){
     var lbl = {cap:'Capacitación', coa:'Coacheo', com:'Compromiso', blo:'Bloqueo'}[f.e.tipo];
     var cls = {cap:'t-v', coa:'t-a', com:'t-m', blo:'t-n'}[f.e.tipo];
-    out += '<tr class="clik" onclick="'+f.e.fn+'(\''+f.e.id+'\')">'+
+    var col = {hecho:'var(--verde)', incompleto:'var(--naranja)', conf:'var(--rojo)', nores:'var(--tinta-3)'}[f.e.extra] || 'var(--tinta-3)';
+    out += '<tr class="clik" onclick="'+f.e.fn+'(\''+f.e.id+'\')"'+(f.e.extra==='hecho'?' style="opacity:.65"':'')+'>'+
       '<td class="mono small"><b>'+esc(fmtFecha(f.d))+'</b></td>'+
       '<td class="mono small">'+esc(f.e.hora||'—')+'</td>'+
       '<td><span class="tag '+cls+'">'+lbl+'</span></td>'+
-      '<td style="max-width:320px">'+esc(f.e.ttl)+'</td>'+
+      '<td style="max-width:300px">'+
+        (f.e.marca? '<span style="color:'+col+';font-weight:700;margin-right:6px" title="'+esc(f.e.tip||'')+'">'+f.e.marca+'</span>':'')+
+        esc(f.e.ttl)+'</td>'+
       '<td class="small">'+esc(f.e.sub.split(' · ')[0])+'</td>'+
       '<td class="small">'+esc(f.e.sub.split(' · ').slice(-1)[0])+'</td>'+
       '<td style="text-align:right;color:var(--tinta-3)">›</td></tr>';
