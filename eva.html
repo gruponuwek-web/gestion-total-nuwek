@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVA+ Coach · Grupo Nuwek</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/eva.css">
+</head>
+<body>
+<div id="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">E+</div>
+      <div>
+        <div class="brand-name">EVA+ Coach</div>
+        <div class="brand-sub">Grupo Nuwek</div>
+      </div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot">
+      <div class="whoami" id="whoami"></div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="top">
+      <div>
+        <h1 id="ttl">Hoy</h1>
+        <div class="sub" id="sub"></div>
+      </div>
+      <div class="top-right">
+        <span id="syncEstado" style="margin-right:4px"></span>
+        <select class="sel" id="fCliente" style="width:auto;min-width:150px"></select>
+        <select class="sel" id="fUser" style="width:auto;min-width:150px"></select>
+      </div>
+    </header>
+    <div class="view" id="view"></div>
+  </div>
+</div>
+<div class="ovl" id="ovl"><div id="modWrap"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/core/supabase-config.js"></script>
+<script src="js/eva/db-eva-core.js"></script>
+<script src="js/eva/db-eva-tablas.js"></script>
+<script src="js/eva/db-eva-sync.js"></script>
+<script src="js/eva/app.js"></script>
+</body>
+</html>
