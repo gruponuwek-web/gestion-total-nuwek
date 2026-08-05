@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVA+ Coach · prueba de guardado</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --verde:#1FA971; --rojo:#E5484D; --ambar:#F0A11A; --tinta:#12202F; --linea:#DCE3EC; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,sans-serif;background:#EEF1F6;color:var(--tinta);padding:28px 20px;line-height:1.5}
+  .wrap{max-width:820px;margin:0 auto}
+  h1{font-family:'Bricolage Grotesque',sans-serif;font-size:26px;letter-spacing:-.02em;margin-bottom:4px}
+  .sub{color:#68788C;font-size:14px;margin-bottom:22px}
+  .card{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:16px 18px;margin-bottom:12px}
+  .card h2{font-family:'Bricolage Grotesque',sans-serif;font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:9px}
+  .dot{width:11px;height:11px;border-radius:50%;background:#C3CEDC;flex:0 0 auto}
+  .dot.ok{background:var(--verde)} .dot.err{background:var(--rojo)} .dot.wait{background:var(--ambar)}
+  .msg{font-size:13.5px;color:#516378}
+  .err{color:var(--rojo);font-weight:600}
+  .mono{font-family:'JetBrains Mono',monospace;font-size:12px}
+  pre{background:#F7F9FC;border:1px solid var(--linea);border-radius:9px;padding:11px;font-family:'JetBrains Mono',monospace;font-size:11.5px;overflow-x:auto;white-space:pre-wrap;margin-top:8px;max-height:280px;overflow-y:auto}
+  .paso{padding:5px 0;border-bottom:1px solid var(--linea);font-size:13px;display:flex;gap:9px;align-items:baseline}
+  .paso:last-child{border:none}
+  .paso b{font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A99AB;width:22px;flex:0 0 auto}
+  .ok-txt{color:var(--verde);font-weight:600}
+  .bad{color:var(--rojo);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EVA+ Coach · prueba de guardado</h1>
+  <div class="sub">Comprueba que el motor de sincronización manda los cambios correctamente. Todo lo que cree se borra al final.</div>
+
+  <div class="card">
+    <h2><span class="dot" id="d1"></span>1 · Cargar todo</h2>
+    <div class="msg" id="m1">Probando…</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d2"></span>2 · Crear, editar y borrar</h2>
+    <div class="msg" id="m2">Esperando…</div>
+    <div id="pasos"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d3"></span>3 · Limpieza</h2>
+    <div class="msg" id="m3">Esperando…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/core/supabase-config.js"></script>
+<script src="js/eva/db-eva-core.js"></script>
+<script src="js/eva/db-eva-tablas.js"></script>
+<script src="js/eva/db-eva-sync.js"></script>
+<script>
+function marca(n, estado, texto){
+  document.getElementById('d'+n).className = 'dot ' + estado;
+  document.getElementById('m'+n).innerHTML = texto;
+}
+var nPaso = 0;
+function paso(txt, ok){
+  nPaso++;
+  var d = document.createElement('div');
+  d.className = 'paso';
+  d.innerHTML = '<b>'+nPaso+'</b><span>'+txt+' <span class="'+(ok?'ok-txt':'bad')+'">'+(ok?'OK':'FALLO')+'</span></span>';
+  document.getElementById('pasos').appendChild(d);
+  return ok;
+}
+function esperar(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+(async function(){
+  var creados = { temas:[], vendedores:[], programas:[] };
+  var todoBien = true;
+
+  /* --- 1 · cargar --- */
+  var datos;
+  try{
+    datos = await dbLoadTodoEva();
+    marca(1,'ok',
+      'Programas: <b>'+datos.programas.length+'</b> · '+
+      'Vendedores: <b>'+datos.vendedores.length+'</b> · '+
+      'Temas: <b>'+datos.temas.length+'</b> · '+
+      'Sesiones: <b>'+datos.sesiones.length+'</b> · '+
+      'Compromisos: <b>'+datos.compromisos.length+'</b><br>'+
+      '<span class="mono" style="color:#8A99AB">Del core: '+datos.clientesDisponibles.length+' clientes disponibles, '+datos.personal.length+' personas</span>');
+  }catch(e){
+    marca(1,'err','<span class="err">Falló:</span> '+e.message);
+    return;
+  }
+
+  /* --- 2 · el ciclo completo --- */
+  marca(2,'wait','Corriendo…');
+  EvaSync.iniciar(datos);
+
+  try{
+    /* crear un tema con dos subtemas */
+    var idTema = crypto.randomUUID();
+    var idSub1 = crypto.randomUUID();
+    var idSub2 = crypto.randomUUID();
+    datos.temas.push({
+      id:idTema, nombre:'__prueba de guardado__', descripcion:'se borra solo',
+      color:'#2F6BFF', cadencia:7, orden:99,
+      subtemas:[
+        {id:idSub1, n:'Sub A', durProg:90, formato:'En linea', tareaDesc:'tarea A', artefacto:'Audio de práctica', nEntregas:3, diasLimite:7},
+        {id:idSub2, n:'Sub B', durProg:60, formato:'Presencial', tareaDesc:'', artefacto:'', nEntregas:null, diasLimite:7}
+      ]
+    });
+    creados.temas.push(idTema);
+    EvaSync.marcarCambio(datos);
+    await EvaSync.guardarYa();
+    var chk = await sb.from('eva_temas').select('*').eq('id', idTema);
+    todoBien &= paso('Crear un tema', chk.data && chk.data.length === 1);
+    var chkS = await sb.from('eva_subtemas').select('*').eq('tema_id', idTema);
+    todoBien &= paso('Guardar sus 2 subtemas', chkS.data && chkS.data.length === 2);
+
+    /* editar */
+    datos.temas[datos.temas.length-1].nombre = '__prueba editada__';
+    datos.temas[datos.temas.length-1].cadencia = 14;
+    EvaSync.marcarCambio(datos);
+    await EvaSync.guardarYa();
+    chk = await sb.from('eva_temas').select('*').eq('id', idTema);
+    todoBien &= paso('Editar el tema', chk.data[0].nombre === '__prueba editada__' && chk.data[0].cadencia === 14);
+
+    /* quitar un subtema */
+    datos.temas[datos.temas.length-1].subtemas.pop();
+    EvaSync.marcarCambio(datos);
+    await EvaSync.guardarYa();
+    chkS = await sb.from('eva_subtemas').select('*').eq('tema_id', idTema);
+    todoBien &= paso('Quitar un subtema', chkS.data && chkS.data.length === 1);
+
+    /* que NO mande nada si no hubo cambios */
+    var antes = 0;
+    var origLog = console.log;
+    console.log = function(m){ if(typeof m === 'string' && m.indexOf('Sincronizados') === 0) antes++; origLog.apply(console, arguments); };
+    EvaSync.marcarCambio(datos);
+    await EvaSync.guardarYa();
+    console.log = origLog;
+    todoBien &= paso('No mandar nada si no hubo cambios', antes === 0);
+
+    /* si hay un programa, probar vendedor (depende de un cliente real) */
+    if (datos.clientesDisponibles.length){
+      var cd = datos.clientesDisponibles[0];
+      var idProg = cd.programaId;
+      if (!idProg){
+        idProg = crypto.randomUUID();
+        datos.programas.push({
+          id:idProg, proyectoId:cd.proyectoId, clienteId:cd.clienteId,
+          coachId:(datos.personal[0]||{}).id, color:'#7A4BD6', activo:true
+        });
+        creados.programas.push(idProg);
+        EvaSync.marcarCambio(datos);
+        await EvaSync.guardarYa();
+        var chkP = await sb.from('eva_programas').select('*').eq('id', idProg);
+        todoBien &= paso('Crear el programa de '+cd.cliente, chkP.data && chkP.data.length === 1);
+      }
+
+      var idVend = crypto.randomUUID();
+      datos.vendedores.push({
+        id:idVend, clienteId:cd.clienteId, contactoId:null,
+        nombre:'__Prueba__', apellidos:'Borrar', rol:'Vendedor', sucursal:'',
+        nac:'', ingreso:'', dias:[2,4], horaSesion:'10:30', activo:true
+      });
+      creados.vendedores.push(idVend);
+      EvaSync.marcarCambio(datos);
+      await EvaSync.guardarYa();
+      var chkV = await sb.from('eva_vendedores').select('*').eq('id', idVend);
+      todoBien &= paso('Crear un vendedor con días [Mar, Jue]',
+        chkV.data && chkV.data.length === 1 &&
+        JSON.stringify(chkV.data[0].dias) === '[2,4]');
+    } else {
+      paso('Vendedor (se salta: no hay clientes con proyecto activo)', true);
+    }
+
+    /* borrar el tema */
+    datos.temas = datos.temas.filter(function(t){ return t.id !== idTema; });
+    EvaSync.marcarCambio(datos);
+    await EvaSync.guardarYa();
+    chk = await sb.from('eva_temas').select('*').eq('id', idTema);
+    todoBien &= paso('Borrar el tema', chk.data && chk.data.length === 0);
+    chkS = await sb.from('eva_subtemas').select('*').eq('tema_id', idTema);
+    todoBien &= paso('Sus subtemas se van con él', chkS.data && chkS.data.length === 0);
+    creados.temas = [];
+
+    /* varios cambios seguidos deben juntarse en un solo envío */
+    var idT2 = crypto.randomUUID();
+    datos.temas.push({id:idT2, nombre:'__rafaga__', descripcion:'', color:'#1FA971', cadencia:7, orden:98, subtemas:[]});
+    creados.temas.push(idT2);
+    for (var k=0;k<5;k++){
+      datos.temas[datos.temas.length-1].descripcion = 'cambio '+k;
+      EvaSync.marcarCambio(datos);
+      await esperar(80);
+    }
+    await EvaSync.guardarYa();
+    chk = await sb.from('eva_temas').select('*').eq('id', idT2);
+    todoBien &= paso('5 cambios seguidos se juntan en uno', chk.data[0].descripcion === 'cambio 4');
+
+    marca(2, todoBien?'ok':'err', todoBien
+      ? 'Todo el ciclo funciona: crear, editar, borrar y agrupar cambios.'
+      : '<span class="err">Alguna prueba falló.</span> Revisa la consola.');
+
+  }catch(e){
+    marca(2,'err','<span class="err">Se rompió:</span> '+e.message+'<pre>'+(e.stack||'')+'</pre>');
+    todoBien = false;
+  }
+
+  /* --- 3 · limpieza --- */
+  try{
+    var borrados = 0;
+    if (creados.temas.length){
+      await sb.from('eva_temas').delete().in('id', creados.temas);
+      borrados += creados.temas.length;
+    }
+    if (creados.vendedores.length){
+      await sb.from('eva_vendedores').delete().in('id', creados.vendedores);
+      borrados += creados.vendedores.length;
+    }
+    if (creados.programas.length){
+      await sb.from('eva_programas').delete().in('id', creados.programas);
+      borrados += creados.programas.length;
+    }
+    var fin = await dbLoadTodoEva();
+    marca(3,'ok','Se borraron los <b>'+borrados+'</b> registros de prueba.<br>'+
+      '<span class="mono" style="color:#8A99AB">La base quedó con '+fin.temas.length+' temas, '+
+      fin.vendedores.length+' vendedores y '+fin.programas.length+' programas.</span>');
+  }catch(e){
+    marca(3,'err','<span class="err">No se pudo limpiar:</span> '+e.message+
+      '<br>Revisa a mano en Supabase si quedó algo con "__prueba" en el nombre.');
+  }
+})();
+</script>
+</body>
+</html>
