@@ -2973,7 +2973,7 @@ function seccionEmpresas(){
   if(pend.length){
     out += '<div class="lock wt"><div class="ico">\ud83c\udfe2</div><div class="f">'+
       '<div class="ttl">'+pend.length+' cliente'+(pend.length>1?'s':'')+' de Nuwek con EVA+ sin configurar</div>'+
-      '<div class="txt">'+pend.map(function(c){return esc(c.nombre);}).join(', ')+'. Tienen el servicio contratado pero a\u00fan no est\u00e1n dados de alta aqu\u00ed.</div></div>'+
+      '<div class="txt">'+pend.map(function(c){return esc(c.cliente);}).join(', ')+'. Tienen proyecto de capacitaci\u00f3n vendido pero a\u00fan no est\u00e1n dados de alta aqu\u00ed.</div></div>'+
       '<button class="btn sm" onclick="abrirAltaEmpresa()">Darlos de alta</button></div>';
   }
 
@@ -2983,9 +2983,9 @@ function seccionEmpresas(){
     var u = usoEmpresa(c.id);
     var real = DB.sesiones.filter(function(s){return s.clienteId===c.id && s.estatus==='realizada';}).length;
     out += '<div class="card" style="border-top:3px solid '+c.color+'"><div class="card-b">'+
-      '<div class="row mb"><div class="av-c" style="background:'+c.color+'">'+esc(c.nombre.slice(0,2))+'</div>'+
+      '<div class="row mb"><div class="av-c" style="background:'+c.color+'">'+esc((c.nombre||'--').slice(0,2))+'</div>'+
       '<div class="f" style="min-width:0"><div style="font-family:var(--display);font-size:16px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.nombre)+'</div>'+
-      '<div class="small muted">'+esc(c.plan)+(c.ciudad?' \u00b7 '+esc(c.ciudad):'')+'</div></div>'+
+      '<div class="small muted">'+esc(c.proyecto||c.plan||'')+'</div></div>'+
       '<button class="btn gho sm" onclick="abrirEmpresa(\''+c.id+'\')">Editar</button></div>'+
       '<div class="row spread small"><span class="muted">Vendedores</span><b class="mono">'+u.vendedores+'</b></div>'+
       '<div class="row spread small"><span class="muted">Capacitaciones</span><b class="mono">'+u.capacitaciones+'</b></div>'+
@@ -3014,23 +3014,26 @@ function pintarAltaEmpresa(){
     '<div><h2>Dar de alta empresa</h2><div class="sub">Clientes de Nuwek con el servicio EVA+</div></div>'+
     '<button class="x" onclick="cerrarModal()">\u2715</button></div><div class="mod-b">';
 
-  h+='<div class="small muted mb">Estos clientes ya existen en la base de Nuwek y tienen EVA+ contratado. Al darlos de alta solo se crea su configuraci\u00f3n del programa \u2014 el nombre y los datos fiscales siguen viviendo en el core.</div>';
+  h+='<div class="small muted mb">Estos clientes ya tienen un <b>proyecto de capacitaci\u00f3n vendido y activo</b> en Gesti\u00f3n Nuwek. '+
+    'Al darlos de alta solo se crea su configuraci\u00f3n del programa: qui\u00e9n los coachea y su color en la agenda.</div>';
 
   if(!pend.length){
-    h+=vacio('\u2713','Todos configurados','Cada cliente de Nuwek con EVA+ ya est\u00e1 dado de alta aqu\u00ed.');
+    h+=vacio('\u2713','Todos configurados','Cada cliente con proyecto de capacitaci\u00f3n activo ya est\u00e1 dado de alta aqu\u00ed.');
   } else {
     pend.forEach(function(c){
-      h+='<div class="blk" style="padding:13px"><div class="row" style="gap:11px">'+
-        '<div class="av-c" style="background:var(--tinta-3)">'+esc(c.nombre.slice(0,2))+'</div>'+
-        '<div class="f" style="min-width:0"><div style="font-weight:600;font-size:14px">'+esc(c.nombre)+'</div>'+
-        '<div class="small muted">'+esc(c.ciudad||'')+' \u00b7 '+esc((c.servicios||[]).join(', '))+'</div></div>'+
-        '<button class="btn amb sm" onclick="altaDesdeCore(\''+c.id+'\')">Dar de alta</button></div></div>';
+      var nom = c.cliente || '\u2014';
+      h+='<div class="blk" style="padding:13px"><div class="row wrap" style="gap:11px">'+
+        '<div class="av-c" style="background:var(--tinta-3)">'+esc(nom.slice(0,2))+'</div>'+
+        '<div class="f" style="min-width:0"><div style="font-weight:600;font-size:14px">'+esc(nom)+'</div>'+
+        '<div class="small muted">'+esc(c.proyecto||'')+' \u00b7 <span class="tag t-v" style="font-size:10.5px">'+esc(c.servicio||'')+'</span>'+
+        (c.inicio? ' \u00b7 '+fmtFecha(c.inicio)+' \u2192 '+(c.fin? fmtFecha(c.fin):'\u2014') : '')+'</div></div>'+
+        '<button class="btn amb sm" onclick="altaDesdeCore(\''+c.clienteId+'\')">Dar de alta</button></div></div>';
     });
   }
 
   h+='<div class="blk" style="background:#F7F9FC"><div class="small muted">'+
-    '<b>\u00bfFalta alguno?</b> Si un cliente no aparece aqu\u00ed es porque no tiene el servicio EVA+ registrado en Nuwek. '+
-    'Eso se da de alta en el core, no en este portal.</div></div>';
+    '<b>\u00bfFalta alguno?</b> Para que un cliente aparezca aqu\u00ed necesita un proyecto de <b>EVA+</b> o <b>Capacitaci\u00f3n</b> '+
+    'con estatus activo en Gesti\u00f3n Nuwek. No se puede coachear a quien no tiene el proyecto aceptado.</div></div>';
 
   h+='</div><div class="mod-f"><div class="f"></div><button class="btn amb" onclick="cerrarModal()">Listo</button></div></div>';
   setHtml('modWrap',h);
@@ -3067,24 +3070,24 @@ function setER(campo,val){ setE(campo,val); pintarEmpresa(); }
 function pintarEmpresa(){
   var cfg=E(); if(!cfg) return;
   var c = cli(cfg.clienteId);
-  var cr = disp(cfg.clienteId);
   var u = usoEmpresa(c.id);
   var vs = DB.vendedores.filter(function(v){return v.clienteId===c.id;});
 
   var h='<div class="mod"><div class="mod-h">'+
-    '<div class="av-c" style="background:'+c.color+'">'+esc(c.nombre.slice(0,2))+'</div>'+
+    '<div class="av-c" style="background:'+c.color+'">'+esc((c.nombre||'--').slice(0,2))+'</div>'+
     '<div><h2>'+esc(c.nombre)+'</h2><div class="sub">'+u.vendedores+' vendedores \u00b7 '+u.capacitaciones+' capacitaciones \u00b7 '+u.sesiones+' sesiones</div></div>'+
     '<button class="x" onclick="cerrarEmpresa()">\u2715</button></div><div class="mod-b">';
 
-  h+='<div class="blk" style="background:#F7F9FC"><div class="bt"><span class="n">1</span>Datos de Nuwek</div>'+
-    '<div class="small muted mb">Esto vive en la base de Nuwek y lo comparten todos los m\u00f3dulos. Desde EVA+ solo se consulta.</div>'+
-    '<div class="row spread mb"><span class="muted small">Nombre</span><b>'+esc(c.nombre)+'</b></div>'+
-    '<div class="row spread mb"><span class="muted small">Ciudad</span><b>'+esc(c.ciudad||'\u2014')+'</b></div>'+
-    '<div class="row spread"><span class="muted small">Servicios contratados</span>'+
-    '<div class="row wrap" style="gap:5px">'+((cr&&cr.servicios)||[]).map(function(x){
-      return '<span class="tag '+(x==='EVA+'?'t-v':'t-n')+'">'+esc(x)+'</span>';
-    }).join('')+'</div></div>'+
-    '<div class="small muted mt-s">Para cambiar el nombre o los datos fiscales hay que hacerlo en el core de Nuwek.</div></div>';
+  h+='<div class="blk" style="background:#F7F9FC"><div class="bt"><span class="n">1</span>Viene de Gesti\u00f3n Nuwek</div>'+
+    '<div class="small muted mb">El proyecto est\u00e1 vendido y activo. Por eso este cliente se puede trabajar.</div>'+
+    '<div class="row spread mb"><span class="muted small">Cliente</span><b>'+esc(c.nombre)+'</b></div>'+
+    '<div class="row spread mb"><span class="muted small">Proyecto</span><b>'+esc(c.proyecto||'\u2014')+'</b></div>'+
+    '<div class="row spread mb"><span class="muted small">Servicio</span><span class="tag t-v">'+esc(c.plan||'\u2014')+'</span></div>'+
+    '<div class="row spread mb"><span class="muted small">Vigencia</span><b class="mono">'+
+      (c.inicio? fmtFecha(c.inicio):'\u2014')+' \u2192 '+(c.fin? fmtFecha(c.fin):'\u2014')+'</b></div>'+
+    '<div class="row spread"><span class="muted small">Precio del proyecto</span><b class="mono">'+
+      (c.precio? '$'+num(c.precio) : '\u2014')+'</b></div>'+
+    '<div class="small muted mt-s">Todo esto se edita en Gesti\u00f3n Nuwek, no aqu\u00ed.</div></div>';
 
   h+='<div class="blk"><div class="bt"><span class="n">2</span>Configuraci\u00f3n del programa</div>'+
     '<div class="small muted mb">Esto s\u00ed es de EVA+ y solo lo usa este portal.</div>'+
