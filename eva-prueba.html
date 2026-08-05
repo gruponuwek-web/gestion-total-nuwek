@@ -92,7 +92,9 @@ function tabla(id, filas, cols){
 (async function(){
   /* 1 · conexión */
   try{
-    if(!window.sb) throw new Error('No se creó el cliente de Supabase');
+    /* ojo: en supabase-config.js la variable se declara con const,
+       asi que existe como global pero NO cuelga de window */
+    if(typeof sb === 'undefined' || !sb) throw new Error('No se creo el cliente de Supabase');
     marca(1,'ok','Conectado a <b>'+SUPABASE_URL+'</b>');
   }catch(e){
     marca(1,'err','<span class="err">Falló:</span> '+e.message+'<br>Revisa que <code>js/core/supabase-config.js</code> esté en su lugar.');
