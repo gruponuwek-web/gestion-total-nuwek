@@ -1,5 +1,6 @@
 // ============================================================
 //  Conexión a Supabase — Portal Nuwek
+//  Compartida por todos los módulos: Gestión, EVA+, Finanzas…
 //  (La "publishable key" es pública por diseño: puede vivir aquí.)
 // ============================================================
 const SUPABASE_URL = "https://wxxuxaodpikkelrjkacs.supabase.co";
