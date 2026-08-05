@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVA+ Coach · prueba de conexión</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --verde:#1FA971; --rojo:#E5484D; --ambar:#F0A11A; --tinta:#12202F; --linea:#DCE3EC; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,system-ui,sans-serif;background:#EEF1F6;color:var(--tinta);padding:28px 20px;line-height:1.5}
+  .wrap{max-width:880px;margin:0 auto}
+  h1{font-family:'Bricolage Grotesque',sans-serif;font-size:26px;letter-spacing:-.02em;margin-bottom:4px}
+  .sub{color:#68788C;font-size:14px;margin-bottom:24px}
+  .card{background:#fff;border:1px solid var(--linea);border-radius:14px;padding:18px;margin-bottom:14px}
+  .card h2{font-family:'Bricolage Grotesque',sans-serif;font-size:16px;margin-bottom:10px;display:flex;align-items:center;gap:9px}
+  .dot{width:11px;height:11px;border-radius:50%;background:#C3CEDC;flex:0 0 auto}
+  .dot.ok{background:var(--verde)}
+  .dot.err{background:var(--rojo)}
+  .dot.wait{background:var(--ambar)}
+  pre{background:#F7F9FC;border:1px solid var(--linea);border-radius:9px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin-top:8px}
+  .msg{font-size:13.5px;color:#516378}
+  .err{color:var(--rojo);font-weight:600}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+  th{text-align:left;padding:7px 9px;border-bottom:2px solid var(--linea);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8A99AB}
+  td{padding:8px 9px;border-bottom:1px solid var(--linea)}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:600;background:#E7EEFF;color:#1B4FCC}
+  .tag.warn{background:#FDF0D9;color:#9A6408}
+  .mono{font-family:'JetBrains Mono',monospace;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EVA+ Coach · prueba de conexión</h1>
+  <div class="sub">Verifica que el portal puede hablar con Supabase y leer lo de Gestión Nuwek.</div>
+
+  <div class="card">
+    <h2><span class="dot" id="d1"></span>1 · Conexión con Supabase</h2>
+    <div class="msg" id="m1">Probando…</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d2"></span>2 · Tablas de EVA+</h2>
+    <div class="msg" id="m2">Esperando…</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d3"></span>3 · Clientes que se pueden trabajar</h2>
+    <div class="msg" id="m3">Esperando…</div>
+    <div id="t3"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d4"></span>4 · Contactos disponibles</h2>
+    <div class="msg" id="m4">Esperando…</div>
+    <div id="t4"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d5"></span>5 · Personal de Nuwek</h2>
+    <div class="msg" id="m5">Esperando…</div>
+    <div id="t5"></div>
+  </div>
+
+  <div class="card">
+    <h2><span class="dot" id="d6"></span>6 · Escritura de prueba</h2>
+    <div class="msg" id="m6">Esperando…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/core/supabase-config.js"></script>
+<script src="js/eva/db-eva-core.js"></script>
+<script>
+function marca(n, estado, texto){
+  document.getElementById('d'+n).className = 'dot ' + estado;
+  document.getElementById('m'+n).innerHTML = texto;
+}
+function tabla(id, filas, cols){
+  if(!filas.length){ document.getElementById(id).innerHTML=''; return; }
+  var h = '<table><thead><tr>' + cols.map(function(c){return '<th>'+c[1]+'</th>';}).join('') + '</tr></thead><tbody>';
+  filas.forEach(function(f){
+    h += '<tr>' + cols.map(function(c){
+      var v = f[c[0]];
+      if(v === null || v === undefined || v === '') return '<td class="mono" style="color:#8A99AB">—</td>';
+      return '<td>' + v + '</td>';
+    }).join('') + '</tr>';
+  });
+  document.getElementById(id).innerHTML = h + '</tbody></table>';
+}
+
+(async function(){
+  /* 1 · conexión */
+  try{
+    if(!window.sb) throw new Error('No se creó el cliente de Supabase');
+    marca(1,'ok','Conectado a <b>'+SUPABASE_URL+'</b>');
+  }catch(e){
+    marca(1,'err','<span class="err">Falló:</span> '+e.message+'<br>Revisa que <code>js/core/supabase-config.js</code> esté en su lugar.');
+    return;
+  }
+
+  /* 2 · tablas de EVA+ */
+  try{
+    var r = await sb.from('eva_artefactos').select('nombre').order('nombre');
+    if(r.error) throw r.error;
+    marca(2,'ok','Las tablas responden. <b>'+r.data.length+' artefactos</b> cargados: '+
+      r.data.map(function(a){return a.nombre;}).join(' · '));
+  }catch(e){
+    marca(2,'err','<span class="err">Falló:</span> '+e.message);
+  }
+
+  /* 3 · clientes disponibles */
+  try{
+    var cls = await dbLoadClientesDisponibles();
+    if(!cls.length){
+      marca(3,'wait','No hay ningún cliente con proyecto de capacitación activo. '+
+        'Abre un proyecto de EVA+ o Capacitación en Gestión Nuwek y recarga.');
+    } else {
+      var sinConfig = cls.filter(function(c){ return !c.programaId; }).length;
+      marca(3,'ok','<b>'+cls.length+'</b> cliente(s) con proyecto vendido y activo.'+
+        (sinConfig? ' <span class="tag warn">'+sinConfig+' sin configurar en EVA+</span>':''));
+      tabla('t3', cls.map(function(c){
+        return {
+          cliente: '<b>'+c.cliente+'</b>',
+          proyecto: c.proyecto,
+          servicio: '<span class="tag">'+c.servicio+'</span>',
+          fechas: (c.inicio||'—')+' → '+(c.fin||'—'),
+          precio: c.precio ? '$'+Number(c.precio).toLocaleString('es-MX') : '—',
+          estado: c.programaId ? 'Configurado' : '<span class="tag warn">Falta configurar</span>'
+        };
+      }), [['cliente','Cliente'],['proyecto','Proyecto'],['servicio','Servicio'],['fechas','Vigencia'],['precio','Precio'],['estado','En EVA+']]);
+    }
+  }catch(e){
+    marca(3,'err','<span class="err">Falló:</span> '+e.message);
+  }
+
+  /* 4 · contactos */
+  try{
+    var cts = await dbLoadContactosCliente();
+    if(!cts.length){
+      marca(4,'wait','Ningún cliente tiene contactos cargados todavía. '+
+        'Se agregan en Gestión Nuwek → ficha del cliente → "Su gente".');
+    } else {
+      marca(4,'ok','<b>'+cts.length+'</b> contacto(s) disponibles para elegir como vendedores.');
+      tabla('t4', cts.map(function(c){
+        return { cliente:c.cliente, nombre:'<b>'+c.nombre+'</b>', rol:c.rol, email:c.email,
+                 id:'<span class="mono">'+c.contactoId+'</span>' };
+      }), [['cliente','Cliente'],['nombre','Nombre'],['rol','Rol'],['email','Correo'],['id','Su id']]);
+    }
+  }catch(e){
+    marca(4,'err','<span class="err">Falló:</span> '+e.message);
+  }
+
+  /* 5 · personal */
+  try{
+    var ps = await dbLoadPersonalNuwek();
+    marca(5, ps.length?'ok':'wait', '<b>'+ps.length+'</b> persona(s) activas en Nuwek.');
+    tabla('t5', ps.map(function(p){
+      return { nombre:'<b>'+p.nombre+'</b>', rol:p.rol,
+               color:'<span style="display:inline-block;width:15px;height:15px;border-radius:4px;background:'+p.color+';vertical-align:middle"></span> <span class="mono">'+p.color+'</span>' };
+    }), [['nombre','Nombre'],['rol','Puesto'],['color','Color']]);
+  }catch(e){
+    marca(5,'err','<span class="err">Falló:</span> '+e.message);
+  }
+
+  /* 6 · escribir y borrar, para confirmar permisos */
+  try{
+    var ins = await sb.from('eva_temas')
+      .insert({ nombre:'__prueba de conexión__', descripcion:'se borra solo', cadencia:7 })
+      .select();
+    if(ins.error) throw ins.error;
+    var id = ins.data[0].id;
+    var del = await sb.from('eva_temas').delete().eq('id', id);
+    if(del.error) throw del.error;
+    marca(6,'ok','Se creó y se borró un registro de prueba. <b>La escritura funciona.</b><br>'+
+      '<span class="mono" style="color:#8A99AB">id generado: '+id+'</span>');
+  }catch(e){
+    marca(6,'err','<span class="err">Falló:</span> '+e.message+
+      '<br>Si dice algo de RLS, revisa que las tablas eva_ estén con RLS desactivado.');
+  }
+})();
+</script>
+</body>
+</html>
