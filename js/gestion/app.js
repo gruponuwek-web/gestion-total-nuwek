@@ -254,6 +254,9 @@ class Store{
     cell.forEach((x,i)=>{ if(x.ord!==i+1||x===t){ x.ord=i+1; if(typeof dbSaveTask==='function') dbSaveTask(x); } });
     this.save();
   }
+  moveSubtask(tid,sid,targetSid,after){ const t=this.task(tid); if(!t||!t.subtasks) return; const a=t.subtasks; const i=a.findIndex(x=>x.id===sid); if(i<0) return; const [it]=a.splice(i,1);
+    let j=a.findIndex(x=>x.id===targetSid); if(j<0){ a.push(it); } else a.splice(after?j+1:j,0,it);
+    this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
   updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
@@ -389,7 +392,8 @@ function sessionBar(){
 /* ===== LOGIN ===== */
 function getLoginBg(){ return (store.d.settings && store.d.settings.loginBg) || LOGIN_BG; }
 function loginScreen(){
-  const pills=store.activeStaff().map(u=>`<button class="login-pill" onclick="openPin('${u.id}')" title="${u.name}"><span class="login-av">${u.photo?`<img src="${u.photo}" alt="">`:esc((u.name||'?')[0])}</span></button>`).join('');
+  const LOGIN_ORDER=['carlos','estrella','gerardo','jaime']; const rank=u=>{ const i=LOGIN_ORDER.indexOf((u.name||'').trim().toLowerCase()); return i<0?99:i; };
+  const pills=store.activeStaff().map((u,i)=>({u,i})).sort((a,b)=>rank(a.u)-rank(b.u)||a.i-b.i).map(x=>x.u).map(u=>`<button class="login-pill" onclick="openPin('${u.id}')" title="${u.name}"><span class="login-av">${u.photo?`<img src="${u.photo}" alt="">`:esc((u.name||'?')[0])}</span></button>`).join('');
   return `<div class="login-wrap" style="background-image:linear-gradient(rgba(10,20,15,.35),rgba(10,20,15,.55)),url('${getLoginBg()}')">
     <div class="login-grid">${pills}</div>
   </div>`;
@@ -410,6 +414,13 @@ function pinModal(){
     <div style="text-align:center"><button class="pin-cancel" onclick="cancelPin()">Cancelar</button></div>
   </div></div>`;
 }
+/* Teclado físico para el PIN: 0-9, Backspace, Escape */
+document.addEventListener('keydown',ev=>{
+  if(!loginUser || session || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+  if(/^[0-9]$/.test(ev.key)){ ev.preventDefault(); pinPush(ev.key); }
+  else if(ev.key==='Backspace'){ ev.preventDefault(); pinBack(); }
+  else if(ev.key==='Escape'){ ev.preventDefault(); cancelPin(); }
+});
 function openPin(uid){ loginUser=uid; loginPin=''; loginErr=''; render(); }
 function cancelPin(){ loginUser=null; loginPin=''; loginErr=''; render(); }
 function pinBack(){ if(loginPin.length){ loginPin=loginPin.slice(0,-1); render(); } }
@@ -1795,10 +1806,12 @@ function taskBody(t,panel){
     const locked=isColab()&&subTimeLocked(s);
     const chkClickable=canChk&&!locked;
     const lockTag = (s.done&&isColab()) ? (subTimeLocked(s)?` · <span class="sub-lock">🔒 tiempo fijo</span>`:(s.doneAt?` · <span class="sub-editable">✏️ editable hasta ${subEditUntil(s)}</span>`:'')) : '';
-    return `<div class="sub-item">
+    const lateD=(!s.done&&s.date&&s.date<todayISO())?Math.round((new Date(todayISO()+'T00:00:00')-new Date(s.date+'T00:00:00'))/86400000):0;
+    return `<div class="sub-item${lateD?' is-late':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
+      <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas'}"`}>${s.done?'✓':''}</span>
       <span class="sub-nm ${s.done?'done':''}">${s.name}</span>
-      <span class="sub-mt">${avatar(per,true)} ${per.name} · ${dLabel(s.date)}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
+      <span class="sub-mt">${avatar(per,true)} ${per.name} · ${dLabel(s.date)}${lateD?` <span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'} de retraso</span>`:''}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
       ${right}</div>`;
   }).join('');
   const persOpts=[staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
@@ -1905,6 +1918,20 @@ function libraryModal(){
     </div>
   </div></div>`;
 }
+/* ===== Reordenar subtareas arrastrando ☰ ===== */
+let sbDrag=null;
+function sbClear(){ document.querySelectorAll('.sub-item.drop-before,.sub-item.drop-after,.sub-item.sb-dragging').forEach(x=>x.classList.remove('drop-before','drop-after','sb-dragging')); }
+function sbStart(ev,tid,sid){ sbDrag={tid,sid}; ev.dataTransfer.effectAllowed='move'; try{ev.dataTransfer.setData('text/plain',sid);}catch(_){}
+  const row=ev.target.closest('.sub-item'); if(row){ try{ev.dataTransfer.setDragImage(row,20,20);}catch(_){} setTimeout(()=>row.classList.add('sb-dragging'),0); } }
+function sbEnd(){ sbDrag=null; sbClear(); }
+function sbOver(ev,tid){ if(!sbDrag||sbDrag.tid!==tid) return; ev.preventDefault(); const row=ev.currentTarget; if(row.dataset.sid===sbDrag.sid) return;
+  const r=row.getBoundingClientRect(), after=ev.clientY>r.top+r.height/2;
+  document.querySelectorAll('.sub-item.drop-before,.sub-item.drop-after').forEach(x=>x.classList.remove('drop-before','drop-after'));
+  row.classList.add(after?'drop-after':'drop-before'); }
+function sbLeave(ev){ if(!ev.currentTarget.contains(ev.relatedTarget)) ev.currentTarget.classList.remove('drop-before','drop-after'); }
+function sbDrop(ev,tid,sid){ if(!sbDrag||sbDrag.tid!==tid) return; ev.preventDefault();
+  const r=ev.currentTarget.getBoundingClientRect(), after=ev.clientY>r.top+r.height/2; const from=sbDrag.sid; sbEnd();
+  if(from===sid) return; store.moveSubtask(tid,from,sid,after); render(); }
 function toggleSub(tid,sid){const t=store.task(tid);const s=t.subtasks.find(x=>x.id===sid);if(!canCheckSub(s)){return;}if(s.done){if(isColab()&&subTimeLocked(s)){alert('Ya pasaron los 10 minutos: el tiempo de esta subtarea quedó fijo y no puede editarse.');return;}store.updateSubtask(tid,sid,{done:false,timeSpent:0,doneAt:null});logEvent(tid,'Reabrió la subtarea «'+s.name+'»');render();}else{timingSub=tid+':'+sid;render();setTimeout(()=>{const el=document.getElementById('stime-'+sid);if(el)el.focus();},0);}}
 function confirmSubTime(tid,sid){const el=document.getElementById('stime-'+sid);const m=parseInt(el&&el.value,10);if(!m||m<=0){alert('Escribe los minutos.');return;}const s0=store.task(tid).subtasks.find(x=>x.id===sid);store.updateSubtask(tid,sid,{done:true,timeSpent:m,doneAt:new Date().toISOString()});logEvent(tid,'Completó la subtarea «'+s0.name+'» ('+fmtTime(m)+')');timingSub=null;render();}
 function cancelSubTime(){timingSub=null;render();}
