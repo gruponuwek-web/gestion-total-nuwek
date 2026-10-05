@@ -502,7 +502,7 @@ function viewCliente(){
     return `<div class="card click" onclick="openProject('${p.id}')">
       <div style="display:flex;justify-content:space-between;align-items:start">
         <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div><h3 style="margin:8px 0 2px">${p.name}</h3></div>
-        <span class="pill ${health.cls}">${health.icon} ${health.pct}%</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}">${health.icon} ${health.pct}%</span>${isGerencia()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
       </div>
       <div class="muted" style="font-size:.85rem;margin-top:6px">${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}</div>
     </div>`;
@@ -1397,7 +1397,8 @@ function quickModal(){
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveFrenteEdit()">Guardar</button></div>`;
   } else if(qm.kind==='proyectoEdit'){
     const p2=store.project(qm.pid);
-    inner=`<h3>Editar parámetros del proyecto</h3>
+    inner=`<h3>Editar proyecto</h3>
+      <div class="field"><label>Nombre del proyecto</label><input id="qm-pname" value="${esc(p2.name||'')}" placeholder="Ej. Marketing 2026"></div>
       <div class="field row"><div><label>Precio contratado</label><input id="qm-price" type="number" value="${p2.price||0}"></div>
         <div><label>Pago por mes</label><input id="qm-monthly" type="number" value="${p2.monthlyPay||0}"></div></div>
       <div class="field row"><div><label># meses</label><input id="qm-months" type="number" value="${p2.months||0}"></div>
@@ -1667,7 +1668,7 @@ function openScoreEdit(pid,sid){qm={kind:'scoreEdit',pid,sid};render();}
 function saveScore(){const u=val('qm-scurl');if(!u){alert('Pon el link del scorecard.');return;}store.addScorecard(qm.pid,val('qm-sctitle'),u,val('qm-scdate'));qm=null;render();}
 function saveScoreEdit(){const u=val('qm-scurl');if(!u){alert('Pon el link del scorecard.');return;}store.updateScorecard(qm.pid,qm.sid,{title:val('qm-sctitle'),url:u,date:val('qm-scdate')});qm=null;render();}
 function delScore(pid,sid){if(confirm('¿Eliminar este scorecard?')){store.removeScorecard(pid,sid);render();}}
-function saveProjectEdit(){store.updateProject(qm.pid,{price:+val('qm-price')||0,monthlyPay:+val('qm-monthly')||0,months:+val('qm-months')||0,paymentDay:+val('qm-payday')||1,startDate:val('qm-start'),endDate:val('qm-end')});qm=null;render();}
+function saveProjectEdit(){const nm=(val('qm-pname')||'').trim(); if(!nm){alert('El proyecto necesita un nombre.');return;} store.updateProject(qm.pid,{name:nm,price:+val('qm-price')||0,monthlyPay:+val('qm-monthly')||0,months:+val('qm-months')||0,paymentDay:+val('qm-payday')||1,startDate:val('qm-start'),endDate:val('qm-end')});qm=null;render();}
 function toggleSvc(id){ svcOpen[id]=!svcOpen[id]; render(); }
 function toggleTeam(key){ teamOpen[key]=(teamOpen[key]!==true); render(); }
 function openSvcForm(){qm={kind:'servicio'};render();}
