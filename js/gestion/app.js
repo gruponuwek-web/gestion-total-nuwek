@@ -297,7 +297,7 @@ let session=null, loginUser=null, loginPin='', loginErr='', loginAttempts={};
 let view='clientes', selClient=null, selProject=null, selTab='gestor', role='gerencia';
 let currentUser='u_car', perfWindow='mes', opFilterClient='', opSelTask=null;
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
-let gestSub='cal', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
+let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
 let agPerson='u_car', agStart=todayISO();
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -806,7 +806,7 @@ function viewOpKanban(){
 }
 
 /* ============ GESTIÓN (vista de mando PM) ============ */
-function openGestion(){ view='gestion'; modalTask=null; gestAnchor=todayISO();
+function openGestion(){ view='gestion'; modalTask=null; gestAnchor=todayISO(); gestSub='asig';
   let last=null; try{ last=localStorage.getItem('gestLast_'+currentUser); }catch(_){}
   const f=last&&gestFilters().find(x=>x.id===last); if(f) applyGestFilter(f.id,true); else clearGestFilter(true);
   render(); }
