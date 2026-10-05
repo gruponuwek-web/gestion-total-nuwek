@@ -299,7 +299,7 @@ let currentUser='u_car', perfWindow='mes', opFilterClient='', opSelTask=null;
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
 let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
-let agPerson='u_car', agStart=todayISO();
+let agPerson='u_car', agStart=todayISO(), agSel=null, agListDrag=null;
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 function isColab(){ return role==='colab'; }
 function isPM(){ return role==='pm'; }
@@ -947,23 +947,79 @@ function setAgPerson(p){ agPerson=p; render(); }
 function agShift(d){ agStart=addDaysISO(agStart,d); render(); }
 function agToday(){ agStart=mondayOf(todayISO()); render(); }
 function agRangeLabel(days){ const dn=i=>+days[i].split('-')[2]; const last=days.length-1; const ab=MESES[(+days[last].split('-')[1])-1].slice(0,3).toLowerCase(); return `${dn(0)}–${dn(last)} ${ab}`; }
+const AG={H0:7,H1:21,rowH:46};
+function agCanEdit(){ return agPerson===currentUser || !isColab(); }
+function agSelInfo(){ if(!agSel) return null; const t=store.task(agSel.tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===agSel.sid); return (t&&sub)?{t,s:sub}:null; }
+function openAgItem(tid,sid){ agSel={tid,sid}; const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(sub&&sub.date) agStart=mondayOf(sub.date); openTask(tid); }
+function agGoDeadline(){ const si=agSelInfo(); if(si&&si.t.dueDate){ agStart=mondayOf(si.t.dueDate); render(); } }
 function agCalendar(days,pid){
-  const H0=7,H1=21,rowH=46,slots=H1-H0;
+  const {H0,H1,rowH}=AG, slots=H1-H0;
   const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
-  const today=todayISO();
+  const today=todayISO(); const si=agSelInfo(); const canEdit=agCanEdit();
   const hourLabels=[]; for(let h=H0;h<H1;h++) hourLabels.push(`<div class="ag-hr" style="height:${rowH}px">${h}:00</div>`);
-  const hoursCol=`<div class="ag-hours"><div class="ag-hours-sp"></div>${hourLabels.join('')}</div>`;
-  const dayCols=days.map(day=>{
+  let anyOff=false;
+  const cols=days.map(day=>{
     const subs=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.personId===pid && s.date===day && s.time) subs.push({s,t}); }));
-    const blocks=subs.map(it=>{ const [hh,mm]=(it.s.time||'10:00').split(':').map(Number); const startMin=hh*60+mm; if(startMin<H0*60||startMin>=H1*60) return ''; const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
-      return `<div class="ag-block" style="top:${top}px;height:${height}px;background:${f.color}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" onclick="openTask('${it.t.id}')"><div class="ag-bl-nm">${it.s.done?'✓ ':''}${it.s.name}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div></div>`;
+    const off=[];
+    const blocks=subs.map(it=>{ const [hh,mm]=(it.s.time||'10:00').split(':').map(Number); const startMin=hh*60+mm; if(startMin<H0*60||startMin>=H1*60){ off.push(it); return ''; }
+      const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
+      const sel=agSel&&agSel.sid===it.s.id;
+      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canEdit?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canEdit?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
     }).join('');
-    const lines=[]; for(let i=0;i<slots;i++) lines.push(`<div class="ag-line" style="top:${i*rowH}px"></div>`);
+    if(off.length) anyOff=true;
+    const lines=[]; for(let k=0;k<slots;k++) lines.push(`<div class="ag-line" style="top:${k*rowH}px"></div>`);
     const load=subs.reduce((a,it)=>a+(+it.s.durMin||30),0);
-    return `<div class="ag-day"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}</div><div class="ag-day-body" style="height:${slots*rowH}px">${lines.join('')}${blocks||''}</div></div>`;
-  }).join('');
+    const isDl=si&&si.t.dueDate===day;
+    const dl=isDl?`<div class="ag-dl-lbl" title="Fecha límite de «${esc(si.t.name)}»">🏁 Deadline · ${esc(si.t.name)}</div>`:'';
+    return {day,html:(offFoot)=>`<div class="ag-day${isDl?' deadline':''}"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}${isDl?'<span class="ag-dl-flag">🏁</span>':''}</div><div class="ag-day-body" data-day="${day}" style="height:${slots*rowH}px" ondragover="agListOver(event)" ondragleave="agListLeave(event)" ondrop="agListDrop(event)">${lines.join('')}${dl}${blocks||''}</div>${offFoot?`<div class="ag-off">${off.length?off.map(it=>`<div class="ag-off-it" onclick="openAgItem('${it.t.id}','${it.s.id}')" title="Fuera del horario 7:00–21:00">⏰ ${it.s.time} · ${esc(it.s.name)}</div>`).join(''):''}</div>`:''}</div>`};
+  });
+  const dayCols=cols.map(c=>c.html(anyOff)).join('');
+  const hoursCol=`<div class="ag-hours"><div class="ag-hours-sp"></div>${hourLabels.join('')}</div>`;
   return `<div class="ag-cal">${hoursCol}${dayCols}</div>`;
 }
+/* ---- arrastrar / redimensionar bloques ---- */
+function agSnap(min){ return Math.round(min/15)*15; }
+function agBlockDown(ev){
+  if(ev.button!==0 || ev.target.classList.contains('ag-rs')) return;
+  const el=ev.currentTarget; const tid=el.dataset.tid, sid=el.dataset.sid; const x0=ev.clientX, y0=ev.clientY; let moved=false;
+  const step=AG.rowH/4; const onMove=e=>{ if(!moved && Math.abs(e.clientX-x0)+Math.abs(e.clientY-y0)<5) return; moved=true; el.classList.add('dragging'); el.style.transform=`translate(${e.clientX-x0}px,${Math.round((e.clientY-y0)/step)*step}px)`; el.style.zIndex=20; };
+  const onUp=e=>{ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp);
+    if(!moved){ openAgItem(tid,sid); return; }
+    const blkTop=el.getBoundingClientRect().top; el.style.transform=''; el.classList.remove('dragging');
+    const body=[...document.elementsFromPoint(e.clientX,e.clientY)].find(n=>n.classList&&n.classList.contains('ag-day-body'));
+    if(!body){ render(); return; }
+    const t=store.task(tid); const sub=t.subtasks.find(x=>x.id===sid); const dur=+sub.durMin||30;
+    const r=body.getBoundingClientRect(); const topPx=(blkTop-r.top);   // posición real del bloque soltado
+    let min=AG.H0*60+agSnap(topPx/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
+    const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
+    store.updateSubtask(tid,sid,{date:body.dataset.day,time}); logEvent(tid,'Movió la subtarea «'+sub.name+'» a '+body.dataset.day+' '+time); agSel={tid,sid}; render(); };
+  document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
+}
+function agResizeDown(ev){
+  ev.stopPropagation(); ev.preventDefault(); const blk=ev.currentTarget.parentElement; const tid=blk.dataset.tid, sid=blk.dataset.sid; const y0=ev.clientY; const h0=blk.getBoundingClientRect().height;
+  const mt=blk.querySelector('.ag-bl-mt'); const t0=(blk.querySelector('.ag-bl-mt').textContent.split(' · ')[0]||''); blk.classList.add('resizing');
+  const onMove=e=>{ const dur=Math.max(15,agSnap((h0+(e.clientY-y0))/AG.rowH*60)); blk.style.height=(dur/60*AG.rowH)+'px'; if(mt) mt.textContent=t0+' · '+fmtDurShort(dur); };
+  const onUp=e=>{ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp);
+    const h=blk.getBoundingClientRect().height; let dur=Math.max(15,agSnap(h/AG.rowH*60));
+    const t=store.task(tid); const sub=t.subtasks.find(x=>x.id===sid); const [hh,mm]=(sub.time||'10:00').split(':').map(Number); dur=Math.min(dur,AG.H1*60-(hh*60+mm));
+    blk.classList.remove('resizing'); store.updateSubtask(tid,sid,{durMin:dur}); logEvent(tid,'Cambió la duración de «'+sub.name+'» a '+fmtDurShort(dur)); render(); };
+  document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
+}
+/* ---- arrastrar desde la lista al calendario ---- */
+function agListStart(ev,tid,sid){ agListDrag={tid,sid}; ev.dataTransfer.effectAllowed='move'; try{ev.dataTransfer.setData('text/plain',sid);}catch(_){} }
+function agListEnd(){ agListDrag=null; document.querySelectorAll('.ag-day-body.drop-on').forEach(x=>x.classList.remove('drop-on')); }
+function agListOver(ev){ if(!agListDrag) return; ev.preventDefault(); ev.currentTarget.classList.add('drop-on'); }
+function agListLeave(ev){ ev.currentTarget.classList.remove('drop-on'); }
+function agListDrop(ev){ if(!agListDrag) return; ev.preventDefault(); const body=ev.currentTarget; const d=agListDrag; agListEnd();
+  const t=store.task(d.tid); const sub=t.subtasks.find(x=>x.id===d.sid); const dur=+sub.durMin||30;
+  const r=body.getBoundingClientRect(); let min=AG.H0*60+agSnap((ev.clientY-r.top)/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
+  const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
+  store.updateSubtask(d.tid,d.sid,{date:body.dataset.day,time}); logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+body.dataset.day+' '+time); agSel=d; render(); }
+function agNotes(days){ let h=''; const si=agSelInfo();
+  if(si&&si.t.dueDate&&!days.includes(si.t.dueDate)) h+=`<button class="ag-note dl" onclick="agGoDeadline()" title="Ir a la semana del deadline">🏁 Deadline de «${esc(si.t.name)}»: ${dLabel(si.t.dueDate)} ${si.t.dueDate<days[0]?'←':'→'}</button>`;
+  const wk=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(x=>{ if(x.personId===agPerson&&x.date&&x.time&&!x.done&&[0,6].includes(isoWeekday(x.date))&&x.date>=addDaysISO(days[0],-1)&&x.date<=addDaysISO(days[4],2)) wk.push(x); }));
+  const wkIn=wk.filter(x=>x.date>=days[0]&&x.date<=addDaysISO(days[4],2)); if(wkIn.length) h+=`<span class="ag-note" title="${esc(wkIn.map(x=>x.name).join(' · '))}">🗓️ ${wkIn.length} subtarea${wkIn.length>1?'s':''} en fin de semana</span>`;
+  return h; }
 function viewAgenda(){
   const per=store.person(agPerson);
   const persOpts=store.activeStaff().map(u=>`<option value="${u.id}" ${agPerson===u.id?'selected':''}>${u.name}</option>`).join('');
@@ -974,8 +1030,10 @@ function viewAgenda(){
   items.forEach(it=>{const d=it.s.date; if(!d)buckets.sinf.push(it); else if(d<today)buckets.venc.push(it); else if(d===today)buckets.hoy.push(it); else if(d<=wkStr)buckets.sem.push(it); else buckets.resto.push(it);});
   Object.values(buckets).forEach(a=>a.sort((x,y)=>(((x.s.date||'9')+(x.s.time||''))<((y.s.date||'9')+(y.s.time||'')))?-1:1));
   const row=it=>{const p=store.project(it.t.projectId),c=store.client(p.clientId),f=kbFrente(it.t);const overdue=it.s.date&&it.s.date<today;
-    return `<div class="ag-item" onclick="openTask('${it.t.id}')" style="border-left:3px solid ${f.color}">
-      <div class="ag-it-nm">${it.s.name}</div>
+    const pend=(it.t.subtasks||[]).filter(x=>!x.done), sched=pend.filter(x=>x.date&&x.time).length; const sel=agSel&&agSel.sid===it.s.id; const canEdit=agCanEdit();
+    return `<div class="ag-item${sel?' sel':''}" ${canEdit?`draggable="true" ondragstart="agListStart(event,'${it.t.id}','${it.s.id}')" ondragend="agListEnd()"`:''} onclick="openAgItem('${it.t.id}','${it.s.id}')" style="border-left:3px solid ${f.color}">
+      <div class="ag-it-nm">${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
+      <div class="ag-it-tk">Tarea: ${esc(it.t.name)}</div>
       <div class="ag-it-mt"><span>${c.name} · <span style="color:${f.color};font-weight:600">${f.name}</span></span><span class="ag-it-date">${overdue?'🔴 ':''}${it.s.date?dLabel(it.s.date):'sin fecha'}</span></div></div>`;};
   const sec=(title,icon,arr)=>arr.length?`<div class="op-sec"><div class="op-sec-h">${icon} ${title} <span class="op-cnt">${arr.length}</span></div>${arr.map(row).join('')}</div>`:'';
   const total=buckets.venc.length+buckets.hoy.length+buckets.sem.length+buckets.resto.length+buckets.sinf.length;
@@ -985,6 +1043,7 @@ function viewAgenda(){
       <label class="filt"><span class="glabel">Persona</span><select class="filter-val" onchange="setAgPerson(this.value)">${persOpts}</select></label>
       <div class="kb-month"><button onclick="agShift(-7)" title="Semana anterior">‹</button><span class="kb-month-lbl">${agRangeLabel(days)}</span><button onclick="agShift(7)" title="Semana siguiente">›</button></div>
       <button class="btn ghost sm" onclick="agToday()">Hoy</button>
+      ${agNotes(days)}
     </div>
     <div class="ag-split">
       <div class="ag-left"><div class="op-list">${list}</div></div>

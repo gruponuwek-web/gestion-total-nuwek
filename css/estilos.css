@@ -620,3 +620,34 @@
   .gf-opt{display:flex;align-items:center;gap:7px;font-size:.88rem;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer}
   .gf-opt input{width:auto;margin:0}
   .gf-scope{display:flex;gap:18px}
+
+  .ag-item.sel{border-color:var(--green);box-shadow:0 0 0 2px var(--green) inset}
+  .ag-item[draggable=true]{cursor:grab}
+  .ag-it-tk{font-size:.74rem;color:var(--muted);margin-top:2px}
+  .ag-cnt{background:#e2ebe6;color:var(--green);border-radius:8px;padding:1px 7px;font-weight:700;font-size:.68rem;margin-left:4px;white-space:nowrap}
+  .ag-block{touch-action:none;user-select:none}
+  .ag-block.dragging{opacity:.85;cursor:grabbing;box-shadow:0 8px 22px rgba(0,0,0,.35);pointer-events:none}
+  .ag-block.sel{outline:3px solid #fff;box-shadow:0 0 0 5px var(--green),0 4px 14px rgba(0,0,0,.3);z-index:5}
+  .ag-block.done{opacity:.7}
+  .ag-rs{position:absolute;left:0;right:0;bottom:0;height:8px;cursor:ns-resize}
+  .ag-rs::after{content:'';position:absolute;left:50%;bottom:2px;width:22px;height:3px;margin-left:-11px;border-radius:2px;background:rgba(255,255,255,.7)}
+  .ag-day-body.drop-on{background:#fffbe6}
+  .ag-day.deadline{box-shadow:inset 3px 0 0 #e53935}
+  .ag-day.deadline .ag-day-body{background:linear-gradient(90deg,rgba(229,57,53,.07),transparent 40%)}
+  .ag-dl-lbl{position:absolute;left:4px;right:4px;top:0;z-index:1;background:#e53935;color:#fff;font-size:.62rem;font-weight:700;padding:2px 6px;border-radius:0 0 6px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .ag-dl-flag{font-size:.8rem}
+  .ag-off{background:#fff7e0;border-top:1px dashed #e6b800}
+  .ag-off-it{font-size:.64rem;font-weight:600;color:#8a6b00;padding:3px 6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ag-off-it:hover{background:#ffefb8}
+  .ag-note{font-size:.76rem;font-weight:600;color:var(--green);background:#fff;border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+  .ag-note.dl{color:#c0392b;border-color:#e8b4b0;cursor:pointer;background:#fdeceb}
+
+  .ag-block.resizing{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--green);z-index:6}
+  .ag-block{transition:none}
+  /* Agenda: la lista izquierda se desplaza sola; el resto de la pantalla no se mueve */
+  @media(min-width:901px){
+    .ag-split{height:calc(100vh - 360px);min-height:460px}
+    .ag-split>.ag-left,.ag-split>.ag-right{height:100%;overflow-y:auto;overscroll-behavior:contain}
+    .ag-split>.ag-left{padding:2px 6px 16px 2px}
+    .ag-split>.ag-right{position:static}
+  }
