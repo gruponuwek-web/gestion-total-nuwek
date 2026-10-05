@@ -297,7 +297,7 @@ let session=null, loginUser=null, loginPin='', loginErr='', loginAttempts={};
 let view='clientes', selClient=null, selProject=null, selTab='gestor', role='gerencia';
 let currentUser='u_car', perfWindow='mes', opFilterClient='', opSelTask=null;
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
-let gestSub='cal', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='';
+let gestSub='cal', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
 let agPerson='u_car', agStart=todayISO();
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -806,7 +806,29 @@ function viewOpKanban(){
 }
 
 /* ============ GESTIÓN (vista de mando PM) ============ */
-function openGestion(){ view='gestion'; modalTask=null; gestAnchor=todayISO(); render(); }
+function openGestion(){ view='gestion'; modalTask=null; gestAnchor=todayISO();
+  let last=null; try{ last=localStorage.getItem('gestLast_'+currentUser); }catch(_){}
+  const f=last&&gestFilters().find(x=>x.id===last); if(f) applyGestFilter(f.id,true); else clearGestFilter(true);
+  render(); }
+/* ===== Vistas (filtros guardados por usuario): clientes + personas + periodo ===== */
+function gestFilters(){ const u=store.d.staff.find(x=>x.id===currentUser); if(u&&Array.isArray(u.gestFilters)&&u.gestFilters.length) return u.gestFilters;
+  try{ return JSON.parse(localStorage.getItem('gestFilters_'+currentUser)||'[]'); }catch(_){ return []; } }
+function saveGestFilters(list){ try{ localStorage.setItem('gestFilters_'+currentUser,JSON.stringify(list)); }catch(_){}
+  const u=store.d.staff.find(x=>x.id===currentUser); if(u) store.updateStaff(u.id,{gestFilters:list}); }
+function applyGestFilter(id,silent){ const f=gestFilters().find(x=>x.id===id); if(!f) return;
+  gestFilterId=f.id; gestClients=(f.clients||[]).slice(); gestPeople=(f.people||[]).slice(); gestScope=f.scope||'mes'; gestProject=''; gestPerson='';
+  try{ localStorage.setItem('gestLast_'+currentUser,f.id); }catch(_){} if(!silent) render(); }
+function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestPeople=[]; gestProject=''; gestPerson='';
+  try{ localStorage.removeItem('gestLast_'+currentUser); }catch(_){} if(!silent) render(); }
+function gestPass(x){ return (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.includes(x.s.personId)); }
+function openGestFilterForm(id){ const f=id?gestFilters().find(x=>x.id===id):null; qm={kind:'gestFilter',fid:id||null,f:f||{name:'',clients:[],people:[],scope:gestScope}}; render(); }
+function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){alert('Ponle un nombre a la vista.');return;}
+  const clients=[...document.querySelectorAll('.gf-cl:checked')].map(x=>x.value), people=[...document.querySelectorAll('.gf-pe:checked')].map(x=>x.value);
+  const scope=(document.querySelector('input[name=gf-scope]:checked')||{}).value||'mes';
+  const list=gestFilters().slice(); const f={id:qm.fid||('gf_'+Date.now()),name,clients,people,scope};
+  const i=list.findIndex(x=>x.id===f.id); if(i>=0) list[i]=f; else list.push(f);
+  saveGestFilters(list); qm=null; applyGestFilter(f.id); }
+function delGestFilter(){ if(!confirm('¿Eliminar esta vista?')) return; saveGestFilters(gestFilters().filter(x=>x.id!==qm.fid)); if(gestFilterId===qm.fid) clearGestFilter(true); qm=null; render(); }
 function setGestSub(v){ gestSub=v; render(); }
 function setGestScope(s){ gestScope=s; render(); }
 function setGestProject(v){ gestProject=v; render(); }
@@ -841,6 +863,11 @@ function viewGestion(){
   const body = gestSub==='asig' ? gestAsignaciones(R) : gestCalendar(R);
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Vista de mando · ${gestSub==='asig'?'quién trabaja en qué':'calendario del equipo'}</div></div>
     <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button></div>
+    <div class="gf-bar"><span class="glabel">Vistas</span>
+      <button class="gf-chip${gestFilterId?'':' on'}" onclick="clearGestFilter()">Todo</button>
+      ${gestFilters().map(f=>`<button class="gf-chip${f.id===gestFilterId?' on':''}" onclick="applyGestFilter('${f.id}')">${esc(f.name)}${f.id===gestFilterId?` <span class="gf-ed" title="Editar vista" onclick="event.stopPropagation();openGestFilterForm('${f.id}')">✏️</span>`:''}</button>`).join('')}
+      <button class="gf-chip gf-new" onclick="openGestFilterForm()">+ Nueva vista</button>
+    </div>
     <div class="kb-ctl">
       <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button></div>
       <label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="setGestProject(this.value)">${projOpts}</select></label>
@@ -852,7 +879,7 @@ function viewGestion(){
 }
 function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip" style="border-left:3px solid ${fr.color}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name}" onclick="openTask('${it.t.id}')">${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
 function gestCalendar(R){
-  let all=gestSubs(); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
+  let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); });
   if(gestScope==='dia') return gestDayView(byDay);
   if(gestScope==='semana') return gestWeekView(byDay);
@@ -895,11 +922,11 @@ function gestDayView(byDay){
   return `<div class="gc-day">${rows}</div>`;
 }
 function gestAsignaciones(R){
-  let all=gestSubs().filter(x=>x.s.date>=R.start && x.s.date<=R.end);
+  let all=gestSubs().filter(gestPass).filter(x=>x.s.date>=R.start && x.s.date<=R.end);
   if(gestProject) all=all.filter(x=>x.p.id===gestProject);
   if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
-  const staff=gestPerson?store.activeStaff().filter(u=>u.id===gestPerson):store.activeStaff();
-  const projects=gestProject?store.d.projects.filter(p=>p.id===gestProject):store.d.projects;
+  const staff=(gestPerson?store.activeStaff().filter(u=>u.id===gestPerson):store.activeStaff()).filter(u=>!gestPeople.length||gestPeople.includes(u.id));
+  const projects=(gestProject?store.d.projects.filter(p=>p.id===gestProject):store.d.projects).filter(p=>!gestClients.length||gestClients.includes(p.clientId));
   const head=`<th class="ga-proj-h">PROYECTO</th>`+staff.map(u=>`<th class="ga-ph"><div class="ga-phin">${avatar(u,true)}<span>${u.name}</span></div></th>`).join('');
   const rows=projects.map(p=>{ const c=store.client(p.clientId); const fc=(store.frentesOf(p.id)[0]||{}).color||'#8a9a93'; const sv=store.service(p.serviceId);
     const cells=staff.map(u=>{ const items=all.filter(x=>x.p.id===p.id && x.s.personId===u.id);
@@ -1582,6 +1609,15 @@ function quickModal(){
       <div class="field"><label>URLs</label>${urlRows}<button class="btn ghost sm" style="margin-top:6px" onclick="lkAdd()">+ Agregar otra URL</button></div>
       <div class="hint">Si no pones http(s), se asume https://</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveLibLink()">Guardar</button></div>`;
+  } else if(qm.kind==='gestFilter'){
+    const f=qm.f;
+    inner=`<h3>${qm.fid?'Editar vista':'Nueva vista'}</h3>
+      <div class="field"><label>Nombre de la vista</label><input id="gf-name" value="${esc(f.name)}" placeholder="Ej. Marketing"></div>
+      <div class="field"><label>Clientes <span class="muted" style="text-transform:none">(sin marcar = todos)</span></label><div class="gf-list">${store.d.clients.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<label class="gf-opt"><input type="checkbox" class="gf-cl" value="${c.id}" ${(f.clients||[]).includes(c.id)?'checked':''}> ${esc(c.name)}</label>`).join('')}</div></div>
+      <div class="field"><label>Personas <span class="muted" style="text-transform:none">(sin marcar = todas)</span></label><div class="gf-list">${store.activeStaff().map(u=>`<label class="gf-opt"><input type="checkbox" class="gf-pe" value="${u.id}" ${(f.people||[]).includes(u.id)?'checked':''}> ${esc(u.name)}</label>`).join('')}</div></div>
+      <div class="field"><label>Periodo</label><div class="gf-scope">${[['dia','Hoy'],['semana','Semana'],['mes','Mes']].map(([v,l])=>`<label class="gf-opt"><input type="radio" name="gf-scope" value="${v}" ${(f.scope||'mes')===v?'checked':''}> ${l}</label>`).join('')}</div>
+        <div class="hint">Con la vista aplicada puedes avanzar o retroceder de periodo con las flechas (‹ ›).</div></div>
+      <div class="wiz-actions">${qm.fid?'<button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="delGestFilter()">🗑️ Eliminar</button>':''}<button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveGestFilter()">Guardar</button></div>`;
   } else if(qm.kind==='kbTask'){
     const projs=store.d.projects.slice();
     const pid=qm.pid||(projs[0]&&projs[0].id); const p2=store.project(pid);

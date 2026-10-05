@@ -35,7 +35,8 @@ function dbToApp(row){
     skills: row.skills || '',
     health: row.health || {},
     computer: row.computer || {},
-    active: row.active !== false
+    active: row.active !== false,
+    gestFilters: Array.isArray(row.filtros) ? row.filtros : []
   };
 }
 
@@ -69,7 +70,8 @@ function appToDb(u){
     skills: u.skills || '',
     health: u.health || {},
     computer: u.computer || {},
-    active: u.active !== false
+    active: u.active !== false,
+    filtros: u.gestFilters || []
   };
 }
 
@@ -86,7 +88,11 @@ async function dbLoadPersonal(){
 // --- GUARDAR (crear o actualizar) una persona en Supabase ---
 async function dbSavePerson(u){
   try{
-    const { error } = await sb.from('personal').upsert(appToDb(u));
+    let { error } = await sb.from('personal').upsert(appToDb(u));
+    if (error && /filtros/.test(error.message||'')) {   // la columna "filtros" aún no existe: guardar sin ella
+      const row = appToDb(u); delete row.filtros;
+      ({ error } = await sb.from('personal').upsert(row));
+    }
     if (error) {
       console.error('No se pudo guardar la persona en Supabase:', error.message);
       alert('Ojo: no se pudo guardar en la base de datos.\n\n' + error.message);
