@@ -22,7 +22,8 @@ function dbToAppTask(row){
     dueDate: row.due_date || '',
     viaticos: row.viaticos || 0,
     subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
-    links: Array.isArray(row.links) ? row.links : []
+    links: Array.isArray(row.links) ? row.links : [],
+    ord: row.ord || 0
   };
 }
 
@@ -43,7 +44,8 @@ function appToDbTask(t){
     due_date: t.dueDate || null,
     viaticos: +t.viaticos || 0,
     subtasks: t.subtasks || [],
-    links: t.links || []
+    links: t.links || [],
+    ord: t.ord || 0
   };
 }
 
@@ -60,7 +62,11 @@ async function dbLoadTareas(){
 // --- GUARDAR (crear o actualizar) una tarea con sus subtareas ---
 async function dbSaveTask(t){
   try{
-    const { error } = await sb.from('tareas').upsert(appToDbTask(t));
+    let { error } = await sb.from('tareas').upsert(appToDbTask(t));
+    if (error && /\bord\b/.test(error.message||'')){   // la columna "ord" aún no existe en la base: guardar sin ella
+      const row = appToDbTask(t); delete row.ord;
+      ({ error } = await sb.from('tareas').upsert(row));
+    }
     if (error){
       console.error('No se pudo guardar la tarea en Supabase:', error.message);
       alert('Ojo: no se pudo guardar la tarea en la base de datos.\n\n' + error.message);

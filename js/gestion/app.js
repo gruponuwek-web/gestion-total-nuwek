@@ -197,13 +197,17 @@ class Store{
   addProject(p){ p.id='pr_'+Date.now(); this.d.projects.push(p); this.save(); return p; }
   updateProject(id,patch){ const p=this.project(id); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p);} }
   linksOf(pid){ const p=this.project(pid); return (p&&p.links)||[]; }
-  addLink(pid,label,url){ const p=this.project(pid); if(!p)return; p.links=p.links||[]; p.links.push({id:'lk_'+Date.now(),label,url}); this.save(); }
+  addLink(pid,label,urls){ const p=this.project(pid); if(!p)return; p.links=p.links||[]; const list=(Array.isArray(urls)?urls:[{title:'',url:urls}]).filter(u=>u&&u.url);
+    const ex=p.links.find(l=>(l.label||'').trim().toLowerCase()===(label||'').trim().toLowerCase());
+    if(ex){ ex.urls=linkUrls(ex).concat(list); delete ex.url; } else p.links.push({id:'lk_'+Date.now(),label,urls:list});
+    this.saveLinks(p); }
+  saveLinks(p){ this.save(); if(typeof dbSaveProject==='function') dbSaveProject(p); }
   scorecardsOf(pid){ const p=this.project(pid); return (p&&p.scorecards)||[]; }
   addScorecard(pid,title,url,date){ const p=this.project(pid); if(!p)return; p.scorecards=p.scorecards||[]; p.scorecards.push({id:'sc_'+Date.now(),title:title||'',url:url||'',date:date||todayISO()}); this.save(); }
   updateScorecard(pid,id,fields){ const p=this.project(pid); if(!p)return; const s=(p.scorecards||[]).find(x=>x.id===id); if(s)Object.assign(s,fields); this.save(); }
   removeScorecard(pid,id){ const p=this.project(pid); if(!p)return; p.scorecards=(p.scorecards||[]).filter(x=>x.id!==id); this.save(); }
-  updateLink(pid,lid,patch){ const p=this.project(pid); if(!p||!p.links)return; const l=p.links.find(x=>x.id===lid); if(l){Object.assign(l,patch); this.save();} }
-  removeLink(pid,lid){ const p=this.project(pid); if(!p||!p.links)return; p.links=p.links.filter(x=>x.id!==lid); this.save(); }
+  updateLink(pid,lid,patch){ const p=this.project(pid); if(!p||!p.links)return; const l=p.links.find(x=>x.id===lid); if(l){Object.assign(l,patch); if(patch.urls) delete l.url; this.saveLinks(p);} }
+  removeLink(pid,lid){ const p=this.project(pid); if(!p||!p.links)return; p.links=p.links.filter(x=>x.id!==lid); this.saveLinks(p); }
   addClient(o){ const c=Object.assign({id:'c_'+Date.now(),name:'',razon:'',rfc:'',location:'',web:'',ig:'',generalResponsibleId:null,people:[]},o); this.d.clients.push(c); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return c; }
   updateClient(id,patch){ const c=this.client(id); if(c){Object.assign(c,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
   addClientPerson(cid,o){ const c=this.client(cid); if(!c)return; const p=Object.assign({id:'p_'+Date.now(),type:'cliente',bossId:null},o); c.people.push(p); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return p; }
@@ -226,7 +230,30 @@ class Store{
   subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){Object.assign(s,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date) s.dateConflict=false; Object.assign(s,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  /* Mueve una tarea a (frente, etapa, posición). Reubica las fechas de las subtareas que estaban en la etapa de origen
+     conservando su día relativo; si no cabe en la etapa destino -> hoy + dateConflict (icono rojo). */
+  moveTaskTo(tid,frenteId,fromEtapaId,toEtapaId,beforeTid){
+    const t=this.task(tid); if(!t) return; const pid=t.projectId;
+    const from=this.etapasOf(pid).find(e=>e.id===fromEtapaId), to=this.etapasOf(pid).find(e=>e.id===toEtapaId);
+    t.frenteId=frenteId;
+    if(from&&to&&from.id!==to.id){
+      const day=86400000, toD=x=>Math.round(new Date(x+'T00:00:00').getTime()/day);
+      const fromS=toD(from.start), toS=toD(to.start), toE=toD(to.end), fmt=n=>new Date(n*day).toISOString().split('T')[0];
+      (t.subtasks||[]).forEach(st=>{
+        if(!st.date||st.date<from.start||st.date>from.end) return;
+        const n=toD(st.date)-fromS+toS;
+        if(n<=toE){ st.date=fmt(n); st.dateConflict=false; }
+        else { st.date=todayISO(); st.dateConflict=true; }
+      });
+    }
+    // reordenar dentro de la celda destino
+    const cell=this.tasksOf(pid).filter(x=>x.id!==tid && x.frenteId===frenteId && taskEtapaIds(x).has(toEtapaId)).sort((a,b)=>(a.ord||0)-(b.ord||0));
+    let idx=beforeTid?cell.findIndex(x=>x.id===beforeTid):-1; if(idx<0) idx=cell.length;
+    cell.splice(idx,0,t);
+    cell.forEach((x,i)=>{ if(x.ord!==i+1||x===t){ x.ord=i+1; if(typeof dbSaveTask==='function') dbSaveTask(x); } });
+    this.save();
+  }
   removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
   updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
@@ -960,6 +987,18 @@ function viewProyecto(){
     <div class="ptabs">${tabbar}</div>${content}`;
 }
 
+/* ===== Arrastrar tareas en el Gestor ===== */
+let tcDrag=null;
+function tcDragStart(ev,tid,eid){ tcDrag={tid,eid}; ev.dataTransfer.effectAllowed='move'; try{ev.dataTransfer.setData('text/plain',tid);}catch(_){} setTimeout(()=>{ const el=ev.target.closest&&ev.target.closest('.tchip'); if(el) el.classList.add('dragging'); },0); }
+function tcDragEnd(){ tcDrag=null; document.querySelectorAll('.tchip.dragging,.gcell.drop-on').forEach(x=>x.classList.remove('dragging','drop-on')); document.querySelectorAll('.drop-line').forEach(x=>x.remove()); }
+function tcBefore(cell,y){ const chips=[...cell.querySelectorAll('.tchip:not(.dragging)')]; for(const c of chips){ const r=c.getBoundingClientRect(); if(y<r.top+r.height/2) return c; } return null; }
+function tcDragOver(ev){ if(!tcDrag) return; ev.preventDefault(); const cell=ev.currentTarget; cell.classList.add('drop-on');
+  cell.querySelectorAll('.drop-line').forEach(x=>x.remove()); const ln=document.createElement('div'); ln.className='drop-line';
+  const b=tcBefore(cell,ev.clientY); if(b) cell.insertBefore(ln,b); else { const add=cell.querySelector('.cell-add'); if(add) cell.insertBefore(ln,add); else cell.appendChild(ln); } }
+function tcDragLeave(ev){ const cell=ev.currentTarget; if(!cell.contains(ev.relatedTarget)){ cell.classList.remove('drop-on'); cell.querySelectorAll('.drop-line').forEach(x=>x.remove()); } }
+function tcDrop(ev){ if(!tcDrag) return; ev.preventDefault(); const cell=ev.currentTarget; const b=tcBefore(cell,ev.clientY); const d=tcDrag; tcDragEnd();
+  store.moveTaskTo(d.tid,cell.dataset.fr,d.eid,cell.dataset.et,b?b.dataset.tid:null); render(); }
+
 function tabGestor(p){
   const colab=isColab();
   const frentes=store.frentesOf(p.id), etapas=store.etapasOf(p.id), tasks=store.tasksOf(p.id);
@@ -968,11 +1007,15 @@ function tabGestor(p){
   const head=`<tr><th class="corner">Frente ╲ Etapa</th>${etapas.map(e=>`<th><div class="et-hd"><div><div class="et-nm">${e.name}</div><span class="sub">${dLabel(e.start)}–${dLabel(e.end)}</span></div>${etOps(e)}</div></th>`).join('')}</tr>`;
   const rows=frentes.map(f=>{
     const cells=etapas.map(e=>{
-      const chips=tasks.filter(t=>t.frenteId===f.id && taskEtapaIds(t).has(e.id)).map(t=>{
+      const chips=tasks.filter(t=>t.frenteId===f.id && taskEtapaIds(t).has(e.id)).sort((a,b)=>(a.ord||0)-(b.ord||0)).map(t=>{
         const done=(t.subtasks||[]).filter(s=>s.done).length, tot=(t.subtasks||[]).length;
-        return `<div class="tchip" style="background:${f.color}" onclick="openTask('${t.id}')">${dk(t)}${t.name}<div class="st">${statusLabel[t.status]} · ${done}/${tot} · ${fmtTime(store.taskTime(t))}</div></div>`;
+        const bad=(t.subtasks||[]).some(x=>x.dateConflict&&!x.done);
+        const isDone=t.status==='done';
+        const late=!isDone && e.end<todayISO() && ((t.subtasks||[]).some(x=>!x.done && x.date>=e.start && x.date<=e.end) || ((t.subtasks||[]).length===0 && t.dueDate>=e.start && t.dueDate<=e.end));
+        const cls='tchip'+(isDone?' is-done':'')+(late?' is-late':'');
+        return `<div class="${cls}" ${late?'title="Atrasada: la etapa ya terminó y tiene pendientes"':''} data-tid="${t.id}" ${colab?'':`draggable="true" ondragstart="tcDragStart(event,'${t.id}','${e.id}')" ondragend="tcDragEnd()"`} style="background:${f.color}" onclick="openTask('${t.id}')">${bad?'<span class="date-bad" title="Hay subtareas con fecha que no cabía en la etapa; se pusieron en hoy">🔴</span> ':''}${dk(t)}${t.name}<div class="st">${statusLabel[t.status]} · ${done}/${tot} · ${fmtTime(store.taskTime(t))}</div></div>`;
       }).join('');
-      return `<td class="gcell">${chips}${colab?'':`<button class="cell-add" onclick="openTaskForm('${p.id}','${f.id}','${e.id}')">+ tarea</button>`}</td>`;
+      return `<td class="gcell" data-fr="${f.id}" data-et="${e.id}" ${colab?'':`ondragover="tcDragOver(event)" ondragleave="tcDragLeave(event)" ondrop="tcDrop(event)"`}>${chips}${colab?'':`<button class="cell-add" onclick="openTaskForm('${p.id}','${f.id}','${e.id}')">+ tarea</button>`}</td>`;
     }).join('');
     const frOps=colab?'':`<span class="fr-ops"><button title="Subir" onclick="moveFrente('${p.id}','${f.id}',-1)">↑</button><button title="Bajar" onclick="moveFrente('${p.id}','${f.id}',1)">↓</button><button title="Renombrar" onclick="openFrenteEdit('${f.id}','${p.id}')">✏️</button><button title="Eliminar" onclick="delFrente('${f.id}','${p.id}')">🗑️</button></span>`;
     return `<tr><td class="frente-h" style="background:${f.color}"><div class="fr-hd"><span class="fr-nm">${f.name}</span>${frOps}</div></td>${cells}</tr>`;
@@ -1229,6 +1272,17 @@ function tabKPIs(p){
 }
 
 /* ---------- Datos y alcances (incluye Cobranza y Rentabilidad) ---------- */
+/* Biblioteca: cada "cajón" (nombre) guarda varias URLs. Compatible con links viejos {label,url}. */
+function linkUrls(l){ return Array.isArray(l.urls)?l.urls:(l.url?[{title:'',url:l.url}]:[]); }
+function hrefOf(u){ return (u||'').match(/^https?:\/\//)?u:'https://'+u; }
+function libCard(pid,l,editable){
+  const urls=linkUrls(l);
+  const items=urls.map(u=>{ const host=faviconOf(u.url);
+    return `<a class="lib-item" href="${esc(hrefOf(u.url))}" target="_blank" rel="noopener"><span class="lib-ico sm">${host?`<img src="https://www.google.com/s2/favicons?domain=${host}&sz=64" alt="">`:'🔗'}</span><span class="lib-g"><span class="lib-nm">${esc(u.title||host||u.url)}</span>${u.title?`<span class="lib-url muted">${esc(host||u.url)}</span>`:''}</span><span class="lib-open">↗</span></a>`; }).join('');
+  return `<div class="lib-box"><div class="lib-box-h"><span class="lib-box-nm">🗂️ ${esc(l.label||'Sin nombre')} <span class="muted" style="font-weight:500">· ${urls.length}</span></span>
+    <span class="lib-ops">${editable?`<button class="btn ghost sm" title="Editar" onclick="openLinkEdit('${pid}','${l.id}')">✏️</button>`:''}<button class="btn ghost sm" title="Eliminar" onclick="delLink('${pid}','${l.id}')">🗑️</button></span></div>
+    <div class="lib-box-b">${items||'<div class="muted" style="padding:8px 4px">Sin URLs.</div>'}</div></div>`;
+}
 function faviconOf(url){ try{ const u=new URL(url.match(/^https?:\/\//)?url:'https://'+url); return u.hostname; }catch(e){ return ''; } }
 function tabScorecard(p){
   const scs=store.scorecardsOf(p.id).slice().sort((a,b)=>((a.date||'')<(b.date||'')?1:-1));
@@ -1245,20 +1299,20 @@ function tabScorecard(p){
     <p class="muted" style="margin-bottom:14px">Historial de evaluaciones del proyecto. Por ahora se guarda el link a cada scorecard; el portal para llenarlos (cliente ↔ Nuwek) llegará pronto.</p>
     <div class="lib-list">${rows||'<div class="muted">Aún no hay scorecards. Agrega el primero con “+ Scorecard”.</div>'}</div>`;
 }
+let selLib=null;
+function selectLib(id){ selLib=id; render(); }
 function tabBiblioteca(p){
   const links=store.linksOf(p.id);
-  const rows=links.map(l=>{
-    const host=faviconOf(l.url);
-    const href=(l.url||'').match(/^https?:\/\//)?l.url:'https://'+l.url;
-    return `<div class="lib-row">
-      <div class="lib-ico">${host?`<img src="https://www.google.com/s2/favicons?domain=${host}&sz=64" alt="">`:'🔗'}</div>
-      <div class="lib-g"><a class="lib-nm" href="${href}" target="_blank" rel="noopener">${l.label||l.url}</a><div class="lib-url muted">${host||l.url}</div></div>
-      <div class="lib-ops"><a class="btn ghost sm" href="${href}" target="_blank" rel="noopener">Abrir ↗</a><button class="btn ghost sm" onclick="openLinkEdit('${p.id}','${l.id}')">✏️</button><button class="btn ghost sm" onclick="delLink('${p.id}','${l.id}')">🗑️</button></div>
-    </div>`;
-  }).join('');
+  if(!links.some(l=>l.id===selLib)) selLib=links.length?links[0].id:null;
+  const cur=links.find(l=>l.id===selLib);
+  const list=links.map(l=>`<div class="lib-side-it${l.id===selLib?' on':''}" onclick="selectLib('${l.id}')"><span class="lib-side-nm">🗂️ ${esc(l.label||'Sin nombre')}</span><span class="lib-side-n">${linkUrls(l).length}</span></div>`).join('');
+  const detail=cur?`<div class="lib-det-h"><h3>${esc(cur.label||'Sin nombre')}</h3><span class="lib-ops"><button class="btn ghost sm" title="Editar" onclick="openLinkEdit('${p.id}','${cur.id}')">✏️</button><button class="btn ghost sm" title="Eliminar" onclick="delLink('${p.id}','${cur.id}')">🗑️</button></span></div>
+      <div class="lib-det-b">${linkUrls(cur).map(u=>{ const host=faviconOf(u.url);
+        return `<a class="lib-item" href="${esc(hrefOf(u.url))}" target="_blank" rel="noopener"><span class="lib-ico sm">${host?`<img src="https://www.google.com/s2/favicons?domain=${host}&sz=64" alt="">`:'🔗'}</span><span class="lib-g"><span class="lib-nm">${esc(u.title||host||u.url)}</span>${u.title?`<span class="lib-url muted">${esc(host||u.url)}</span>`:''}</span><span class="lib-open">↗</span></a>`; }).join('')||'<div class="muted" style="padding:8px">Sin URLs.</div>'}</div>`
+    :'<div class="muted" style="padding:20px">Selecciona un cajón para ver sus links.</div>';
   return `<div class="sec-title"><h2 style="font-size:1.15rem">📚 Biblioteca</h2><button class="btn sm" onclick="openLinkForm('${p.id}')">+ Link</button></div>
-    <p class="muted" style="margin-bottom:14px">Links del proyecto siempre a la mano: drives, documentos, brand kits, tableros, referencias…</p>
-    <div class="lib-list">${rows||'<div class="muted">Aún no hay links. Agrega el primero con “+ Link”.</div>'}</div>`;
+    <p class="muted" style="margin-bottom:14px">Cada nombre es un cajón que puede guardar varias URLs: drives, documentos, brand kits, tableros, referencias…</p>
+    ${links.length?`<div class="lib-split"><div class="lib-side">${list}</div><div class="lib-det">${detail}</div></div>`:'<div class="muted">Aún no hay links. Agrega el primero con “+ Link”.</div>'}`;
 }
 function tabDatos(p){
   const sv=store.service(p.serviceId); const today=todayISO();
@@ -1508,12 +1562,14 @@ function quickModal(){
       <div class="hint">Si no pones http(s), se asume https://</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='scoreEdit'?'saveScoreEdit()':'saveScore()'}">Guardar</button></div>`;
   } else if(qm.kind==='link' || qm.kind==='linkEdit'){
-    const l=qm.kind==='linkEdit'?(store.linksOf(qm.pid).find(x=>x.id===qm.lid)||{label:'',url:''}):{label:'',url:''};
+    const l=qm.kind==='linkEdit'?(store.linksOf(qm.pid).find(x=>x.id===qm.lid)||{label:''}):{label:''};
+    if(!qm.urls){ qm.urls=linkUrls(l).map(u=>({title:u.title||'',url:u.url||''})); if(!qm.urls.length) qm.urls=[{title:'',url:''}]; }
+    const urlRows=qm.urls.map((u,i)=>`<div class="lk-row"><input class="lk-t" id="qm-lkt-${i}" value="${esc(u.title)}" placeholder="Título (opcional)"><input class="lk-u" id="qm-lku-${i}" value="${esc(u.url)}" placeholder="https://…"><button class="btn ghost sm" title="Quitar" onclick="lkRemove(${i})">×</button></div>`).join('');
     inner=`<h3>${qm.kind==='linkEdit'?'Editar link':'Nuevo link'}</h3>
       <div class="field"><label>Nombre</label><input id="qm-lklabel" value="${esc(l.label||'')}" placeholder="Ej. Brand kit / Drive del cliente"></div>
-      <div class="field"><label>URL</label><input id="qm-lkurl" value="${esc(l.url||'')}" placeholder="https://…"></div>
+      <div class="field"><label>URLs</label>${urlRows}<button class="btn ghost sm" style="margin-top:6px" onclick="lkAdd()">+ Agregar otra URL</button></div>
       <div class="hint">Si no pones http(s), se asume https://</div>
-      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='linkEdit'?'saveLinkEdit()':'saveLink()'}">Guardar</button></div>`;
+      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveLibLink()">Guardar</button></div>`;
   } else if(qm.kind==='kbTask'){
     const projs=store.d.projects.slice();
     const pid=qm.pid||(projs[0]&&projs[0].id); const p2=store.project(pid);
@@ -1585,9 +1641,15 @@ function delPay(payId,pid){if(confirm('¿Eliminar este pago?')){store.removePaym
 function openGenPagos(pid){qm={kind:'genPagos',pid};render();}function runGenPagos(){const freq=val('qm-freq'),count=+val('qm-count'),total=+val('qm-total'),start=val('qm-pstart');if(!count||!total||!start){alert('Completa frecuencia, número, total y fecha.');return;}if(!confirm('Esto reemplaza el calendario de pagos actual. ¿Continuar?'))return;store.generatePaymentsCustom(qm.pid,freq,count,total,start);qm=null;render();}
 function openProjectEdit(pid){qm={kind:'proyectoEdit',pid};render();}
 function openLinkForm(pid){qm={kind:'link',pid};render();}
-function saveLink(){const u=val('qm-lkurl');if(!u){alert('Pon la URL del link.');return;}store.addLink(qm.pid,val('qm-lklabel')||u,u);qm=null;render();}
+function lkRead(){ if(!qm||!qm.urls) return; qm.urls=qm.urls.map((u,i)=>({title:val('qm-lkt-'+i)||'',url:(val('qm-lku-'+i)||'').trim()})); }
+function lkAdd(){ lkRead(); qm.label=val('qm-lklabel'); qm.urls.push({title:'',url:''}); const lb=qm.label; render(); const el=document.getElementById('qm-lklabel'); if(el&&lb!=null) el.value=lb; const last=document.getElementById('qm-lku-'+(qm.urls.length-1)); if(last) last.focus(); }
+function lkRemove(i){ lkRead(); const lb=val('qm-lklabel'); qm.urls.splice(i,1); if(!qm.urls.length) qm.urls=[{title:'',url:''}]; render(); const el=document.getElementById('qm-lklabel'); if(el) el.value=lb; }
+function saveLibLink(){ lkRead(); const urls=qm.urls.filter(u=>u.url); if(!urls.length){alert('Pon al menos una URL.');return;}
+  const label=val('qm-lklabel')||urls[0].title||urls[0].url;
+  if(qm.kind==='linkEdit'){ store.updateLink(qm.pid,qm.lid,{label,urls}); selLib=qm.lid; } else { store.addLink(qm.pid,label,urls); const ls=store.linksOf(qm.pid); const m=ls.find(l=>(l.label||'').trim().toLowerCase()===label.trim().toLowerCase()); if(m) selLib=m.id; }
+  qm=null; render(); }
+function openLinkForm(pid){qm={kind:'link',pid};render();}
 function openLinkEdit(pid,lid){qm={kind:'linkEdit',pid,lid};render();}
-function saveLinkEdit(){const u=val('qm-lkurl');if(!u){alert('Pon la URL del link.');return;}store.updateLink(qm.pid,qm.lid,{label:val('qm-lklabel')||u,url:u});qm=null;render();}
 function delLink(pid,lid){if(confirm('¿Eliminar este link?')){store.removeLink(pid,lid);render();}}
 function openScoreForm(pid){qm={kind:'score',pid};render();}
 function openScoreEdit(pid,sid){qm={kind:'scoreEdit',pid,sid};render();}
@@ -1736,7 +1798,7 @@ function taskBody(t,panel){
     return `<div class="sub-item">
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas'}"`}>${s.done?'✓':''}</span>
       <span class="sub-nm ${s.done?'done':''}">${s.name}</span>
-      <span class="sub-mt">${avatar(per,true)} ${per.name} · ${dLabel(s.date)} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
+      <span class="sub-mt">${avatar(per,true)} ${per.name} · ${dLabel(s.date)}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
       ${right}</div>`;
   }).join('');
   const persOpts=[staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
@@ -1829,23 +1891,16 @@ function navTask(dir){const p=store.project(store.task(modalTask).projectId);con
 function setTaskStatus(id,s){const t=store.task(id);if(!canEditTask(t)){return;}store.updateTask(id,{status:s});logEvent(id,'Cambió el estado a '+(statusLabel[s]||s));render();}
 function openLibModal(pid){libModal=pid;render();}
 function closeLibModal(){libModal=null;render();}
-function addLibLink(){const u=val('lib-url');if(!u){alert('Pon la URL del link.');return;}store.addLink(libModal,val('lib-label')||u,u);render();}
+function addLibLink(){const u=val('lib-url');if(!u){alert('Pon la URL del link.');return;}store.addLink(libModal,val('lib-label')||u,[{title:'',url:u}]);render();}
 function libraryModal(){
   const pid=libModal; const p=store.project(pid); if(!p)return '';
-  const links=store.linksOf(pid);
-  const rows=links.map(l=>{
-    const host=faviconOf(l.url); const href=(l.url||'').match(/^https?:\/\//)?l.url:'https://'+l.url;
-    return `<div class="lib-row">
-      <div class="lib-ico">${host?`<img src="https://www.google.com/s2/favicons?domain=${host}&sz=64" alt="">`:'🔗'}</div>
-      <div class="lib-g"><a class="lib-nm" href="${href}" target="_blank" rel="noopener">${l.label||l.url}</a><div class="lib-url muted">${host||l.url}</div></div>
-      <div class="lib-ops"><a class="btn ghost sm" href="${href}" target="_blank" rel="noopener">Abrir ↗</a><button class="btn ghost sm" onclick="delLink('${pid}','${l.id}')">🗑️</button></div>
-    </div>`;
-  }).join('');
+  const rows=store.linksOf(pid).map(l=>libCard(pid,l,false)).join('');
   return `<div class="modal active" onclick="if(event.target===this)closeLibModal()"><div class="modal-card" style="max-width:560px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${p.name}</div><h3 style="margin:8px 0 0">📚 Biblioteca</h3></div>
       <button class="x" onclick="closeLibModal()">×</button></div></div>
     <div class="m-body">
       <div class="lib-add"><input id="lib-label" placeholder="Nombre (ej. Brand kit)"><input id="lib-url" placeholder="https://…"><button class="btn sm" onclick="addLibLink()">+ Agregar</button></div>
+      <div class="hint" style="margin-top:6px">Si el nombre ya existe, la URL se agrega a ese cajón.</div>
       <div class="lib-list" style="margin-top:14px">${rows||'<div class="muted">Aún no hay links. Agrega el primero arriba.</div>'}</div>
     </div>
   </div></div>`;
