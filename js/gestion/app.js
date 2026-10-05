@@ -295,7 +295,7 @@ const store = new Store();
 const LOGIN_BG = "https://images.unsplash.com/photo-1512428813834-c702c7702b78?q=80&w=1080&auto=format&fit=crop";
 let session=null, loginUser=null, loginPin='', loginErr='', loginAttempts={};
 let view='clientes', selClient=null, selProject=null, selTab='gestor', role='gerencia';
-let currentUser='u_car', perfWindow='mes', opFilterClient='', opSelTask=null;
+let currentUser='u_car', perfWindow='mes', perfMonth=todayISO().slice(0,7), opFilterClient='', opSelTask=null;
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
 let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
@@ -480,7 +480,7 @@ function viewClientes(){
   const cards=store.d.clients.map(c=>{
     const n=store.projectsOf(c.id).length;
     return `<div class="card click" onclick="openClient('${c.id}')">
-      <div class="pill green">Cliente</div>
+      <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>
       <h3 style="margin:8px 0 4px">${c.name}</h3>
       <div class="muted" style="font-size:.85rem">${c.location} · ${n} proyecto${n===1?'':'s'} vivo${n===1?'':'s'}</div>
     </div>`;
@@ -689,14 +689,45 @@ function viewMisPendientes(){
       <div class="op-right">${taskPanel()}</div>
     </div>`;
 }
+/* ===== Ocupación: horas requeridas y semáforo ===== */
+const PERF_WEEK_H=40;                        // horas requeridas por semana (ajustable)
+const PERF_MONTH_H=PERF_WEEK_H*52/12;        // horas requeridas por mes
+function occClass(pct){ return pct>90?'red':pct>=85?'green':pct>=75?'yellow':'red'; }   // 85–90 verde · 75–85 amarillo · <75 y >90 rojo
+function occLabel(pct){ return pct>90?'Riesgo de burnout':pct>=85?'En meta':pct>=75?'Por debajo de la meta':'Muy baja ocupación'; }
+function localISO(iso){ const d=new Date(iso); return isNaN(d)?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function perfHist(month){
+  const me=currentUser; let sOn=0,sTot=0,tOn=0,tTot=0; const wk={}, mo={};
+  store.d.tasks.forEach(t=>{ let last='';
+    (t.subtasks||[]).forEach(s=>{ if(s.personId!==me||!s.done) return; const day=s.doneAt?localISO(s.doneAt):(s.date||'');
+      if(month && day.slice(0,7)!==month) return;
+      if(s.doneAt&&s.date){ sTot++; if(day<=s.date) sOn++; }
+      if(day>last) last=day;
+      const min=s.timeSpent||0; if(min>0&&day){ const w=mondayOf(day), m=day.slice(0,7); wk[w]=(wk[w]||0)+min; mo[m]=(mo[m]||0)+min; } });
+    if(t.responsibleId===me && t.status==='done' && last && t.dueDate){ tTot++; if(last<=t.dueDate) tOn++; } });
+  const avg=o=>{ const k=Object.keys(o); return k.length?k.reduce((a,x)=>a+o[x],0)/k.length:0; };
+  return {sOn,sTot,tOn,tTot,wkAvg:avg(wk),moAvg:avg(mo),moSum:Object.values(mo).reduce((a,x)=>a+x,0),wkN:Object.keys(wk).length,moN:Object.keys(mo).length};
+}
+function perfMonthKpis(){
+  const h=perfHist(perfMonth); const pc=(a,b)=>b?Math.round(a/b*100):null;
+  const sp=pc(h.sOn,h.sTot), tp=pc(h.tOn,h.tTot);
+  const occ=(avgMin,req,n,lbl)=>{ const pct=Math.round(avgMin/60/req*100); const cl=n?occClass(pct):'';
+    return `<div class="perf-card occ ${cl}"><div class="perf-big">${n?pct+'%':'—'}</div><div class="perf-lbl">${lbl}</div><div class="occ-sub">${n?`${fmtTime(avgMin)} de ${Math.round(req*10)/10} h requeridas`:'Sin horas registradas'}</div>${n?`<div class="occ-tag">${occLabel(pct)}</div>`:''}</div>`; };
+  return `<div class="perf-kpis" style="margin-bottom:8px">
+      <div class="perf-card"><div class="perf-big">${sp==null?'—':sp+'%'}</div><div class="perf-lbl">Subtareas entregadas a tiempo</div><div class="occ-sub">${h.sOn} de ${h.sTot} hechas</div></div>
+      <div class="perf-card"><div class="perf-big">${tp==null?'—':tp+'%'}</div><div class="perf-lbl">Tareas entregadas a tiempo</div><div class="occ-sub">${h.tOn} de ${h.tTot} hechas (donde soy responsable)</div></div>
+      ${occ(h.wkAvg,PERF_WEEK_H,h.wkN,'Promedio de horas por semana')}
+      ${occ(h.moSum,PERF_MONTH_H,h.moN,'Horas del mes')}
+    </div>
+    <div class="occ-legend"><span class="occ-dot green"></span> 85–90% en meta <span class="occ-dot yellow"></span> 75–85% por debajo <span class="occ-dot red"></span> menos de 75% o más de 90% (riesgo de burnout) · Promedio semanal sobre las semanas del mes con horas registradas · Requeridas: ${PERF_WEEK_H} h por semana</div>`;
+}
 function perfData(pid){
   // subtareas MÍAS (asignado) del proyecto pid (o todas si pid null), filtradas por ventana
-  const inWin=(s)=>{ if(perfWindow==='hist') return true; const ym=(s.date||'').slice(0,7); return ym===todayISO().slice(0,7); };
+  const inWin=(s)=>{ if(perfWindow==='hist') return true; const ym=(s.date||'').slice(0,7); return ym===perfMonth; };
   let subDone=0,subTot=0,tiempo=0,atrasos=0; const today=todayISO();
   const tasks=store.d.tasks.filter(t=>!pid||t.projectId===pid);
   tasks.forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.personId!==currentUser) return; if(!inWin(s)) return;
     subTot++; if(s.done){subDone++; tiempo+=s.timeSpent||0;} else if(s.date&&s.date<today) atrasos++; }));
-  const respTasks=tasks.filter(t=>t.responsibleId===currentUser && (perfWindow==='hist'|| (t.dueDate||'').slice(0,7)===today.slice(0,7))).length;
+  const respTasks=tasks.filter(t=>t.responsibleId===currentUser && (perfWindow==='hist'|| (t.dueDate||'').slice(0,7)===perfMonth)).length;
   return {subDone,subTot,tiempo,atrasos,respTasks};
 }
 function viewMiDesempeno(){
@@ -714,6 +745,8 @@ function viewMiDesempeno(){
   const lateHtml=late.length?late.slice(0,8).map(l=>`<span class="chip">🔴 ${l.name} <span class="muted">(${l.proj}) ${l.dias}d</span></span>`).join(''):'<span class="muted">Sin atrasos abiertos 🎉</span>';
   return `<div class="op-hello"><h2>Mi desempeño</h2><div class="muted">${u.name} · al día de hoy (${dLabel(today)})</div></div>
     <div class="subtoggle" style="margin:4px 0 16px"><button class="${perfWindow==='mes'?'on':''}" onclick="setPerfWin('mes')">Este mes</button><button class="${perfWindow==='hist'?'on':''}" onclick="setPerfWin('hist')">Histórico</button></div>
+    ${perfWindow==='mes'?`<div class="kb-month" style="margin:-4px 0 16px"><button onclick="perfShift(-1)" title="Mes anterior">‹</button><span class="kb-month-lbl">${perfMonthLabel()}</span><button onclick="perfShift(1)" title="Mes siguiente">›</button></div>`:''}
+    ${perfWindow==='mes'?perfMonthKpis():''}
     <div class="perf-kpis">
       <div class="perf-card"><div class="perf-big">${g.subDone}/${g.subTot}</div><div class="perf-lbl">Subtareas hechas (${pct}%)</div><div class="bar sm"><i style="width:${pct}%"></i></div></div>
       <div class="perf-card"><div class="perf-big">${g.respTasks}</div><div class="perf-lbl">Tareas donde soy responsable</div></div>
@@ -735,6 +768,8 @@ function viewTableros(){
 }
 function setOpClient(v){opFilterClient=v;render();}
 function setPerfWin(w){perfWindow=w;render();}
+function perfShift(d){ let [y,m]=perfMonth.split('-').map(Number); m+=d; if(m<1){m=12;y--;} if(m>12){m=1;y++;} perfMonth=y+'-'+String(m).padStart(2,'0'); render(); }
+function perfMonthLabel(){ const [y,m]=perfMonth.split('-').map(Number); return MESES[m-1]+' '+y; }
 
 function kbFrente(t){ const p=store.project(t.projectId); const f=p&&store.frentesOf(p.id).find(x=>x.id===t.frenteId); return f||{name:'(sin frente)',color:'#9aa39f'}; }
 function kbInvolves(t,pid){ return t.responsibleId===pid || (t.subtasks||[]).some(s=>s.personId===pid||(s.invitados||[]).includes(pid)); }
@@ -1421,7 +1456,8 @@ function tabDatos(p){
   tasks.forEach(t=>{ viat+=t.viaticos||0; (t.subtasks||[]).forEach(s=>{ const pr=store.person(s.personId); laborCost+=(s.timeSpent||0)/60*(pr.rate||0); }); });
   const margen=p.price-(viat+laborCost), margenPct=p.price?Math.round(margen/p.price*100):0;
 
-  const finCards=`<div class="grid cols-2" style="margin-bottom:16px">
+  const internal=(store.client(p.clientId)||{}).tipo==='interno';
+  const finCards=internal?`<div class="card" style="margin-bottom:16px"><b>Proyecto interno</b><div class="muted" style="margin-top:4px">Capacitaciones, juntas y actividades internas: sus horas cuentan para la ocupación del equipo, pero no generan ingreso, cobranza ni costo.</div></div>`:`<div class="grid cols-2" style="margin-bottom:16px">
     <div class="kpi"><div class="lab">Cobranza</div><div class="big">${money(cobrado)}</div><div class="sub">de ${money(p.price)} contratado · ${pctCob}%</div>
       <div class="track"><i style="width:${pctCob}%;background:var(--ok)"></i></div>
       <div class="sub" style="margin-top:6px;color:var(--bad)">Vencido: ${money(vencido)}</div></div>
@@ -1513,6 +1549,7 @@ function quickModal(){
     const respOpts='<option value="">— sin asignar —</option>'+staffOptEls(c.generalResponsibleId);
     inner=`<h3>${qm.kind==='clienteEdit'?'Editar cliente':'Nuevo cliente'}</h3>
       <div class="field"><label>Nombre comercial</label><input id="qm-name" value="${esc(c.name)}" placeholder="Ej. ADN Media"></div>
+      <div class="field"><label>Tipo de cliente</label><select id="qm-tipo"><option value="externo" ${c.tipo==='interno'?'':'selected'}>Externo (genera ingreso y costo)</option><option value="interno" ${c.tipo==='interno'?'selected':''}>Interno (capacitaciones, juntas, RH… cuenta horas, no costo)</option></select></div>
       <div class="field row"><div><label>Razón social</label><input id="qm-razon" value="${esc(c.razon||'')}"></div>
         <div><label>RFC</label><input id="qm-rfc" value="${esc(c.rfc||'')}"></div></div>
       <div class="field row"><div><label>Ubicación</label><input id="qm-loc" value="${esc(c.location||'')}"></div>
@@ -1731,9 +1768,9 @@ function delFrente(fid,pid){const n=store.tasksOf(pid).filter(t=>t.frenteId===fi
 
 /* ===== Catálogos ===== */
 function openClientForm(){qm={kind:'cliente'};render();}
-function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null});qm=null;openClient(c.id);}
+function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
 function openClientEdit(cid){qm={kind:'clienteEdit',cid};render();}
-function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null});qm=null;render();}
+function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;render();}
 function openContactForm(cid){qm={kind:'contacto',cid};render();}
 function saveContact(){const n=val('qm-name');if(!n){alert('El contacto necesita un nombre.');return;}store.addClientPerson(qm.cid,{name:n,phone:val('qm-phone'),email:val('qm-email'),role:val('qm-crole'),birthday:val('qm-bday')});qm=null;render();}
 function openContactEdit(cid,pid){qm={kind:'contactoEdit',cid,pid};render();}
