@@ -369,7 +369,11 @@ function mdInline(t){
   const keep=[]; const hold=h=>{ keep.push(h); return '\u0000'+(keep.length-1)+'\u0000'; };
   t=t.replace(/`([^`\n]+)`/g,(_,c)=>hold('<code>'+c+'</code>'));
   t=t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,(_,a,u)=>hold('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+a+'</a>'));
-  t=t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,(_,pre,u)=>pre+hold('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'));
+  t=t.replace(/(^|[^\w@\/.\-])((?:https?:\/\/|www\.)[^\s<]+|(?:[a-z0-9-]+\.)+(?:com|mx|org|net|io|co|app|dev|me|edu|gob|ly|gl|link|page|site|xyz)(?:\/[^\s<]*)?)/gi,(m,pre,u)=>{
+    let tail=''; while(/[.,;:!?)\]]$/.test(u)||/&(?:gt|lt|quot);$/.test(u)){ const mm=u.match(/&(?:gt|lt|quot);$/); const cut=mm?mm[0]:u.slice(-1); tail=cut+tail; u=u.slice(0,-cut.length); }
+    if(!u||/^\w+\.\w+$/.test(u)&&!/\.(com|mx|org|net|io|co|app|dev|me|edu|gob|ly|gl|link|page|site|xyz)$/i.test(u)) return m;
+    const href=/^https?:\/\//i.test(u)?u:'https://'+u;
+    return pre+hold('<a href="'+href+'" target="_blank" rel="noopener noreferrer">'+u+'</a>')+tail; });
   t=t.replace(/\*\*\*([^*\n]+?)\*\*\*/g,'<strong><em>$1</em></strong>')
      .replace(/\*\*([^*\n]+?)\*\*/g,'<strong>$1</strong>').replace(/(^|[^\w])__([^_\n]+?)__(?!\w)/g,'$1<strong>$2</strong>')
      .replace(/\*([^*\s][^*\n]*?)\*/g,'<em>$1</em>').replace(/(^|[^\w])_([^_\s][^_\n]*?)_(?!\w)/g,'$1<em>$2</em>')
