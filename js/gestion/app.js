@@ -314,6 +314,12 @@ function toggleAcc(key){ const c=accClosed(); if(c[key]) delete c[key]; else c[k
   const ids=document.querySelectorAll('.op-sec[data-acc="'+key+'"]'); if(ids.length){ ids.forEach(e=>e.classList.toggle('closed',!!c[key])); } else render(); }
 function accSec(scope,title,icon,arr,rowFn){ if(!arr.length) return ''; const key=scope+':'+title; const closed=!!accClosed()[key];
   return `<div class="op-sec${closed?' closed':''}" data-acc="${esc(key)}"><div class="op-sec-h acc-h" onclick="toggleAcc('${esc(key)}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAcc('${esc(key)}')}"><span class="acc-arw">▾</span> ${icon} ${title} <span class="op-cnt">${arr.length}</span></div><div class="acc-body">${arr.map(rowFn).join('')}</div></div>`; }
+/* ===== Urgente ⚠️ (tarea o subtarea) ===== */
+const URG='<span class="urg" title="Urgente">⚠️</span>';
+function taskHasUrgent(t){ return !!t.urgent || (t.subtasks||[]).some(x=>x.urgent&&!x.done); }
+function urgMark(on){ return on?URG+' ':''; }
+function toggleTaskUrgent(tid){ const t=store.task(tid); if(!t) return; t.urgent=!t.urgent; store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(tid,t.urgent?'Marcó la tarea como URGENTE':'Quitó la marca de urgente de la tarea'); render(); }
+function toggleSubUrgent(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const v=!sub.urgent; store.updateSubtask(tid,sid,{urgent:v}); logEvent(tid,(v?'Marcó como URGENTE':'Quitó la marca de urgente de')+' la subtarea «'+sub.name+'»'); render(); }
 function isColab(){ return role==='colab'; }
 function isPM(){ return role==='pm'; }
 function isGerencia(){ return role==='gerencia'; }
@@ -698,7 +704,7 @@ function opTaskRow(t){
   const mineTxt = bits.length?'· '+bits.join(' · '):'';
   return `<div class="op-row ${opSelTask===t.id?'sel':''}" onclick="selectOpTask('${t.id}')">
     <span class="badge s-${t.status}">${statusLabel[t.status]}</span>
-    <div class="g"><div class="nm">${dk(t)}${t.name}</div>
+    <div class="g"><div class="nm">${urgMark(taskHasUrgent(t))}${dk(t)}${t.name}</div>
       <div class="mt">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span> · ☑ ${doneS}/${totS} ${mineTxt}</div></div>
     <div class="op-due">${t.dueDate?dLabel(t.dueDate):'—'}</div></div>`;
 }
@@ -843,7 +849,7 @@ function kbCard(t){
   const done=(t.subtasks||[]).filter(s=>s.done).length, tot=(t.subtasks||[]).length;
   const overdue=t.dueDate&&t.status!=='done'&&t.dueDate<todayISO();
   return `<div class="kb-card" onclick="openTask('${t.id}')" style="border-left:4px solid ${f.color}">
-    <div class="kb-card-nm">${dk(t)}${t.name}</div>
+    <div class="kb-card-nm">${urgMark(taskHasUrgent(t))}${dk(t)}${t.name}</div>
     <div class="kb-card-mt">${c.name} · ${p.name}</div>
     <div class="kb-card-ft"><span class="kb-fr" style="background:${f.color}">${f.name}</span>${avatar(resp,true)}<span class="kb-prog ${done===tot&&tot>0?'ok':''}">☑ ${done}/${tot}</span>${overdue?'<span class="kb-late">🔴</span>':''}</div></div>`;
 }
@@ -1039,7 +1045,7 @@ function agCalendar(days,pid){
     const blocks=subs.map(it=>{ const [hh,mm]=(it.s.time||'10:00').split(':').map(Number); const startMin=hh*60+mm; if(startMin<H0*60||startMin>=H1*60){ off.push(it); return ''; }
       const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
       const sel=agSel&&agSel.sid===it.s.id;
-      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canEdit?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canEdit?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
+      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canEdit?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canEdit?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
     }).join('');
     if(off.length) anyOff=true;
     const lines=[]; for(let k=0;k<slots;k++) lines.push(`<div class="ag-line" style="top:${k*rowH}px"></div>`);
@@ -1127,7 +1133,7 @@ function viewAgenda(){
   const row=it=>{const p=store.project(it.t.projectId),c=store.client(p.clientId),f=kbFrente(it.t);const overdue=it.s.date&&it.s.date<today;
     const pend=(it.t.subtasks||[]).filter(x=>!x.done), sched=pend.filter(x=>x.date&&x.time).length; const sel=agSel&&agSel.sid===it.s.id; const canEdit=agCanEdit();
     return `<div class="ag-item${sel?' sel':''}" ${canEdit?`draggable="true" ondragstart="agListStart(event,'${it.t.id}','${it.s.id}')" ondragend="agListEnd()"`:''} onclick="openAgItem('${it.t.id}','${it.s.id}')" style="border-left:3px solid ${f.color}">
-      <div class="ag-it-nm">${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
+      <div class="ag-it-nm">${urgMark(it.s.urgent||it.t.urgent)}${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
       <div class="ag-it-tk">Tarea: ${esc(it.t.name)}</div>
       <div class="ag-it-mt"><span>${c.name} · <span style="color:${f.color};font-weight:600">${f.name}</span></span><span class="ag-it-date">${overdue?'🔴 ':''}${it.s.date?dLabel(it.s.date):'sin fecha'}</span></div></div>`;};
   const sec=(title,icon,arr)=>accSec('ag',title,icon,arr,row);
@@ -1205,7 +1211,7 @@ function tabGestor(p){
         const isDone=t.status==='done';
         const late=!isDone && e.end<todayISO() && ((t.subtasks||[]).some(x=>!x.done && x.date>=e.start && x.date<=e.end) || ((t.subtasks||[]).length===0 && t.dueDate>=e.start && t.dueDate<=e.end));
         const cls='tchip'+(isDone?' is-done':'')+(late?' is-late':'');
-        return `<div class="${cls}" ${late?'title="Atrasada: la etapa ya terminó y tiene pendientes"':''} data-tid="${t.id}" ${colab?'':`draggable="true" ondragstart="tcDragStart(event,'${t.id}','${e.id}')" ondragend="tcDragEnd()"`} style="background:${f.color}" onclick="openTask('${t.id}')">${bad?'<span class="date-bad" title="Hay subtareas con fecha que no cabía en la etapa; se pusieron en hoy">🔴</span> ':''}${dk(t)}${t.name}<div class="st">${statusLabel[t.status]} · ${done}/${tot} · ${fmtTime(store.taskTime(t))}</div></div>`;
+        return `<div class="${cls}" ${late?'title="Atrasada: la etapa ya terminó y tiene pendientes"':''} data-tid="${t.id}" ${colab?'':`draggable="true" ondragstart="tcDragStart(event,'${t.id}','${e.id}')" ondragend="tcDragEnd()"`} style="background:${f.color}"  onclick="openTask('${t.id}')">${urgMark(taskHasUrgent(t))}${bad?'<span class="date-bad" title="Hay subtareas con fecha que no cabía en la etapa; se pusieron en hoy">🔴</span> ':''}${dk(t)}${t.name}<div class="st">${statusLabel[t.status]} · ${done}/${tot} · ${fmtTime(store.taskTime(t))}</div></div>`;
       }).join('');
       return `<td class="gcell" data-fr="${f.id}" data-et="${e.id}" ${colab?'':`ondragover="tcDragOver(event)" ondragleave="tcDragLeave(event)" ondrop="tcDrop(event)"`}>${chips}${colab?'':`<button class="cell-add" onclick="openTaskForm('${p.id}','${f.id}','${e.id}')">+ tarea</button>`}</td>`;
     }).join('');
@@ -2017,7 +2023,7 @@ function taskBody(t,panel){
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas'}"`}>${s.done?'✓':''}</span>
       <span class="sub-nm ${s.done?'done':''}">${s.name}</span>
-      <span class="sub-mt">${avatar(per,true)} ${per.name} · ${dLabel(s.date)}${lateD?` <span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'} de retraso</span>`:''}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
+      <span class="sub-mt"><span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':'Clic para marcar como urgente'}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(per,true)}</span> ${per.name} · ${dLabel(s.date)}${lateD?` <span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'} de retraso</span>`:''}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
       ${right}</div>`;
   }).join('');
   const persOpts=[staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
@@ -2051,7 +2057,7 @@ function taskBody(t,panel){
         <div class="field"><label>Etiquetas (del catálogo)</label>${tagPicker('et-tags-box', t.tags||[])}</div>
         <div class="wiz-actions"><button class="btn ghost" onclick="cancelTaskEdit()">Cancelar</button><button class="btn" onclick="saveTaskEdit('${t.id}')">Guardar</button></div>
       ` : `
-        <div class="m-title"><h3>${dk(t)}${t.name}</h3></div>
+        <div class="m-title"><h3>${dk(t)}${t.name}</h3><button class="urg-btn${t.urgent?' on':''}" title="${t.urgent?'Urgente: clic para quitar':'Marcar tarea como urgente'}" onclick="toggleTaskUrgent('${t.id}')">⚠️</button></div>
         <div class="m-crumb-row"><div class="m-crumb">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span></div>${tags?`<div class="m-tags">${tags}</div>`:''}</div>
         <div class="m-meta"><span>${avatar(resp,true)} <b>${resp.name}</b></span>
           <select ${(isColab()&&!canEditTask(t))?'disabled title="Solo el responsable cambia el estado"':''} onchange="setTaskStatus('${t.id}',this.value)" style="padding:6px 10px;border-radius:7px;border:2px solid var(--line)">

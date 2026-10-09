@@ -23,7 +23,8 @@ function dbToAppTask(row){
     viaticos: row.viaticos || 0,
     subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
     links: Array.isArray(row.links) ? row.links : [],
-    ord: row.ord || 0
+    ord: row.ord || 0,
+    urgent: !!row.urgente
   };
 }
 
@@ -45,7 +46,8 @@ function appToDbTask(t){
     viaticos: +t.viaticos || 0,
     subtasks: t.subtasks || [],
     links: t.links || [],
-    ord: t.ord || 0
+    ord: t.ord || 0,
+    urgente: !!t.urgent
   };
 }
 
@@ -62,10 +64,13 @@ async function dbLoadTareas(){
 // --- GUARDAR (crear o actualizar) una tarea con sus subtareas ---
 async function dbSaveTask(t){
   try{
-    let { error } = await sb.from('tareas').upsert(appToDbTask(t));
-    if (error && /\bord\b/.test(error.message||'')){   // la columna "ord" aún no existe en la base: guardar sin ella
-      const row = appToDbTask(t); delete row.ord;
-      ({ error } = await sb.from('tareas').upsert(row));
+    const row = appToDbTask(t);
+    let { error } = await sb.from('tareas').upsert(row);
+    // si alguna columna nueva ("ord", "urgente") aún no existe en la base, guardar sin ella
+    for (let i = 0; i < 2 && error; i++){
+      const m = (error.message||'').match(/\b(ord|urgente)\b/i); const col = m && m[1].toLowerCase();
+      if (!col || !(col in row)) break;
+      delete row[col]; ({ error } = await sb.from('tareas').upsert(row));
     }
     if (error){
       console.error('No se pudo guardar la tarea en Supabase:', error.message);
