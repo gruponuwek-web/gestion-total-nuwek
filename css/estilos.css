@@ -677,3 +677,11 @@
   .op-sec.closed .acc-arw{transform:rotate(-90deg)}
   .op-sec.closed .acc-body{display:none}
   .op-sec.closed .op-sec-h{margin-bottom:0}
+
+  #ag-pop{position:fixed;z-index:300;max-width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.22);padding:10px 12px;pointer-events:none}
+  .agp-t{font-weight:700;font-size:.86rem;color:var(--green-deep,#16261f)}
+  .agp-s{font-size:.72rem;color:var(--muted);margin:2px 0 8px}
+  .agp-chips{display:flex;flex-wrap:wrap;gap:5px}
+  .agp-chip{font-size:.66rem;font-weight:700;color:#fff;border-radius:99px;padding:3px 9px;white-space:nowrap}
+  .agp-chip.badge{border-radius:99px;font-family:inherit}
+  .ag-bl-nm{cursor:default}

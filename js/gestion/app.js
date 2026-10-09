@@ -1052,6 +1052,26 @@ function agCalendar(days,pid){
   const hoursCol=`<div class="ag-hours"><div class="ag-hours-sp"></div>${hourLabels.join('')}</div>`;
   return `<div class="ag-cal">${hoursCol}${dayCols}</div>`;
 }
+/* ---- hover sobre el TÍTULO del bloque: etiquetas de estatus (el tooltip de la tarjeta se conserva) ---- */
+function agPopHide(){ const p=document.getElementById('ag-pop'); if(p) p.remove(); const b=document.querySelector('.ag-block[data-title-held]'); if(b){ b.setAttribute('title',b.dataset.titleHeld); b.removeAttribute('data-title-held'); } }
+function agPopShow(nm){
+  const blk=nm.closest('.ag-block'); if(!blk) return; const t=store.task(blk.dataset.tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===blk.dataset.sid); if(!sub) return;
+  agPopHide(); if(blk.hasAttribute('title')){ blk.dataset.titleHeld=blk.getAttribute('title'); blk.removeAttribute('title'); }
+  const today=todayISO(); const late=!sub.done&&sub.date&&sub.date<today; const per=store.person(sub.personId);
+  const chips=[
+    `<span class="agp-chip badge s-${t.status}">Tarea · ${statusLabel[t.status]||t.status}</span>`,
+    sub.done?`<span class="agp-chip" style="background:#3f9d6d">✓ Subtarea hecha</span>`:late?`<span class="agp-chip" style="background:#c0392b">⚠ Subtarea atrasada</span>`:`<span class="agp-chip" style="background:#6b7a73">Subtarea pendiente</span>`,
+    t.dueDate?`<span class="agp-chip" style="background:${(t.status!=='done'&&t.dueDate<today)?'#c0392b':'#2c6b4c'}">🏁 ${dLabel(t.dueDate)}</span>`:'',
+    ...(t.tags||[]).map(g=>`<span class="agp-chip" style="background:${store.tagColor(g)}">${esc(g)}</span>`)
+  ].join('');
+  const pop=document.createElement('div'); pop.id='ag-pop'; pop.innerHTML=`<div class="agp-t">${esc(sub.name)}</div><div class="agp-s">${esc(t.name)} · ${esc(per.name||'')}</div><div class="agp-chips">${chips}</div>`;
+  document.body.appendChild(pop); const r=nm.getBoundingClientRect(), pw=pop.offsetWidth, ph=pop.offsetHeight;
+  let x=Math.min(Math.max(8,r.left),innerWidth-pw-8), y=r.bottom+6; if(y+ph>innerHeight-8) y=Math.max(8,r.top-ph-6);
+  pop.style.left=x+'px'; pop.style.top=y+'px';
+}
+document.addEventListener('mouseover',ev=>{ const nm=ev.target.closest&&ev.target.closest('.ag-bl-nm'); if(nm){ if(!nm._agp){ nm._agp=1; } agPopShow(nm); } });
+document.addEventListener('mouseout',ev=>{ const nm=ev.target.closest&&ev.target.closest('.ag-bl-nm'); if(nm && !(ev.relatedTarget&&nm.contains(ev.relatedTarget))) agPopHide(); });
+document.addEventListener('pointerdown',agPopHide,true);
 /* ---- arrastrar / redimensionar bloques ---- */
 function agSnap(min){ return Math.round(min/15)*15; }
 function agBlockDown(ev){
