@@ -442,8 +442,8 @@ function miEspacioBody(){
   const tab=(v,label,fn)=>`<button class="${view===v?'active':''}" onclick="${fn}">${label}</button>`;
   return `<div class="subnav">
     ${tab('op_pendientes','Mis pendientes',"go('op_pendientes')")}
-    ${tab('op_kanban','Kanban',"openKanban()")}
     ${tab('op_agenda','Agenda',"openAgenda()")}
+    ${tab('op_kanban','Kanban',"openKanban()")}
     ${tab('op_desempeno','Mi desempeño',"go('op_desempeno')")}
   </div>${inner}`;
 }
@@ -552,8 +552,8 @@ function shellOp(body){
       <div class="brand" onclick="go('op_pendientes')"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
       <div class="nav">
         <button class="${view==='op_pendientes'?'active':''}" onclick="go('op_pendientes')">Mis pendientes</button>
-        <button class="${view==='op_kanban'?'active':''}" onclick="openKanban()">Kanban</button>
         <button class="${view==='op_agenda'?'active':''}" onclick="openAgenda()">Agenda</button>
+        <button class="${view==='op_kanban'?'active':''}" onclick="openKanban()">Kanban</button>
         <button class="${view==='op_desempeno'?'active':''}" onclick="go('op_desempeno')">Mi desempeño</button>
       </div>
       ${sessionBar()}
