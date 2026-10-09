@@ -109,3 +109,25 @@ async function dbDeleteEtapa(id){
   try{ const { error } = await sb.from('etapas').delete().eq('id', id); if (error) console.error('Error borrando etapa:', error.message); }
   catch(e){ console.error('Red al borrar etapa:', e); }
 }
+
+// Borra un proyecto y TODO lo que cuelga de él (irreversible). Devuelve true si todo salió bien.
+async function dbDeleteProjectCascade(pid, taskIds){
+  const steps = [];
+  if (taskIds && taskIds.length){
+    steps.push(['comentarios', q => q.in('tarea_id', taskIds)]);
+    steps.push(['log',         q => q.in('tarea_id', taskIds)]);
+  }
+  steps.push(['tareas',   q => q.eq('proyecto_id', pid)]);
+  steps.push(['pagos',    q => q.eq('proyecto_id', pid)]);
+  steps.push(['frentes',  q => q.eq('proyecto_id', pid)]);
+  steps.push(['etapas',   q => q.eq('proyecto_id', pid)]);
+  steps.push(['proyectos',q => q.eq('id', pid)]);
+  try{
+    for (const [tabla, filtro] of steps){
+      const { error } = await filtro(sb.from(tabla).delete());
+      if (error){ console.error('Error borrando en '+tabla+':', error.message); alert('No se pudo borrar completamente el proyecto (falló en «'+tabla+'»).\n\n'+error.message+'\n\nRevisa antes de reintentar: parte de los datos pudo borrarse ya.'); return false; }
+    }
+    console.log('🗑️ Proyecto eliminado en Supabase:', pid);
+    return true;
+  }catch(e){ console.error('Red al borrar proyecto:', e); alert('Sin conexión: el proyecto no se eliminó.'); return false; }
+}

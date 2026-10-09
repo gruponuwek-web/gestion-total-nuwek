@@ -258,6 +258,13 @@ class Store{
     let j=a.findIndex(x=>x.id===targetSid); if(j<0){ a.push(it); } else a.splice(after?j+1:j,0,it);
     this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   removeSubtask(tid,sid){ const t=this.task(tid); t.subtasks=t.subtasks.filter(x=>x.id!==sid); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  projectStats(pid){ const ts=this.tasksOf(pid); return {tareas:ts.length,subtareas:ts.reduce((a,t)=>a+(t.subtasks||[]).length,0),pagos:(this.d.payments||[]).filter(x=>x.projectId===pid).length,frentes:this.frentesOf(pid).length,etapas:this.etapasOf(pid).length}; }
+  async removeProject(pid){ const ids=this.tasksOf(pid).map(t=>t.id);
+    if(typeof dbDeleteProjectCascade==='function'){ const ok=await dbDeleteProjectCascade(pid,ids); if(!ok) return false; }
+    const idSet=new Set(ids);
+    this.d.tasks=this.d.tasks.filter(t=>t.projectId!==pid); this.d.comments=(this.d.comments||[]).filter(c=>!idSet.has(c.taskId)); this.d.log=(this.d.log||[]).filter(l=>!idSet.has(l.taskId));
+    this.d.payments=(this.d.payments||[]).filter(x=>x.projectId!==pid); this.d.frentes=this.d.frentes.filter(f=>f.projectId!==pid); this.d.etapas=this.d.etapas.filter(e=>e.projectId!==pid);
+    this.d.projects=this.d.projects.filter(p=>p.id!==pid); this.save(); return true; }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
   updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   addComment(tid,uid,text,attachments,mentions){ const cm={id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}; this.d.comments.push(cm); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
@@ -1109,7 +1116,7 @@ function viewProyecto(){
     ? `<div class="crumb"><a onclick="go('op_tableros')">Tableros</a> › ${p.name}</div>`
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
-  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
+  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
   return `${crumb}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
@@ -1528,7 +1535,14 @@ function quickModal(){
       <div class="field row"><div><label>Inicio</label><input id="qm-start" type="date" value="${p2.startDate||''}"></div>
         <div><label>Cierre</label><input id="qm-end" type="date" value="${p2.endDate||''}"></div></div>
       <div class="hint">Editar el precio no toca el calendario de pagos (ese lo manejas aparte). Tip: puedes usar el total programado como precio.</div>
-      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
+      <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
+  } else if(qm.kind==='proyectoDel'){
+    const p2=store.project(qm.pid), st=store.projectStats(qm.pid);
+    inner=`<h3 style="color:#c0392b">Eliminar proyecto</h3>
+      <p>Vas a borrar <b>${esc(p2.name)}</b> de forma <b>permanente</b>. Esto no se puede deshacer.</p>
+      <div class="card" style="background:#fdeceb;border-color:#e8b4b0;margin:10px 0"><div style="font-size:.88rem">Se eliminarán también: <b>${st.tareas}</b> tarea(s), <b>${st.subtareas}</b> subtarea(s) con sus comentarios y bitácora, <b>${st.pagos}</b> pago(s), <b>${st.frentes}</b> frente(s) y <b>${st.etapas}</b> etapa(s).</div></div>
+      <div class="field"><label>Para confirmar, escribe el nombre del proyecto exactamente</label><input id="qm-delname" placeholder="${esc(p2.name)}" autocomplete="off" oninput="document.getElementById('qm-delbtn').disabled=(this.value.trim()!==${JSON.stringify(p2.name.trim()).replace(/"/g,'&quot;')})"></div>
+      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" id="qm-delbtn" disabled style="background:#c0392b;border-color:#c0392b" onclick="confirmProjectDel()">Eliminar para siempre</button></div>`;
   } else if(qm.kind==='pago' || qm.kind==='pagoEdit'){
     const p2=store.project(qm.pid); const x=qm.kind==='pagoEdit'?store.paymentsOf(qm.pid).find(z=>z.id===qm.payId):{dueDate:p2.startDate,amount:p2.monthlyPay||''};
     inner=`<h3>${qm.kind==='pagoEdit'?'Editar pago':'Nuevo pago'}</h3>
@@ -1784,6 +1798,12 @@ function savePayEdit(){const d=val('qm-pdate'),a=val('qm-pamount');if(!d||!a){al
 function delPay(payId,pid){if(confirm('¿Eliminar este pago?')){store.removePayment(payId);render();}}
 function openGenPagos(pid){qm={kind:'genPagos',pid};render();}function runGenPagos(){const freq=val('qm-freq'),count=+val('qm-count'),total=+val('qm-total'),start=val('qm-pstart');if(!count||!total||!start){alert('Completa frecuencia, número, total y fecha.');return;}if(!confirm('Esto reemplaza el calendario de pagos actual. ¿Continuar?'))return;store.generatePaymentsCustom(qm.pid,freq,count,total,start);qm=null;render();}
 function openProjectEdit(pid){qm={kind:'proyectoEdit',pid};render();}
+function openProjectDel(pid){ if(!isGerencia()) return; qm={kind:'proyectoDel',pid}; render(); }
+async function confirmProjectDel(){ if(!isGerencia()||!qm||qm.kind!=='proyectoDel') return; const p=store.project(qm.pid); if(!p) return;
+  if((val('qm-delname')||'').trim()!==p.name.trim()){ alert('El nombre no coincide.'); return; }
+  const btn=document.getElementById('qm-delbtn'); if(btn){ btn.disabled=true; btn.textContent='Eliminando…'; }
+  const cid=p.clientId; const ok=await store.removeProject(qm.pid);
+  if(ok){ qm=null; selProject=null; selClient=cid; view='cliente'; render(); } else { render(); } }
 function openLinkForm(pid){qm={kind:'link',pid};render();}
 function lkRead(){ if(!qm||!qm.urls) return; qm.urls=qm.urls.map((u,i)=>({title:val('qm-lkt-'+i)||'',url:(val('qm-lku-'+i)||'').trim()})); }
 function lkAdd(){ lkRead(); qm.label=val('qm-lklabel'); qm.urls.push({title:'',url:''}); const lb=qm.label; render(); const el=document.getElementById('qm-lklabel'); if(el&&lb!=null) el.value=lb; const last=document.getElementById('qm-lku-'+(qm.urls.length-1)); if(last) last.focus(); }
