@@ -308,6 +308,12 @@ let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gest
 let svcOpen={}, teamOpen={};
 let agPerson='u_car', agStart=todayISO(), agSel=null, agListDrag=null;
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+/* ===== Secciones tipo acordeón (Vencidas, Hoy, …) — se recuerda cuáles dejaste cerradas ===== */
+function accClosed(){ try{ return JSON.parse(localStorage.getItem('accClosed')||'{}'); }catch(_){ return {}; } }
+function toggleAcc(key){ const c=accClosed(); if(c[key]) delete c[key]; else c[key]=1; try{ localStorage.setItem('accClosed',JSON.stringify(c)); }catch(_){} 
+  const ids=document.querySelectorAll('.op-sec[data-acc="'+key+'"]'); if(ids.length){ ids.forEach(e=>e.classList.toggle('closed',!!c[key])); } else render(); }
+function accSec(scope,title,icon,arr,rowFn){ if(!arr.length) return ''; const key=scope+':'+title; const closed=!!accClosed()[key];
+  return `<div class="op-sec${closed?' closed':''}" data-acc="${esc(key)}"><div class="op-sec-h acc-h" onclick="toggleAcc('${esc(key)}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleAcc('${esc(key)}')}"><span class="acc-arw">▾</span> ${icon} ${title} <span class="op-cnt">${arr.length}</span></div><div class="acc-body">${arr.map(rowFn).join('')}</div></div>`; }
 function isColab(){ return role==='colab'; }
 function isPM(){ return role==='pm'; }
 function isGerencia(){ return role==='gerencia'; }
@@ -328,6 +334,33 @@ function taskDelay(t){const ds=(t.subtasks||[]).map(s=>s.date).filter(Boolean).s
 const statusLabel={'to-do':'To Do','in-progress':'En Progreso','done':'Hecho','ajuste':'Ajuste','on-hold':'En Pausa'};
 function avatar(p,sm){p=p||{}; if(p.photo) return `<span class="avatar ${sm?'sm':''}" style="background-image:url('${p.photo}');background-size:cover;background-position:center"></span>`; return `<span class="avatar ${sm?'sm':''}" style="background:${p.color||'#8a9a93'}">${(p.name||'?')[0]}</span>`;}
 function fullName(u){u=u||{}; return [u.firstName||u.name,u.secondName,u.lastName].filter(Boolean).join(' ')||u.name||'';}
+/* ===== Markdown ligero y SEGURO para descripciones y comentarios =====
+   Soporta: # ## ### títulos · **negrita** · *cursiva* · ***ambas*** · ~~tachado~~ · `código` · listas (- / 1.) · [texto](url) · links sueltos.
+   Primero se escapa todo el HTML, así que nada de lo escrito se ejecuta. */
+function mdEsc(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function mdInline(t){
+  const keep=[]; const hold=h=>{ keep.push(h); return '\u0000'+(keep.length-1)+'\u0000'; };
+  t=t.replace(/`([^`\n]+)`/g,(_,c)=>hold('<code>'+c+'</code>'));
+  t=t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,(_,a,u)=>hold('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+a+'</a>'));
+  t=t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g,(_,pre,u)=>pre+hold('<a href="'+u+'" target="_blank" rel="noopener noreferrer">'+u+'</a>'));
+  t=t.replace(/\*\*\*([^*\n]+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+     .replace(/\*\*([^*\n]+?)\*\*/g,'<strong>$1</strong>').replace(/(^|[^\w])__([^_\n]+?)__(?!\w)/g,'$1<strong>$2</strong>')
+     .replace(/\*([^*\s][^*\n]*?)\*/g,'<em>$1</em>').replace(/(^|[^\w])_([^_\s][^_\n]*?)_(?!\w)/g,'$1<em>$2</em>')
+     .replace(/~~([^~\n]+?)~~/g,'<del>$1</del>');
+  return t.replace(/\u0000(\d+)\u0000/g,(_,i)=>keep[+i]);
+}
+function mdRender(src){
+  const lines=mdEsc(src).split(/\r?\n/); let out='', list=null, para=[];
+  const flushP=()=>{ if(para.length){ out+='<p>'+para.map(mdInline).join('<br>')+'</p>'; para=[]; } };
+  const closeL=()=>{ if(list){ out+='</'+list+'>'; list=null; } };
+  lines.forEach(l=>{ let m;
+    if((m=l.match(/^(#{1,3})\s+(.+)$/))){ flushP(); closeL(); out+='<h'+(m[1].length+2)+' class="md-h">'+mdInline(m[2])+'</h'+(m[1].length+2)+'>'; }
+    else if((m=l.match(/^\s*[-*•]\s+(.+)$/))){ flushP(); if(list!=='ul'){ closeL(); out+='<ul>'; list='ul'; } out+='<li>'+mdInline(m[1])+'</li>'; }
+    else if((m=l.match(/^\s*\d+[.)]\s+(.+)$/))){ flushP(); if(list!=='ol'){ closeL(); out+='<ol>'; list='ol'; } out+='<li>'+mdInline(m[1])+'</li>'; }
+    else if(!l.trim()){ flushP(); closeL(); }
+    else { closeL(); para.push(l); } });
+  flushP(); closeL(); return out;
+}
 function esc(s){return (s||'').replace(/"/g,'&quot;');}
 function dLabel(dateStr){ if(!dateStr) return '—'; const d=new Date(dateStr+'T00:00:00'); return d.toLocaleDateString('es-MX',{day:'numeric',month:'short'}); }
 
@@ -682,7 +715,7 @@ function viewMisPendientes(){
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
   ts.forEach(t=>{ const d=t.dueDate; if(!d) buckets.sinf.push(t); else if(d<today) buckets.venc.push(t); else if(d===today) buckets.hoy.push(t); else if(d<=wkStr) buckets.sem.push(t); else buckets.resto.push(t); });
   Object.values(buckets).forEach(a=>a.sort((x,y)=>(x.dueDate||'9')<(y.dueDate||'9')?-1:1));
-  const sec=(title,icon,arr)=> arr.length?`<div class="op-sec"><div class="op-sec-h">${icon} ${title} <span class="op-cnt">${arr.length}</span></div>${arr.map(opTaskRow).join('')}</div>`:'';
+  const sec=(title,icon,arr)=> accSec('op',title,icon,arr,opTaskRow);
   const clientes=[...new Set(ts.length?store.d.tasks.map(t=>store.project(t.projectId).clientId):[])];
   const cliOpts='<option value="">Todos los clientes</option>'+store.d.clients.map(c=>`<option value="${c.id}" ${opFilterClient===c.id?'selected':''}>${c.name}</option>`).join('');
   const list = (buckets.venc.length+buckets.hoy.length+buckets.sem.length+buckets.resto.length+buckets.sinf.length)
@@ -1077,7 +1110,7 @@ function viewAgenda(){
       <div class="ag-it-nm">${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
       <div class="ag-it-tk">Tarea: ${esc(it.t.name)}</div>
       <div class="ag-it-mt"><span>${c.name} · <span style="color:${f.color};font-weight:600">${f.name}</span></span><span class="ag-it-date">${overdue?'🔴 ':''}${it.s.date?dLabel(it.s.date):'sin fecha'}</span></div></div>`;};
-  const sec=(title,icon,arr)=>arr.length?`<div class="op-sec"><div class="op-sec-h">${icon} ${title} <span class="op-cnt">${arr.length}</span></div>${arr.map(row).join('')}</div>`:'';
+  const sec=(title,icon,arr)=>accSec('ag',title,icon,arr,row);
   const total=buckets.venc.length+buckets.hoy.length+buckets.sem.length+buckets.resto.length+buckets.sinf.length;
   const list= total? sec('Vencidas','🔴',buckets.venc)+sec('Hoy','🟡',buckets.hoy)+sec('Esta semana','⚪',buckets.sem)+sec('Más adelante','🗓️',buckets.resto)+sec('Sin fecha','⚪',buckets.sinf) : '<div class="muted" style="padding:16px">Sin actividades pendientes.</div>';
   return `<div class="op-hello"><h2>Agenda · ${per.name}</h2><div class="muted">Mira la semana de tu compañero para balancear su carga. ⏳ = duración planeada.</div></div>
@@ -1757,7 +1790,7 @@ function quickModal(){
     const persOpts=staffOptEls('');
     inner=`<h3>Nueva tarea</h3>
       <div class="field"><label>Nombre de la tarea</label><input id="qm-name" placeholder="Ej. Parrilla de contenidos"></div>
-      <div class="field"><label>Descripción general (opcional)</label><textarea id="qm-desc" style="width:100%;min-height:60px;padding:9px;border:2px solid var(--line);border-radius:7px" placeholder="Objetivo, contexto, lineamientos…"></textarea></div>
+      <div class="field"><label>Descripción general (opcional)</label><textarea id="qm-desc" style="width:100%;min-height:60px;padding:9px;border:2px solid var(--line);border-radius:7px" placeholder="Objetivo, contexto, lineamientos… (admite **negrita**, *cursiva*, # títulos, - listas)"></textarea></div>
       <div class="field row"><div><label>Frente</label><select id="qm-frente">${frOpts}</select></div>
         <div><label>Etapa</label><select id="qm-etapa" onchange="qmEtapaSync()">${etOpts}</select></div></div>
       <div class="field row"><div><label>Responsable</label><select id="qm-resp">${persOpts}</select></div>
@@ -1979,7 +2012,7 @@ function taskBody(t,panel){
     const receipt=readers.length?`<span class="cmt-read">✓ Leído por ${readers.join(', ')}</span>`:'';
     const readBtn=(meMent&&!meRead)?`<button class="cmt-read-btn" onclick="markRead('${cm.id}')">✓ Ya lo vi</button>`:'';
     const foot=(receipt||readBtn)?`<div class="cmt-foot">${receipt}${readBtn}</div>`:'';
-    return `<div class="cmt">${avatar(a)}<div class="b"><div class="h"><b>${a.name}</b> <span>${time}</span></div>${cm.text?`<div class="t">${cm.text}</div>`:''}${ments?`<div class="cmt-ments">${ments}</div>`:''}${atts?`<div class="cmt-atts">${atts}</div>`:''}${foot}</div></div>`;}).join('');
+    return `<div class="cmt">${avatar(a)}<div class="b"><div class="h"><b>${a.name}</b> <span>${time}</span></div>${cm.text?`<div class="t md">${mdRender(cm.text)}</div>`:''}${ments?`<div class="cmt-ments">${ments}</div>`:''}${atts?`<div class="cmt-atts">${atts}</div>`:''}${foot}</div></div>`;}).join('');
 
   return `${panel?'':''}
     <div class="m-head">
@@ -2012,7 +2045,7 @@ function taskBody(t,panel){
       `}
     </div>
     <div class="m-body" ${editingTask===t.id?'style="display:none"':''}>
-      <div class="m-sec"><h4>Descripción</h4><div class="muted" style="white-space:pre-wrap">${t.description?esc(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
+      <div class="m-sec"><h4>Descripción</h4><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
       <div class="m-sec"><div class="subs-head"><h4 style="margin:0">Subtareas (${(t.subtasks||[]).filter(s=>s.done).length}/${(t.subtasks||[]).length})</h4>
         <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${!isColab()?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
         ${(subView==='log'&&!isColab())?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
@@ -2028,7 +2061,7 @@ function taskBody(t,panel){
       </div>
       <div class="m-sec"><h4>Comentarios</h4>
         <div class="cmt-box">
-          <textarea class="cmt-in" id="cmt-${t.id}" placeholder="Escribe un comentario… usa @ para mencionar" oninput="mentionInput(this,'${t.id}')" onblur="mentionBlur('${t.id}')"></textarea>
+          <textarea class="cmt-in" id="cmt-${t.id}" placeholder="Escribe un comentario… usa @ para mencionar · **negrita** *cursiva* ~~tachado~~" oninput="mentionInput(this,'${t.id}')" onblur="mentionBlur('${t.id}')"></textarea>
           <button class="cmt-attach" title="Adjuntar imagen o archivo" onclick="document.getElementById('cmt-file-${t.id}').click()">📎</button>
           <input type="file" id="cmt-file-${t.id}" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple style="display:none" onchange="draftAttach(event,'${t.id}')">
           <div id="mention-box-${t.id}" class="mention-box"></div>
