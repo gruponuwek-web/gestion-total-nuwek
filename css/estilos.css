@@ -700,3 +700,8 @@
   .cmt-ops button:hover{opacity:1;background:#efede4}
   .cmt-edit{width:100%;min-height:64px;margin-top:4px}
   .cmt-edit-bar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:6px;font-size:.72rem}
+
+  .op-due{text-align:right}
+  .op-due-sub{font-weight:800;color:var(--green);font-size:.9rem;line-height:1.2}
+  .op-due-sub.late{color:#c0392b}.op-due-sub.today{color:#9a7a00}
+  .op-due-dl{font-size:.72rem;font-weight:500;color:var(--muted);margin-top:2px}

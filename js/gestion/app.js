@@ -759,21 +759,25 @@ function opTaskRow(t){
     <span class="badge s-${t.status}">${statusLabel[t.status]}</span>
     <div class="g"><div class="nm">${urgMark(taskHasUrgent(t))}${dk(t)}${t.name}</div>
       <div class="mt">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span> · ☑ ${doneS}/${totS} ${mineTxt}</div></div>
-    <div class="op-due">${t.dueDate?dLabel(t.dueDate):'—'}</div></div>`;
+    <div class="op-due">${(()=>{ const sd=mySubDate(t); const dl=t.dueDate?dLabel(t.dueDate):'—';
+      return sd?`<div class="op-due-sub${sd<todayISO()?' late':sd===todayISO()?' today':''}" title="Fecha de mi subtarea pendiente más próxima">☑ ${sd===todayISO()?'hoy':dLabel(sd)}</div><div class="op-due-dl" title="Fecha límite de la tarea">🏁 ${dl}</div>`:dl; })()}</div></div>`;
 }
 function myPendingTasks(){
   let ts=store.d.tasks.filter(t=>personParticipates(t,currentUser));
   if(opFilterClient) ts=ts.filter(t=>store.project(t.projectId).clientId===opFilterClient);
   return ts;
 }
+/* Fecha que manda para ubicar una tarea en MIS pendientes: la subtarea mía pendiente más próxima; si no hay, el deadline de la tarea */
+function mySubDate(t){ const ds=(t.subtasks||[]).filter(s=>!s.done&&s.date&&(s.personId===currentUser||(s.invitados||[]).includes(currentUser))).map(s=>s.date).sort(); return ds[0]||''; }
+function myKeyDate(t){ return mySubDate(t)||t.dueDate||''; }
 function viewMisPendientes(){
   const u=store.person(currentUser);
   const today=todayISO();
   const wk=new Date(); wk.setDate(wk.getDate()+7); const wkStr=wk.toISOString().slice(0,10);
   const ts=myPendingTasks();
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
-  ts.forEach(t=>{ const d=t.dueDate; if(!d) buckets.sinf.push(t); else if(d<today) buckets.venc.push(t); else if(d===today) buckets.hoy.push(t); else if(d<=wkStr) buckets.sem.push(t); else buckets.resto.push(t); });
-  Object.values(buckets).forEach(a=>a.sort((x,y)=>(x.dueDate||'9')<(y.dueDate||'9')?-1:1));
+  ts.forEach(t=>{ const d=myKeyDate(t); if(!d) buckets.sinf.push(t); else if(d<today) buckets.venc.push(t); else if(d===today) buckets.hoy.push(t); else if(d<=wkStr) buckets.sem.push(t); else buckets.resto.push(t); });
+  Object.values(buckets).forEach(a=>a.sort((x,y)=>(myKeyDate(x)||'9')<(myKeyDate(y)||'9')?-1:1));
   const sec=(title,icon,arr)=> accSec('op',title,icon,arr,opTaskRow);
   const clientes=[...new Set(ts.length?store.d.tasks.map(t=>store.project(t.projectId).clientId):[])];
   const cliOpts='<option value="">Todos los clientes</option>'+store.d.clients.map(c=>`<option value="${c.id}" ${opFilterClient===c.id?'selected':''}>${c.name}</option>`).join('');
