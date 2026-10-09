@@ -267,7 +267,7 @@ class Store{
     this.d.payments=(this.d.payments||[]).filter(x=>x.projectId!==pid); this.d.frentes=this.d.frentes.filter(f=>f.projectId!==pid); this.d.etapas=this.d.etapas.filter(e=>e.projectId!==pid);
     this.d.projects=this.d.projects.filter(p=>p.id!==pid); this.save(); return true; }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
-  updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateTask(tid,patch){ const t=this.task(tid); if(t){ if(patch&&patch.dueDate!==undefined&&patch.dueDate!==t.dueDate&&!canSubDate()){ patch=Object.assign({},patch); delete patch.dueDate; } Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   addComment(tid,uid,text,attachments,mentions){ const cm={id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}; this.d.comments.push(cm); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
   updateComment(cmId,text,mentions){ const cm=this.d.comments.find(c=>c.id===cmId); if(!cm) return; cm.text=text; cm.readBy=(cm.readBy||[]).filter(id=>(mentions||[]).includes(id)); cm.mentions=mentions||[]; this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
   removeComment(cmId){ this.d.comments=this.d.comments.filter(c=>c.id!==cmId); this.save(); if(typeof dbDeleteComment==='function') dbDeleteComment(cmId); }
@@ -324,10 +324,19 @@ function urgMark(on){ return on?URG+' ':''; }
 function toggleTaskUrgent(tid){ const t=store.task(tid); if(!t) return; t.urgent=!t.urgent; store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(tid,t.urgent?'Marcó la tarea como URGENTE':'Quitó la marca de urgente de la tarea'); render(); }
 function toggleSubUrgent(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const v=!sub.urgent; store.updateSubtask(tid,sid,{urgent:v}); logEvent(tid,(v?'Marcó como URGENTE':'Quitó la marca de urgente de')+' la subtarea «'+sub.name+'»'); render(); }
 /* Solo PM (y gerencia) pueden modificar las fechas de las subtareas */
-function canSubDate(){ return role==='pm' || role==='gerencia'; }
+/* ===== NIVELES DE PERMISO =====
+   Clave guardada → etiqueta en pantalla:  gerencia → Dirección (todo) · gerente → Gerencia (crea/edita/borra proyectos)
+   · pm → Project Manager (tareas y fechas) · colab → Colaborador (sin editar fechas).
+   La clave 'gerencia' se conserva para no tener que migrar a las personas que ya la tienen. */
+const PERM_LABEL={gerencia:'Dirección',gerente:'Gerencia',pm:'Project Manager',colab:'Colaborador'};
+function permLabel(k){ return PERM_LABEL[k]||PERM_LABEL.colab; }
+function permOptions(sel){ return ['gerencia','gerente','pm','colab'].map(k=>`<option value="${k}" ${(sel===k||(!sel&&k==='colab'))?'selected':''}>${PERM_LABEL[k]}</option>`).join(''); }
+function canManageProject(){ return role==='gerencia' || role==='gerente'; }          // crear / editar / eliminar proyectos
+function canSubDate(){ return role==='gerencia' || role==='gerente' || role==='pm'; }   // fechas de subtareas y de tareas
 const SUB_DATE_MSG='Solo el PM puede cambiar las fechas de las subtareas.';
 function isColab(){ return role==='colab'; }
 function isPM(){ return role==='pm'; }
+function isGerente(){ return role==='gerente'; }
 function isGerencia(){ return role==='gerencia'; }
 function canEditTask(t){ return true; }
 function canCheckSub(s){ return true; }
@@ -457,11 +466,11 @@ function miEspacioBody(){
 function whoSelector(){
   const opts=store.activeStaff().map(u=>`<option value="${u.id}" ${currentUser===u.id?'selected':''}>${u.name}</option>`).join('');
   return `<div class="role"><select onchange="setUser(this.value)" title="Quién soy">${opts}</select>
-    <select onchange="setRole(this.value)"><option value="gerencia" ${role==='gerencia'?'selected':''}>Gerencia</option><option value="pm" ${role==='pm'?'selected':''}>Project Manager</option><option value="colab" ${role==='colab'?'selected':''}>Colaborador</option></select></div>`;
+    <select onchange="setRole(this.value)">${permOptions(role)}</select></div>`;
 }
 function sessionBar(){
   const u=store.person(session)||{name:'?'};
-  const rl=u.perm==='gerencia'?'Gerencia':u.perm==='pm'?'Project Manager':'Colaborador';
+  const rl=permLabel(u.perm);
   return `<div class="sessbar">${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
 }
 /* ===== LOGIN ===== */
@@ -583,19 +592,30 @@ function shell(body){
     </div></div>
     <div class="wrap">${body}</div>`;
 }
+/* ===== Clientes favoritos (por usuario) ===== */
+function myFavClients(){ const u=store.d.staff.find(x=>x.id===currentUser); if(u&&Array.isArray(u.favClients)&&u.favClients.length) return u.favClients;
+  try{ return JSON.parse(localStorage.getItem('favClients_'+currentUser)||'[]'); }catch(_){ return []; } }
+function toggleFavClient(cid){ const cur=myFavClients().slice(); const i=cur.indexOf(cid); if(i>=0) cur.splice(i,1); else cur.push(cid);
+  try{ localStorage.setItem('favClients_'+currentUser,JSON.stringify(cur)); }catch(_){}
+  const u=store.d.staff.find(x=>x.id===currentUser); if(u) store.updateStaff(u.id,{favClients:cur}); render(); }
 function viewClientes(){
-  const cards=store.d.clients.map(c=>{
-    const n=store.projectsOf(c.id).length;
-    return `<div class="card click" onclick="openClient('${c.id}')">
+  const favs=myFavClients();
+  const card=c=>{
+    const n=store.projectsOf(c.id).length; const fav=favs.includes(c.id);
+    return `<div class="card click${fav?' is-fav':''}" onclick="openClient('${c.id}')">
+      <button class="fav-btn${fav?' on':''}" title="${fav?'Quitar de favoritos':'Marcar como favorito'}" onclick="event.stopPropagation();toggleFavClient('${c.id}')">${fav?'★':'☆'}</button>
       <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>
       <h3 style="margin:8px 0 4px">${c.name}</h3>
       <div class="muted" style="font-size:.85rem">${c.location} · ${n} proyecto${n===1?'':'s'} vivo${n===1?'':'s'}</div>
-    </div>`;
-  }).join('');
+    </div>`; };
+  const favList=favs.map(id=>store.client(id)).filter(Boolean);
+  const rest=store.d.clients.filter(c=>!favs.includes(c.id));
+  const add=isGerencia()?`<div class="card click" style="display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed" onclick="openClientForm()">+ Nuevo cliente</div>`:'';
   return `<div class="crumb">Clientes</div>
     <div class="sec-title"><h2>Clientes</h2></div>
-    <div class="grid cols-3">${cards}
-      ${isGerencia()?`<div class="card click" style="display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed" onclick="openClientForm()">+ Nuevo cliente</div>`:''}
+    ${favList.length?`<div class="fav-title">★ Favoritos</div><div class="grid cols-3">${favList.map(card).join('')}</div><div class="fav-title" style="margin-top:22px">Todos los clientes</div>`:''}
+    <div class="grid cols-3">${rest.map(card).join('')}
+      ${add}
     </div>`;
 }
 
@@ -609,7 +629,7 @@ function viewCliente(){
     return `<div class="card click" onclick="openProject('${p.id}')">
       <div style="display:flex;justify-content:space-between;align-items:start">
         <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div><h3 style="margin:8px 0 2px">${p.name}</h3></div>
-        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}">${health.icon} ${health.pct}%</span>${isGerencia()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}">${health.icon} ${health.pct}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
       </div>
       <div class="muted" style="font-size:.85rem;margin-top:6px">${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}</div>
     </div>`;
@@ -618,7 +638,7 @@ function viewCliente(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
         <div><div class="pill green">Cliente</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
-        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button></div>
+        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
       </div>
       <dl class="kv" style="margin-top:16px">
         <dt>RFC</dt><dd>${c.rfc||'—'}</dd>
@@ -643,7 +663,7 @@ function projectHealth(pid){
 }
 
 /* ================== WIZARD ================== */
-function startWizard(cid){
+function startWizard(cid){ if(!canManageProject()) return;
   wiz={step:1,clientId:cid,serviceId:store.d.services[0].id,price:'',monthlyPay:'',months:'',paymentDay:'',startDate:'',endDate:'',
        alcances:[],loadTemplate:true,etapas:[],frentes:[]};
   view='wizard'; render();
@@ -1225,7 +1245,7 @@ function viewProyecto(){
   const colab=isColab();
   let tabs;
   if(isGerencia()) tabs=['gestor','gantt','tareas','kpis','biblioteca','datos','scorecard'];
-  else if(isPM()) tabs=['gestor','gantt','tareas','biblioteca','scorecard'];
+  else if(isPM()||isGerente()) tabs=['gestor','gantt','tareas','biblioteca','scorecard'];
   else tabs=['gestor','gantt','tareas','biblioteca'];
   const tlabel={gestor:'Gestor',gantt:'Gantt',tareas:'Tareas',kpis:'KPIs',biblioteca:'📚 Biblioteca',datos:'Datos y alcances',scorecard:'📊 Scorecard'};
   if(!tabs.includes(selTab)) selTab='gestor';
@@ -1242,7 +1262,7 @@ function viewProyecto(){
     ? `<div class="crumb"><a onclick="go('op_tableros')">Tableros</a> › ${p.name}</div>`
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
-  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
+  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
   return `${crumb}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
@@ -1776,7 +1796,7 @@ function quickModal(){
           <div><label>Estado</label><select id="qm-active"><option value="1" ${u.active!==false?'selected':''}>Activo</option><option value="0" ${u.active===false?'selected':''}>Inactivo</option></select></div></div>
         <div class="pers-div">Acceso al sistema</div>
         <div class="field row"><div><label>Contraseña de ingreso (6 dígitos)</label><input id="qm-pass" inputmode="numeric" maxlength="6" pattern="[0-9]*" value="${esc(u.password||'')}" placeholder="••••••" style="letter-spacing:3px;max-width:160px"></div>
-          <div><label>Permiso</label><select id="qm-perm"><option value="gerencia" ${u.perm==='gerencia'?'selected':''}>Gerencia</option><option value="pm" ${u.perm==='pm'?'selected':''}>Project Manager</option><option value="colab" ${(u.perm==='colab'||!u.perm)?'selected':''}>Colaborador</option></select></div></div>
+          <div><label>Permiso</label><select id="qm-perm">${permOptions(u.perm)}</select></div></div>
       </div>
 
       <div class="pers-sec" data-sec="contacto" style="display:none">
@@ -1923,9 +1943,9 @@ function openPayEdit(pid,payId){qm={kind:'pagoEdit',pid,payId};render();}
 function savePayEdit(){const d=val('qm-pdate'),a=val('qm-pamount');if(!d||!a){alert('Fecha y monto.');return;}store.updatePayment(qm.payId,{dueDate:d,amount:a});qm=null;render();}
 function delPay(payId,pid){if(confirm('¿Eliminar este pago?')){store.removePayment(payId);render();}}
 function openGenPagos(pid){qm={kind:'genPagos',pid};render();}function runGenPagos(){const freq=val('qm-freq'),count=+val('qm-count'),total=+val('qm-total'),start=val('qm-pstart');if(!count||!total||!start){alert('Completa frecuencia, número, total y fecha.');return;}if(!confirm('Esto reemplaza el calendario de pagos actual. ¿Continuar?'))return;store.generatePaymentsCustom(qm.pid,freq,count,total,start);qm=null;render();}
-function openProjectEdit(pid){qm={kind:'proyectoEdit',pid};render();}
-function openProjectDel(pid){ if(!isGerencia()) return; qm={kind:'proyectoDel',pid}; render(); }
-async function confirmProjectDel(){ if(!isGerencia()||!qm||qm.kind!=='proyectoDel') return; const p=store.project(qm.pid); if(!p) return;
+function openProjectEdit(pid){ if(!canManageProject()) return; qm={kind:'proyectoEdit',pid};render();}
+function openProjectDel(pid){ if(!canManageProject()) return; qm={kind:'proyectoDel',pid}; render(); }
+async function confirmProjectDel(){ if(!canManageProject()||!qm||qm.kind!=='proyectoDel') return; const p=store.project(qm.pid); if(!p) return;
   if((val('qm-delname')||'').trim()!==p.name.trim()){ alert('El nombre no coincide.'); return; }
   const btn=document.getElementById('qm-delbtn'); if(btn){ btn.disabled=true; btn.textContent='Eliminando…'; }
   const cid=p.clientId; const ok=await store.removeProject(qm.pid);
@@ -2122,7 +2142,7 @@ function taskBody(t,panel){
         <div class="field"><label>Descripción general</label><textarea id="et-desc" style="width:100%;min-height:70px;padding:9px;border:2px solid var(--line);border-radius:7px" placeholder="Objetivo, contexto, lineamientos…">${esc(t.description||'')}</textarea></div>
         <div class="field row"><div><label>Frente</label><select id="et-frente">${store.frentesOf(p.id).map(f=>`<option value="${f.id}" ${f.id===t.frenteId?'selected':''}>${f.name}</option>`).join('')}</select></div>
           <div><label>Responsable</label><select id="et-resp">${staffOptEls(t.responsibleId)}</select></div></div>
-        <div class="field row"><div><label>Fecha límite</label><input id="et-date" type="date" value="${t.dueDate}"></div>
+        <div class="field row"><div><label>Fecha límite</label><input id="et-date" type="date" value="${t.dueDate}" ${canSubDate()?'':'disabled title="Solo PM, Gerencia o Dirección pueden cambiar fechas."'}></div>
           <div><label>Viáticos</label><input id="et-viat" type="number" value="${t.viaticos||0}"></div></div>
         <div class="field"><label>Etiquetas (del catálogo)</label>${tagPicker('et-tags-box', t.tags||[])}</div>
         <div class="wiz-actions"><button class="btn ghost" onclick="cancelTaskEdit()">Cancelar</button><button class="btn" onclick="saveTaskEdit('${t.id}')">Guardar</button></div>

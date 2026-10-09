@@ -744,3 +744,23 @@
 
   #ver-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:200;background:#16261f;color:#fff;padding:11px 18px;border-radius:99px;font-size:.88rem;box-shadow:0 8px 28px rgba(0,0,0,.35);display:flex;align-items:center;gap:12px}
   #ver-banner button{background:#f2dc6b;color:#16261f;border:0;border-radius:99px;padding:6px 14px;font-weight:700;cursor:pointer;font-family:inherit}
+
+  /* ---- Ajuste de tipografía global (−2 pt): todo el sistema escala desde aquí ---- */
+  html{font-size:14px}
+  /* ---- Subtareas: nada se sale de la vista ---- */
+  .m-body,.task-panel{overflow-x:hidden}
+  .sub-mt{flex:0 1 auto;min-width:0;white-space:normal;flex-wrap:wrap;row-gap:2px}
+  .sub-btns{flex-shrink:0}
+  .task-panel .sub-item:not(.editing){display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:center;column-gap:10px;row-gap:2px}
+  .task-panel .sub-item .sub-grip{grid-column:1;grid-row:1 / span 2}
+  .task-panel .sub-item .check{grid-column:2;grid-row:1 / span 2}
+  .task-panel .sub-item .sub-nm{grid-column:3;grid-row:1;white-space:normal;overflow-wrap:anywhere;min-width:0}
+  .task-panel .sub-item .sub-mt{grid-column:3;grid-row:2}
+  .task-panel .sub-item .sub-btns,.task-panel .sub-item .sub-time{grid-column:4;grid-row:1 / span 2}
+
+  .card.click{position:relative}
+  .fav-btn{position:absolute;top:10px;right:12px;border:0;background:none;cursor:pointer;font-size:1.35rem;line-height:1;color:#b9bfba;padding:2px 4px;border-radius:8px;transition:.12s}
+  .fav-btn:hover{color:#e6b800;transform:scale(1.15)}
+  .fav-btn.on{color:#e6b800}
+  .card.is-fav{border-color:#e6d27a;background:linear-gradient(180deg,#fffdf3,#fff)}
+  .fav-title{font-family:'Space Grotesk';font-weight:700;color:var(--green);margin:6px 0 10px;font-size:.95rem}
