@@ -37,7 +37,7 @@ class Store{
     // reparar ids de tareas/subtareas duplicados (colisiones antiguas por Date.now())
     const seenT={}; (this.d.tasks||[]).forEach(t=>{ if(seenT[t.id]||!t.id) t.id=uid('t_'); seenT[t.id]=1; const seenS={}; (t.subtasks||[]).forEach(s=>{ if(seenS[s.id]||!s.id) s.id=uid('s_'); seenS[s.id]=1;
       if(s.links && !Array.isArray(s.links)) s.links=Object.entries(s.links).filter(e=>e[1]).map(e=>({title:e[0],url:e[1]}));
-      if(!Array.isArray(s.links)) s.links=[]; if(s.durMin==null) s.durMin=30; if(s.done && !s.doneAt) s.doneAt='2020-01-01T00:00:00.000Z'; });
+      if(!Array.isArray(s.links)) s.links=[]; if(s.done && !s.doneAt) s.doneAt='2020-01-01T00:00:00.000Z'; });
       if(!Array.isArray(t.links)){ const col=[]; (t.subtasks||[]).forEach(s=>(s.links||[]).forEach(l=>{ if(l.url) col.push({title:l.title||'',url:l.url}); })); t.links=col; }
     });
     if(!this.d.log){ this.d.log=[]; (this.d.tasks||[]).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.done) this.d.log.push({id:uid('lg_'),ts:s.doneAt||new Date().toISOString(),userId:s.personId,taskId:t.id,action:'Completó la subtarea «'+s.name+'»'+(s.timeSpent?' ('+fmtTime(s.timeSpent)+')':'')}); })); }
@@ -226,11 +226,11 @@ class Store{
   taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   taskDelLink(tid,idx){ const t=this.task(tid); if(t&&t.links){ t.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  addSubtask(tid,st){ const t=this.task(tid); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; if(st.durMin==null) st.durMin=30; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  addSubtask(tid,st){ const t=this.task(tid); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date) s.dateConflict=false; Object.assign(s,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } Object.assign(s,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   /* Mueve una tarea a (frente, etapa, posición). Reubica las fechas de las subtareas que estaban en la etapa de origen
      conservando su día relativo; si no cabe en la etapa destino -> hoy + dateConflict (icono rojo). */
   moveTaskTo(tid,frenteId,fromEtapaId,toEtapaId,beforeTid){
@@ -322,6 +322,9 @@ function taskHasUrgent(t){ return !!t.urgent || (t.subtasks||[]).some(x=>x.urgen
 function urgMark(on){ return on?URG+' ':''; }
 function toggleTaskUrgent(tid){ const t=store.task(tid); if(!t) return; t.urgent=!t.urgent; store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(tid,t.urgent?'Marcó la tarea como URGENTE':'Quitó la marca de urgente de la tarea'); render(); }
 function toggleSubUrgent(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const v=!sub.urgent; store.updateSubtask(tid,sid,{urgent:v}); logEvent(tid,(v?'Marcó como URGENTE':'Quitó la marca de urgente de')+' la subtarea «'+sub.name+'»'); render(); }
+/* Solo PM (y gerencia) pueden modificar las fechas de las subtareas */
+function canSubDate(){ return role==='pm' || role==='gerencia'; }
+const SUB_DATE_MSG='Solo el PM puede cambiar las fechas de las subtareas.';
 function isColab(){ return role==='colab'; }
 function isPM(){ return role==='pm'; }
 function isGerencia(){ return role==='gerencia'; }
@@ -1143,6 +1146,7 @@ function agBlockDown(ev){
     const r=body.getBoundingClientRect(); const topPx=(blkTop-r.top);   // posición real del bloque soltado
     let min=AG.H0*60+agSnap(topPx/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
     const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
+    if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes cambiar la hora dentro del mismo día.'); render(); return; }
     store.updateSubtask(tid,sid,{date:body.dataset.day,time}); logEvent(tid,'Movió la subtarea «'+sub.name+'» a '+body.dataset.day+' '+time); agSel={tid,sid}; render(); };
   document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
 }
@@ -1165,6 +1169,7 @@ function agListDrop(ev){ if(!agListDrag) return; ev.preventDefault(); const body
   const t=store.task(d.tid); const sub=t.subtasks.find(x=>x.id===d.sid); const dur=+sub.durMin||30;
   const r=body.getBoundingClientRect(); let min=AG.H0*60+agSnap((ev.clientY-r.top)/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
   const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
+  if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
   store.updateSubtask(d.tid,d.sid,{date:body.dataset.day,time}); logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+body.dataset.day+' '+time); agSel=d; render(); }
 function agNotes(days){ let h=''; const si=agSelInfo();
   if(si&&si.t.dueDate&&!days.includes(si.t.dueDate)) h+=`<button class="ag-note dl" onclick="agGoDeadline()" title="Ir a la semana del deadline">🏁 Deadline de «${esc(si.t.name)}»: ${dLabel(si.t.dueDate)} ${si.t.dueDate<days[0]?'←':'→'}</button>`;
@@ -2053,10 +2058,10 @@ function taskBody(t,panel){
     const timing=timingSub===t.id+':'+s.id;
     const editing=editingSub===t.id+':'+s.id;
     if(editing){
-      const persOpts2=[staffOptEls(s.personId,' (Nuwek)'),...clientPeople2.map(pp=>`<option value="${pp.id}" ${pp.id===s.personId?'selected':''}>${pp.name} (Cliente)</option>`)].join('');
+      const persOpts2=[`<option value="" ${s.personId?'':'selected'}>— Sin responsable —</option>`,staffOptEls(s.personId,' (Nuwek)'),...clientPeople2.map(pp=>`<option value="${pp.id}" ${pp.id===s.personId?'selected':''}>${pp.name} (Cliente)</option>`)].join('');
       return `<div class="sub-item editing"><div class="sub-edit">
         <input id="se-name-${s.id}" value="${esc(s.name)}" placeholder="Nombre de la subtarea">
-        <div class="se-row"><select id="se-person-${s.id}">${persOpts2}</select><input type="date" id="se-date-${s.id}" value="${s.date||''}"><input type="time" id="se-time-${s.id}" value="${s.time||'10:00'}"><select id="se-dur-${s.id}">${durOptsEl(s.durMin||30)}</select></div>
+        <div class="se-row"><select id="se-person-${s.id}">${persOpts2}</select><input type="date" id="se-date-${s.id}" value="${s.date||''}" ${canSubDate()?'':`disabled title="${SUB_DATE_MSG}"`}><input type="time" id="se-time-${s.id}" value="${s.time||''}"><select id="se-dur-${s.id}"><option value="" ${s.durMin?'':'selected'}>— Sin duración —</option>${durOptsEl(s.durMin||0)}</select></div>
         <div class="se-actions"><button class="btn ghost sm" onclick="cancelSubEdit()">Cancelar</button><button class="btn sm" onclick="saveSubEdit('${t.id}','${s.id}')">Guardar</button></div>
       </div></div>`;
     }
@@ -2073,10 +2078,10 @@ function taskBody(t,panel){
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas'}"`}>${s.done?'✓':''}</span>
       <span class="sub-nm ${s.done?'done':''}">${s.name}</span>
-      <span class="sub-mt"><span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':'Clic para marcar como urgente'}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(per,true)}</span> ${per.name} · ${dLabel(s.date)}${lateD?` <span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'} de retraso</span>`:''}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span> · ⏳ ${fmtDurShort(s.durMin||30)}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
+      <span class="sub-mt"><span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':'Clic para marcar como urgente'}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(per,true)}</span> ${s.personId?per.name:'<i class="muted">Sin responsable</i>'} · ${dLabel(s.date)}${lateD?` <span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'} de retraso</span>`:''}${s.dateConflict?' <span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''} ${s.time||''} <span class="etapa-badge ${e?'':'out'}">${e?e.name:'fuera'}</span>${s.durMin?` · ⏳ ${fmtDurShort(s.durMin)}`:''}${s.done&&s.timeSpent?` · ⏱ ${fmtTime(s.timeSpent)}`:''}${lockTag}${inv?` · 👥 ${inv}`:''}</span>
       ${right}</div>`;
   }).join('');
-  const persOpts=[staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
+  const persOpts=['<option value="" selected>— Sin responsable —</option>',staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
   const invOpts=`<option value="">+ invitar…</option>`+clientPeople.map(pp=>`<option value="${pp.id}">${pp.name}</option>`).join('');
   const comments=store.commentsOf(t.id).slice().reverse().map(cm=>{const a=store.person(cm.userId);const time=new Date(cm.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
     const atts=(cm.attachments||[]).map((f,i)=> f.type&&f.type.startsWith('image/')
@@ -2131,9 +2136,9 @@ function taskBody(t,panel){
         <div class="inline-add">
           <input class="grow" id="ns-name" placeholder="Nueva subtarea...">
           <span class="ns-field"><button type="button" class="ns-ico" title="Responsable" onclick="nsReveal('ns-person')">👤</button><select id="ns-person" class="ns-ctl hidden">${persOpts}</select></span>
-          <span class="ns-field"><button type="button" class="ns-ico" title="Fecha" onclick="nsReveal('ns-date')">📅</button><input type="date" id="ns-date" class="ns-ctl hidden" value="${t.dueDate}"></span>
-          <span class="ns-field"><button type="button" class="ns-ico" title="Hora" onclick="nsReveal('ns-time')">🕐</button><input type="time" id="ns-time" class="ns-ctl hidden" value="10:00"></span>
-          <span class="ns-field"><button type="button" class="ns-ico" title="Duración aprox." onclick="nsReveal('ns-dur')">⏳</button><select id="ns-dur" class="ns-ctl hidden">${durOptsEl(30)}</select></span>
+          ${canSubDate()?`<span class="ns-field"><button type="button" class="ns-ico" title="Fecha" onclick="nsReveal('ns-date')">📅</button><input type="date" id="ns-date" class="ns-ctl hidden" value="${t.dueDate}"></span>`:`<span class="ns-field"><button type="button" class="ns-ico" title="${SUB_DATE_MSG} Se usará la fecha límite de la tarea." style="opacity:.4;cursor:not-allowed" onclick="alert('${SUB_DATE_MSG} Se usará la fecha límite de la tarea.')">📅</button></span>`}
+          <span class="ns-field"><button type="button" class="ns-ico" title="Hora" onclick="nsReveal('ns-time')">🕐</button><input type="time" id="ns-time" class="ns-ctl hidden" value=""></span>
+          <span class="ns-field"><button type="button" class="ns-ico" title="Duración aprox." onclick="nsReveal('ns-dur')">⏳</button><select id="ns-dur" class="ns-ctl hidden"><option value="" selected>— Sin duración —</option>${durOptsEl(0)}</select></span>
           <button class="btn sm" onclick="addSub('${t.id}')">+ Agregar</button>
         </div>
         <div class="hint">Toca un círculo para elegir responsable, fecha, hora o duración. Si no lo abres, se usan los valores por defecto.</div>`}
@@ -2234,12 +2239,12 @@ function editSub(tid,sid){editingSub=tid+':'+sid;timingSub=null;render();}
 function cancelSubEdit(){editingSub=null;render();}
 function saveSubEdit(tid,sid){
   const name=(val('se-name-'+sid)||'').trim(); if(!name){alert('La subtarea necesita nombre.');return;}
-  store.updateSubtask(tid,sid,{name,personId:val('se-person-'+sid),date:val('se-date-'+sid),time:val('se-time-'+sid),durMin:+val('se-dur-'+sid)||30});
+  store.updateSubtask(tid,sid,{name,personId:val('se-person-'+sid)||'',date:val('se-date-'+sid)||(store.task(tid)||{}).dueDate||'',time:val('se-time-'+sid)||'',durMin:+val('se-dur-'+sid)||null});
   logEvent(tid,'Editó la subtarea «'+name+'»');
   editingSub=null;render();
 }
 function nsReveal(id){const ctl=document.getElementById(id);if(!ctl)return;ctl.classList.remove('hidden');const btn=ctl.parentElement.querySelector('.ns-ico');if(btn)btn.style.display='none';if(ctl.showPicker){try{ctl.showPicker();}catch(e){ctl.focus();}}else{ctl.focus();}}
-function addSub(tid){const n=val('ns-name');if(!n)return;store.addSubtask(tid,{name:n,personId:val('ns-person'),date:val('ns-date'),time:val('ns-time')||'10:00',durMin:+val('ns-dur')||30,invitados:[]});logEvent(tid,'Agregó la subtarea «'+n+'»');render();}
+function addSub(tid){const n=val('ns-name');if(!n)return;const tk=store.task(tid);store.addSubtask(tid,{name:n,personId:val('ns-person')||'',date:(canSubDate()?val('ns-date'):'')||(tk&&tk.dueDate)||'',time:val('ns-time')||'',durMin:+val('ns-dur')||null,invitados:[]});logEvent(tid,'Agregó la subtarea «'+n+'»');render();}
 function draftAttach(ev,tid){
   const files=[...ev.target.files]; const box=document.getElementById('cmt-preview-'+tid);
   files.forEach(f=>{
