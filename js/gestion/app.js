@@ -2621,4 +2621,16 @@ function viewPublicTask(){
   </div></div>`; }
 window.addEventListener('hashchange',()=>{ const id=takeShareHash(); if(id) handleShareLink(id); });
 
+/* ================== AVISO DE VERSIÓN NUEVA ==================
+   Cada push cambia la versión en index.html (meta app-version + ?v= en los archivos). Si alguien tiene abierta una versión
+   vieja, sale un aviso para recargar y no se queda sin las mejoras. */
+const APP_VERSION=(document.querySelector('meta[name="app-version"]')||{}).content||'';
+async function checkNewVersion(){
+  if(!APP_VERSION||document.hidden||document.getElementById('ver-banner')) return;
+  try{ const r=await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'}); const t=await r.text(); const m=t.match(/<meta name="app-version" content="([^"]*)"/);
+    if(m&&m[1]&&m[1]!==APP_VERSION){ const b=document.createElement('div'); b.id='ver-banner'; b.innerHTML='🆕 Hay una versión nueva del portal. <button onclick="location.reload()">Recargar ahora</button>'; document.body.appendChild(b); } }catch(_){}
+}
+setInterval(checkNewVersion,60000); setTimeout(checkNewVersion,8000);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(checkNewVersion,500); });
+
 boot();
