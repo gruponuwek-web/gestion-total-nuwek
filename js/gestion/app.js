@@ -410,6 +410,7 @@ function render(){
   if(session){ saveSession(); saveNav(); }
   setTimeout(notifUpdate,0);
   if(!session){
+    if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
     app.innerHTML = loginScreen();
     document.getElementById('modal-root').innerHTML = loginUser ? pinModal() : '';
     return;
@@ -523,7 +524,7 @@ function pinSubmit(){
     view=(role==='colab')?'op_pendientes':'clientes';
     selProject=null; modalTask=null; opSelTask=null;
     loginAttempts[u.id]=null; loginUser=null; loginPin=''; loginErr='';
-    saveSession(); render(); return;
+    saveSession(); if(afterLoginTask){ openSharedTask(afterLoginTask); afterLoginTask=null; } render(); return;
   }
   const a=loginAttempts[loginUser]||{fails:0,until:0};
   a.fails=(a.fails||0)+1;
@@ -2113,7 +2114,7 @@ function taskBody(t,panel){
     <div class="m-head">
       <div class="m-top">${(panel||editingTask===t.id)?`<div class="muted" style="font-size:.8rem;font-weight:600">${editingTask===t.id?'Editar tarea':'Detalle de tarea'}</div>`:`<div class="m-nav"><button onclick="navTask(-1)" ${idx<=0?'disabled':''}>‹</button><button onclick="navTask(1)" ${idx>=siblings.length-1?'disabled':''}>›</button><span class="muted" style="font-size:.8rem">${idx+1} de ${siblings.length}</span></div>`}
         <div style="display:flex;gap:6px;align-items:center">
-          ${(editingTask!==t.id)?`<button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button><button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}
+          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button><button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}
           ${(panel&&editingTask!==t.id)?'':`<button class="x" onclick="${editingTask===t.id?'cancelTaskEdit()':'closeTask()'}">×</button>`}
         </div></div>
       ${editingTask===t.id ? `
@@ -2457,6 +2458,7 @@ function resetLoginBg(){ if(confirm('¿Restaurar el fondo por defecto?')){ store
 function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMentions=[];subView='list';render();}
 
 /* init: cargar Personal desde Supabase y luego arrancar */
+let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null; let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){} history.replaceState(null,'',location.pathname+location.search); return id; }catch(_){ return null; } })();
 async function boot(){
   try{
     if(typeof dbLoadPersonal==='function'){
@@ -2497,6 +2499,7 @@ async function boot(){
     return;
   }
   restoreSession();
+  if(shareTaskIdAtLoad){ const sid=shareTaskIdAtLoad; shareTaskIdAtLoad=null; if(session){ openSharedTask(sid); } else { publicTaskId=sid; afterLoginTask=sid; } }
   render();
   startSync();
 }
@@ -2578,5 +2581,44 @@ function toggleNotif(){ notifOpen=!notifOpen; notifUpdate(); }
 function goNotif(tid){ notifOpen=false; opFilterClient=''; view='op_pendientes'; modalTask=null; opSelTask=tid; subView='list'; draftAtt=[]; draftMentions=[]; render();
   setTimeout(()=>{ const row=document.querySelector(`.op-row[onclick*="'${tid}'"]`); if(row){ const sec=row.closest('.op-sec'); if(sec&&sec.classList.contains('closed')) toggleAcc(sec.dataset.acc); row.scrollIntoView({block:'center'}); } },30); }
 document.addEventListener('click',ev=>{ if(notifOpen&&!ev.target.closest('#notif-root')){ notifOpen=false; notifUpdate(); } });
+
+/* ================== LINK COMPARTIBLE POR TAREA ==================
+   Formato: <portal>#/tarea/<id>. Al abrirlo se ve la tarea SIN iniciar sesión (solo lectura);
+   la dirección se limpia de inmediato; para editar o comentar hay que iniciar sesión. */
+let publicTaskId=null, afterLoginTask=null;
+function taskShareUrl(id){ return location.origin+location.pathname+'#/tarea/'+encodeURIComponent(id); }
+function copyTaskLink(id){ const url=taskShareUrl(id);
+  const done=()=>shareToast('🔗 Link copiado. Cualquiera puede ver la tarea; para editar debe iniciar sesión.');
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copia el link:',url));
+  else prompt('Copia el link:',url); }
+function shareToast(msg){ const t=document.createElement('div'); t.className='nf-toast'; t.textContent=msg; notifRoot().appendChild(t); setTimeout(()=>t.remove(),4500); }
+function takeShareHash(){   // lee el id del hash y quita el link de la barra de direcciones
+  const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null;
+  let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){}
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
+  return id; }
+function openSharedTask(id){ const t=store.task(id); if(!t){ alert('Esa tarea ya no existe.'); return; }
+  const p=store.project(t.projectId); if(p){ selClient=p.clientId; selProject=p.id; }
+  view='proyecto'; selTab='gestor'; modalTask=id; timingSub=null; editingTask=null; editingSub=null; opSelTask=null; }
+function handleShareLink(id){ if(!id) return; if(session){ openSharedTask(id); render(); } else { publicTaskId=id; afterLoginTask=id; render(); } }
+function goLoginFromShare(){ publicTaskId=null; render(); }
+function viewPublicTask(){
+  const t=store.task(publicTaskId);
+  const head=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div></div>`;
+  if(!t) return `<div class="pub-wrap">${head}<div class="pub-card"><h2>Esta tarea ya no existe</h2><p class="muted">Pudo haberse eliminado o el link está incompleto.</p><button class="btn" onclick="goLoginFromShare()">Ir al portal</button></div></div>`;
+  const p=store.project(t.projectId)||{name:''}; const c=store.client(p.clientId)||{name:''}; const f=kbFrente(t); const resp=store.person(t.responsibleId);
+  const subs=(t.subtasks||[]).map(x=>{ const per=x.personId?store.person(x.personId):null;
+    return `<div class="pub-sub${x.done?' done':''}"><span class="pub-chk">${x.done?'✓':''}</span><span class="pub-sn">${x.urgent?URG+' ':''}${mdEsc(x.name)}</span><span class="pub-sm">${per?mdEsc(per.name||''):'Sin responsable'}${x.date?' · '+dLabel(x.date):''}</span></div>`; }).join('');
+  const tags=(t.tags||[]).map(g=>`<span class="agp-chip" style="background:${store.tagColor(g)}">${mdEsc(g)}</span>`).join('');
+  const done=(t.subtasks||[]).filter(x=>x.done).length, tot=(t.subtasks||[]).length;
+  return `<div class="pub-wrap">${head}<div class="pub-card">
+    <div class="pub-crumb">${mdEsc(c.name)} » ${mdEsc(p.name)} » <span style="color:${f.color};font-weight:600">${mdEsc(f.name)}</span></div>
+    <h2>${urgMark(t.urgent)}${dk(t)}${mdEsc(t.name)}</h2>
+    <div class="pub-meta"><span class="badge s-${t.status}">${statusLabel[t.status]||t.status}</span>${t.dueDate?`<span>🏁 Fecha límite: <b>${dLabel(t.dueDate)}</b></span>`:''}<span>Responsable: <b>${mdEsc(resp.name||'—')}</b></span>${tags}</div>
+    ${t.description?`<div class="md pub-desc">${mdRender(t.description)}</div>`:''}
+    <h4 style="margin:18px 0 6px">Subtareas (${done}/${tot})</h4>${subs||'<div class="muted">Sin subtareas.</div>'}
+    <div class="pub-cta"><div class="muted">Vista de solo lectura. Para editar, comentar o marcar avances, inicia sesión.</div><button class="btn" onclick="goLoginFromShare()">Iniciar sesión para editar</button></div>
+  </div></div>`; }
+window.addEventListener('hashchange',()=>{ const id=takeShareHash(); if(id) handleShareLink(id); });
 
 boot();
