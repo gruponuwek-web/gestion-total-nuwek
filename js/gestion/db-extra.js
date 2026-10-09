@@ -21,6 +21,10 @@ function appToDbComment(c){
     ts: c.ts, attachments: c.attachments || [], mentions: c.mentions || [], read_by: c.readBy || []
   };
 }
+async function dbDeleteComment(id){
+  try{ const { error } = await sb.from('comentarios').delete().eq('id', id); if (error){ console.error('Error borrando comentario:', error.message); alert('No se pudo borrar el comentario en la base de datos.\n\n'+error.message); } }
+  catch(e){ console.error('Red al borrar comentario:', e); }
+}
 async function dbLoadComentarios(){
   const { data, error } = await sb.from('comentarios').select('*').order('ts', { ascending: true });
   if (error) throw error;

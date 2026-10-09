@@ -268,6 +268,8 @@ class Store{
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
   updateTask(tid,patch){ const t=this.task(tid); if(t){Object.assign(t,patch); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   addComment(tid,uid,text,attachments,mentions){ const cm={id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}; this.d.comments.push(cm); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
+  updateComment(cmId,text,mentions){ const cm=this.d.comments.find(c=>c.id===cmId); if(!cm) return; cm.text=text; cm.readBy=(cm.readBy||[]).filter(id=>(mentions||[]).includes(id)); cm.mentions=mentions||[]; this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
+  removeComment(cmId){ this.d.comments=this.d.comments.filter(c=>c.id!==cmId); this.save(); if(typeof dbDeleteComment==='function') dbDeleteComment(cmId); }
   markCommentRead(cmId,uid){ const cm=this.d.comments.find(c=>c.id===cmId); if(cm&&(cm.mentions||[]).includes(uid)){ cm.readBy=cm.readBy||[]; if(!cm.readBy.includes(uid)) cm.readBy.push(uid); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); } }
 
   /* catálogos: servicios */
@@ -325,6 +327,22 @@ function isPM(){ return role==='pm'; }
 function isGerencia(){ return role==='gerencia'; }
 function canEditTask(t){ return true; }
 function canCheckSub(s){ return true; }
+const CMT_EDIT_MS=15*60*1000; // 15 minutos para editar o borrar tu propio comentario
+let editingCmt=null;
+function cmtCanEdit(cm){ return cm.userId===currentUser && (Date.now()-new Date(cm.ts).getTime())<=CMT_EDIT_MS; }
+function cmtEditUntil(cm){ const d=new Date(new Date(cm.ts).getTime()+CMT_EDIT_MS); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function editCmt(id){ const cm=(store.d.comments||[]).find(c=>c.id===id); if(!cm||!cmtCanEdit(cm)){ alert('Ya pasaron los 15 minutos: este comentario ya no se puede editar.'); render(); return; } editingCmt=id; render(); setTimeout(()=>{ const el=document.getElementById('cmt-edit-'+id); if(el){ el.focus(); el.setSelectionRange(el.value.length,el.value.length); } },0); }
+function cancelCmtEdit(){ editingCmt=null; render(); }
+function saveCmtEdit(id){ const cm=(store.d.comments||[]).find(c=>c.id===id); if(!cm) return; if(!cmtCanEdit(cm)){ alert('Ya pasaron los 15 minutos: este comentario ya no se puede editar.'); editingCmt=null; render(); return; }
+  const tx=(document.getElementById('cmt-edit-'+id).value||'').trim(); if(!tx&&!(cm.attachments||[]).length){ alert('El comentario no puede quedar vacío. Si quieres quitarlo, usa 🗑️.'); return; }
+  const ments=(cm.mentions||[]).filter(pid=>tx.includes('@'+store.person(pid).name)); store.updateComment(id,tx,ments); logEvent(cm.taskId,'Editó un comentario'); editingCmt=null; render(); }
+function delCmt(id){ const cm=(store.d.comments||[]).find(c=>c.id===id); if(!cm) return; if(!cmtCanEdit(cm)){ alert('Ya pasaron los 15 minutos: este comentario ya no se puede borrar.'); render(); return; }
+  if(!confirm('¿Borrar este comentario?')) return; store.removeComment(id); logEvent(cm.taskId,'Borró un comentario'); render(); }
+/* Enter envía · Shift+Enter = nueva línea (si hay sugerencias de @, Enter elige la primera) */
+function cmtKey(ev,tid){ if(ev.key!=='Enter'||ev.shiftKey||ev.isComposing) return;
+  const box=document.getElementById('mention-box-'+tid); const first=box&&box.classList.contains('on')&&box.querySelector('.ment-opt');
+  ev.preventDefault(); if(first){ mentionPick(ev,tid,first.dataset.id); return; } addCmt(tid); }
+function cmtEditKey(ev,id){ if(ev.isComposing) return; if(ev.key==='Escape'){ ev.preventDefault(); cancelCmtEdit(); } else if(ev.key==='Enter'&&!ev.shiftKey){ ev.preventDefault(); saveCmtEdit(id); } }
 const SUB_EDIT_MS=10*60*1000; // 10 minutos para editar el tiempo
 function subTimeLocked(s){ return !!(s.done && s.doneAt && (Date.now()-new Date(s.doneAt).getTime())>SUB_EDIT_MS); }
 function subEditUntil(s){ if(!s.doneAt) return ''; const d=new Date(new Date(s.doneAt).getTime()+SUB_EDIT_MS); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
@@ -381,6 +399,7 @@ function taskEtapaIds(t){
 /* ================== RENDER DISPATCH ================== */
 function render(){
   const app=document.getElementById('app');
+  if(session){ saveSession(); saveNav(); }
   if(!session){
     app.innerHTML = loginScreen();
     document.getElementById('modal-root').innerHTML = loginUser ? pinModal() : '';
@@ -460,6 +479,16 @@ function pinModal(){
     <div style="text-align:center"><button class="pin-cancel" onclick="cancelPin()">Cancelar</button></div>
   </div></div>`;
 }
+/* Esc: cierra lo último que abriste (modal, edición, panel) */
+document.addEventListener('keydown',ev=>{
+  if(ev.key!=='Escape'||ev.defaultPrevented||!session) return;
+  const tg=ev.target; if(tg&&tg.classList&&tg.classList.contains('cmt-in')&&tg.value.trim()&&!tg.id.startsWith('cmt-edit')){ tg.blur(); return; }   // no perder un comentario a medias
+  if(lightbox){ closeLightbox(); return; }
+  if(qm){ closeQM(); return; }
+  if(libModal){ closeLibModal(); return; }
+  if(modalTask){ if(timingSub){ cancelSubTime(); return; } if(editingSub){ cancelSubEdit(); return; } if(editingTask===modalTask){ cancelTaskEdit(); return; } closeTask(); return; }
+  if(opSelTask&&view==='op_pendientes'){ selectOpTask(opSelTask); return; }
+});
 /* Teclado físico para el PIN: 0-9, Backspace, Escape */
 document.addEventListener('keydown',ev=>{
   if(!loginUser || session || ev.metaKey || ev.ctrlKey || ev.altKey) return;
@@ -484,7 +513,7 @@ function pinSubmit(){
     view=(role==='colab')?'op_pendientes':'clientes';
     selProject=null; modalTask=null; opSelTask=null;
     loginAttempts[u.id]=null; loginUser=null; loginPin=''; loginErr='';
-    render(); return;
+    saveSession(); render(); return;
   }
   const a=loginAttempts[loginUser]||{fails:0,until:0};
   a.fails=(a.fails||0)+1;
@@ -492,7 +521,28 @@ function pinSubmit(){
   else { loginErr=`Código incorrecto (intento ${a.fails} de 3).`; }
   loginAttempts[loginUser]=a; loginPin=''; render();
 }
-function logout(){ session=null; loginUser=null; loginPin=''; loginErr=''; render(); }
+/* ===== Sesión que sobrevive al refresh (se cierra con «Salir» o tras 12 h sin usar el portal) ===== */
+const SESSION_TTL_MS=12*60*60*1000;
+function saveSession(){ try{ if(session) localStorage.setItem('nuwekSession',JSON.stringify({uid:session,exp:Date.now()+SESSION_TTL_MS})); }catch(_){} }
+function clearSession(){ try{ localStorage.removeItem('nuwekSession'); sessionStorage.removeItem('nuwekNav'); }catch(_){} }
+function saveNav(){ try{ sessionStorage.setItem('nuwekNav',JSON.stringify({view,selClient,selProject,selTab,modalTask,opSelTask,gestSub,gestScope})); }catch(_){} }
+function restoreSession(){
+  try{ const raw=localStorage.getItem('nuwekSession'); if(!raw) return false; const o=JSON.parse(raw);
+    if(!o||!o.uid||Date.now()>o.exp) { clearSession(); return false; }
+    const u=store.d.staff.find(x=>x.id===o.uid&&x.active!==false); if(!u){ clearSession(); return false; }
+    session=u.id; currentUser=u.id; role=u.perm||'colab';
+    view=(role==='colab')?'op_pendientes':'clientes';
+    const n=JSON.parse(sessionStorage.getItem('nuwekNav')||'null');
+    if(n){ if(typeof n.view==='string') view=n.view;
+      if(n.selClient&&store.client(n.selClient)) selClient=n.selClient;
+      if(n.selProject&&store.project(n.selProject)) selProject=n.selProject; else if(view==='proyecto') view=(role==='colab')?'op_pendientes':'clientes';
+      if(view==='cliente'&&!selClient) view='clientes';
+      if(typeof n.selTab==='string') selTab=n.selTab;
+      if(n.modalTask&&store.task(n.modalTask)) modalTask=n.modalTask;
+      if(n.opSelTask&&store.task(n.opSelTask)) opSelTask=n.opSelTask;
+      if(n.gestSub) gestSub=n.gestSub; if(n.gestScope) gestScope=n.gestScope; }
+    return true; }catch(_){ return false; } }
+function logout(){ session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
 function shellOp(body){
   return `
     <div class="topbar"><div class="topbar-in">
@@ -2038,7 +2088,10 @@ function taskBody(t,panel){
     const receipt=readers.length?`<span class="cmt-read">✓ Leído por ${readers.join(', ')}</span>`:'';
     const readBtn=(meMent&&!meRead)?`<button class="cmt-read-btn" onclick="markRead('${cm.id}')">✓ Ya lo vi</button>`:'';
     const foot=(receipt||readBtn)?`<div class="cmt-foot">${receipt}${readBtn}</div>`:'';
-    return `<div class="cmt">${avatar(a)}<div class="b"><div class="h"><b>${a.name}</b> <span>${time}</span></div>${cm.text?`<div class="t md">${mdRender(cm.text)}</div>`:''}${ments?`<div class="cmt-ments">${ments}</div>`:''}${atts?`<div class="cmt-atts">${atts}</div>`:''}${foot}</div></div>`;}).join('');
+    const canE=cmtCanEdit(cm); const isEd=editingCmt===cm.id&&canE;
+    const ops=canE&&!isEd?`<span class="cmt-ops" title="Puedes editar o borrar hasta las ${cmtEditUntil(cm)}"><button onclick="editCmt('${cm.id}')">✏️</button><button onclick="delCmt('${cm.id}')">🗑️</button></span>`:'';
+    const body=isEd?`<textarea class="cmt-in cmt-edit" id="cmt-edit-${cm.id}" onkeydown="cmtEditKey(event,'${cm.id}')">${mdEsc(cm.text||'')}</textarea><div class="cmt-edit-bar"><span class="muted">Enter guarda · Shift+Enter nueva línea · Esc cancela</span><span><button class="btn ghost sm" onclick="cancelCmtEdit()">Cancelar</button> <button class="btn sm" onclick="saveCmtEdit('${cm.id}')">Guardar</button></span></div>`:(cm.text?`<div class="t md">${mdRender(cm.text)}</div>`:'');
+    return `<div class="cmt">${avatar(a)}<div class="b"><div class="h"><b>${a.name}</b> <span>${time}</span>${ops}</div>${body}${ments?`<div class="cmt-ments">${ments}</div>`:''}${atts?`<div class="cmt-atts">${atts}</div>`:''}${foot}</div></div>`;}).join('');
 
   return `${panel?'':''}
     <div class="m-head">
@@ -2057,7 +2110,7 @@ function taskBody(t,panel){
         <div class="field"><label>Etiquetas (del catálogo)</label>${tagPicker('et-tags-box', t.tags||[])}</div>
         <div class="wiz-actions"><button class="btn ghost" onclick="cancelTaskEdit()">Cancelar</button><button class="btn" onclick="saveTaskEdit('${t.id}')">Guardar</button></div>
       ` : `
-        <div class="m-title"><h3>${dk(t)}${t.name}</h3><button class="urg-btn${t.urgent?' on':''}" title="${t.urgent?'Urgente: clic para quitar':'Marcar tarea como urgente'}" onclick="toggleTaskUrgent('${t.id}')">⚠️</button></div>
+        <div class="m-title"><button class="urg-btn${t.urgent?' on':''}" title="${t.urgent?'Urgente: clic para quitar':'Marcar tarea como urgente'}" onclick="toggleTaskUrgent('${t.id}')">⚠️</button><h3>${dk(t)}${t.name}</h3></div>
         <div class="m-crumb-row"><div class="m-crumb">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span></div>${tags?`<div class="m-tags">${tags}</div>`:''}</div>
         <div class="m-meta"><span>${avatar(resp,true)} <b>${resp.name}</b></span>
           <select ${(isColab()&&!canEditTask(t))?'disabled title="Solo el responsable cambia el estado"':''} onchange="setTaskStatus('${t.id}',this.value)" style="padding:6px 10px;border-radius:7px;border:2px solid var(--line)">
@@ -2087,7 +2140,7 @@ function taskBody(t,panel){
       </div>
       <div class="m-sec"><h4>Comentarios</h4>
         <div class="cmt-box">
-          <textarea class="cmt-in" id="cmt-${t.id}" placeholder="Escribe un comentario… usa @ para mencionar · **negrita** *cursiva* ~~tachado~~" oninput="mentionInput(this,'${t.id}')" onblur="mentionBlur('${t.id}')"></textarea>
+          <textarea class="cmt-in" id="cmt-${t.id}" placeholder="Escribe un comentario… usa @ para mencionar · Enter envía, Shift+Enter nueva línea · **negrita** *cursiva*" oninput="mentionInput(this,'${t.id}')" onkeydown="cmtKey(event,'${t.id}')" onblur="mentionBlur('${t.id}')"></textarea>
           <button class="cmt-attach" title="Adjuntar imagen o archivo" onclick="document.getElementById('cmt-file-${t.id}').click()">📎</button>
           <input type="file" id="cmt-file-${t.id}" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx" multiple style="display:none" onchange="draftAttach(event,'${t.id}')">
           <div id="mention-box-${t.id}" class="mention-box"></div>
@@ -2251,7 +2304,7 @@ function mentionInput(ta,tid){
   const q=m[1].toLowerCase();
   const matches=mentionPeople(tid).filter(pp=>pp.name.toLowerCase().includes(q)).slice(0,6);
   if(!matches.length){ box.innerHTML=''; box.classList.remove('on'); return; }
-  box.innerHTML=matches.map(pp=>`<div class="ment-opt" onmousedown="mentionPick(event,'${tid}','${pp.id}')"><span class="ment-dot" style="background:${pp.color}"></span>${pp.name} <span class="muted" style="font-size:.72rem">${pp.tipo}</span></div>`).join('');
+  box.innerHTML=matches.map(pp=>`<div class="ment-opt" data-id="${pp.id}" onmousedown="mentionPick(event,'${tid}','${pp.id}')"><span class="ment-dot" style="background:${pp.color}"></span>${pp.name} <span class="muted" style="font-size:.72rem">${pp.tipo}</span></div>`).join('');
   box.classList.add('on');
 }
 function mentionPick(ev,tid,id){
@@ -2427,6 +2480,7 @@ async function boot(){
     if(app) app.innerHTML='<div style="padding:48px;max-width:520px;margin:40px auto;font-family:Inter,sans-serif;color:#223c36;text-align:center"><h2>No se pudo conectar con la base de datos</h2><p style="color:#6b7d76">Revisa tu conexión a internet y recarga la página. Si el problema sigue, avísame. (Detalle técnico en la consola del navegador.)</p></div>';
     return;
   }
+  restoreSession();
   render();
 }
 boot();
