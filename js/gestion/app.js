@@ -529,7 +529,7 @@ function pinPush(d){
 function pinSubmit(){
   const u=store.person(loginUser); if(!u) return;
   if((u.password||'')===loginPin){
-    session=u.id; currentUser=u.id; role=u.perm||'colab';
+    session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id;
     view=(role==='colab')?'op_pendientes':'clientes';
     selProject=null; modalTask=null; opSelTask=null;
     loginAttempts[u.id]=null; loginUser=null; loginPin=''; loginErr='';
@@ -550,7 +550,7 @@ function restoreSession(){
   try{ const raw=localStorage.getItem('nuwekSession'); if(!raw) return false; const o=JSON.parse(raw);
     if(!o||!o.uid||Date.now()>o.exp) { clearSession(); return false; }
     const u=store.d.staff.find(x=>x.id===o.uid&&x.active!==false); if(!u){ clearSession(); return false; }
-    session=u.id; currentUser=u.id; role=u.perm||'colab';
+    session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id;
     view=(role==='colab')?'op_pendientes':'clientes';
     const n=JSON.parse(sessionStorage.getItem('nuwekNav')||'null');
     if(n){ if(typeof n.view==='string') view=n.view;
@@ -928,7 +928,7 @@ function setKbGroup(g){kbGroup=g;render();}
 function setKbPerson(p){kbPerson=p;render();}
 function setKbClient(c){kbClient=c;kbProject='';render();}
 function setKbProject(p){kbProject=p;render();}
-function openKanban(){kbGroup='frente';kbAnchor=todayISO();view='op_kanban';modalTask=null;render();}
+function openKanban(){kbGroup='frente';kbAnchor=todayISO();kbPerson=currentUser;view='op_kanban';modalTask=null;render();}
 function kbCard(t){
   const p=store.project(t.projectId), c=store.client(p.clientId), f=kbFrente(t), resp=store.person(t.responsibleId);
   const done=(t.subtasks||[]).filter(s=>s.done).length, tot=(t.subtasks||[]).length;
