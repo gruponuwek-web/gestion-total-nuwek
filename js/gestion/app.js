@@ -402,6 +402,13 @@ function mdRender(src){
     else { closeL(); para.push(l); } });
   flushP(); closeL(); return out;
 }
+/* ===== Selector de color: paleta predefinida + selector libre (ambos escriben en #qm-color) ===== */
+const COLOR_SWATCHES=['#223c36','#3f7d6e','#6b8e23','#2e9e5b','#2c8ca0','#4a6fa5','#2f7dd8','#5b4fc9','#9c5a8a','#c2417a','#C0553B','#e53935','#E0A93B','#e6b800','#8a6d3b','#6b7a73','#8a9a93','#16261f','#b8873b','#a4506b','#7a5aa0','#3b7d8a','#f0a020','#1e88e5'];
+function colorPicker(cur){ cur=(cur||'#3f7d6e').toLowerCase();
+  const sw=COLOR_SWATCHES.map(c=>`<button type="button" class="clr-sw${c.toLowerCase()===cur?' on':''}" style="background:${c}" title="${c}" onclick="pickColor('${c}')"></button>`).join('');
+  return `<div class="clr-wrap"><div class="clr-pal">${sw}</div><div class="clr-custom"><input id="qm-color" type="color" value="${cur}" oninput="syncColorSw()" style="width:48px;height:34px;padding:2px"><span class="muted">o elige cualquier color</span></div></div>`; }
+function pickColor(c){ const i=document.getElementById('qm-color'); if(i){ i.value=c; syncColorSw(); } }
+function syncColorSw(){ const i=document.getElementById('qm-color'); if(!i) return; const v=i.value.toLowerCase(); document.querySelectorAll('.clr-sw').forEach(b=>b.classList.toggle('on',b.title.toLowerCase()===v)); }
 function esc(s){return (s||'').replace(/"/g,'&quot;');}
 function dLabel(dateStr){ if(!dateStr) return '—'; const d=new Date(dateStr+'T00:00:00'); return d.toLocaleDateString('es-MX',{day:'numeric',month:'short'}); }
 
@@ -1647,14 +1654,14 @@ function quickModal(){
     const nextColor=FRENTE_PALETTE[store.frentesOf(qm.pid).length%FRENTE_PALETTE.length];
     inner=`<h3>Nuevo frente</h3>
       <div class="field"><label>Nombre</label><input id="qm-name" placeholder="Ej. Onboarding"></div>
-      <div class="field"><label>Color</label><input id="qm-color" type="color" value="${nextColor}" style="width:60px;height:38px;padding:2px"></div>
+      <div class="field"><label>Color</label>${colorPicker(nextColor)}</div>
       <div class="hint">Los frentes son las filas del Gantt.</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveFrente()">Crear frente</button></div>`;
   } else if(qm.kind==='frenteEdit'){
     const f=store.frentesOf(qm.pid).find(x=>x.id===qm.fid)||{name:'',color:'#223c36'};
     inner=`<h3>Editar frente</h3>
       <div class="field"><label>Nombre</label><input id="qm-name" value="${esc(f.name)}"></div>
-      <div class="field"><label>Color</label><input id="qm-color" type="color" value="${f.color}" style="width:60px;height:38px;padding:2px"></div>
+      <div class="field"><label>Color</label>${colorPicker(f.color)}</div>
       <div class="hint">El orden se ajusta con las flechas ↑ ↓ en el Gestor.</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveFrenteEdit()">Guardar</button></div>`;
   } else if(qm.kind==='proyectoEdit'){
@@ -1746,7 +1753,7 @@ function quickModal(){
     const s=store.service(qm.sid); const cur=qm.kind==='svFrenteEdit'?(s.frentes.find(f=>f.name===qm.old)||{name:'',color:'#3f7d6e'}):{name:'',color:FRENTE_PALETTE[(s?s.frentes.length:0)%FRENTE_PALETTE.length]};
     inner=`<h3>${qm.kind==='svFrenteEdit'?'Editar frente del servicio':'Agregar frente al servicio'}</h3>
       <div class="field"><label>Nombre del frente</label><input id="qm-name" value="${esc(cur.name)}" placeholder="Ej. Onboarding"></div>
-      <div class="field"><label>Color</label><input id="qm-color" type="color" value="${cur.color}" style="width:60px;height:38px;padding:2px"></div>
+      <div class="field"><label>Color</label>${colorPicker(cur.color)}</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='svFrenteEdit'?'saveSvcFrenteEdit()':'saveSvcFrente()'}">Guardar</button></div>`;
   } else if(qm.kind==='persona' || qm.kind==='personaEdit'){
     const u=qm.kind==='personaEdit'?store.d.staff.find(x=>x.id===qm.uid):{name:'',role:'',rate:'',color:'#3f7d6e'};
@@ -1778,7 +1785,7 @@ function quickModal(){
         <div class="field row"><div><label>Rol / puesto</label><input id="qm-role" value="${esc(u.role||'')}" placeholder="Ej. Diseño"></div>
           <div><label>Equipo</label><select id="qm-team">${opt(TEAMS,u.team)}</select></div></div>
         <div class="field row"><div><label>Tipo</label><select id="qm-tipo">${opt(TIPOS,u.tipo)}</select></div>
-          <div><label>Color</label><input id="qm-color" type="color" value="${u.color||'#3f7d6e'}" style="width:60px;height:38px;padding:2px"></div></div>
+          <div><label>Color</label>${colorPicker(u.color||'#3f7d6e')}</div></div>
         <div class="field row"><div><label>Fecha de ingreso</label><input id="qm-join" type="date" value="${esc(u.joinDate||'')}"></div>
           <div><label>Estado</label><select id="qm-active"><option value="1" ${u.active!==false?'selected':''}>Activo</option><option value="0" ${u.active===false?'selected':''}>Inactivo</option></select></div></div>
         <div class="pers-div">Acceso al sistema</div>
@@ -1832,7 +1839,7 @@ function quickModal(){
     const curColor=qm.kind==='tagEdit'?store.tagColor(qm.old):'#3f7d6e';
     inner=`<h3>${qm.kind==='tagEdit'?'Editar etiqueta':'Nueva etiqueta'}</h3>
       <div class="field"><label>Nombre</label><input id="qm-name" value="${esc(qm.kind==='tagEdit'?qm.old:'')}"></div>
-      <div class="field"><label>Color</label><input id="qm-color" type="color" value="${curColor}" style="width:60px;height:38px;padding:2px"></div>
+      <div class="field"><label>Color</label>${colorPicker(curColor)}</div>
       ${qm.kind==='tagEdit'?'<div class="hint">El nombre se actualizará también en las tareas que la usan.</div>':''}
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='tagEdit'?'saveTagEdit()':'saveTag()'}">Guardar</button></div>`;
   } else if(qm.kind==='score' || qm.kind==='scoreEdit'){

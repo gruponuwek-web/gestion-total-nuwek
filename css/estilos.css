@@ -764,3 +764,9 @@
   .fav-btn.on{color:#e6b800}
   .card.is-fav{border-color:#e6d27a;background:linear-gradient(180deg,#fffdf3,#fff)}
   .fav-title{font-family:'Space Grotesk';font-weight:700;color:var(--green);margin:6px 0 10px;font-size:.95rem}
+
+  .clr-pal{display:grid;grid-template-columns:repeat(12,28px);gap:8px;margin-bottom:12px}
+  .clr-sw{width:28px;height:28px;min-width:0;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.18);cursor:pointer;padding:0;transition:transform .1s}
+  .clr-sw:hover{transform:scale(1.15)}
+  .clr-sw.on{box-shadow:0 0 0 3px var(--green)}
+  .clr-custom{display:flex;align-items:center;gap:10px;font-size:.82rem}
