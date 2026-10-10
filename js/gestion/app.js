@@ -445,7 +445,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (lightbox ? lightboxModal() : '');
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
 function openMiEspacio(){ view='op_pendientes'; opSelTask=null; modalTask=null; render(); }
@@ -503,6 +503,7 @@ document.addEventListener('keydown',ev=>{
   if(ev.key!=='Escape'||ev.defaultPrevented||!session) return;
   const tg=ev.target; if(tg&&tg.classList&&tg.classList.contains('cmt-in')&&tg.value.trim()&&!tg.id.startsWith('cmt-edit')){ tg.blur(); return; }   // no perder un comentario a medias
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
+  if(wiz&&!qm){ closeWizard(); return; }
   if(lightbox){ closeLightbox(); return; }
   if(qm){ closeQM(); return; }
   if(libModal){ closeLibModal(); return; }
@@ -666,20 +667,19 @@ function projectHealth(pid){
 function startWizard(cid){ if(!canManageProject()) return;
   wiz={step:1,clientId:cid,serviceId:store.d.services[0].id,price:'',monthlyPay:'',months:'',paymentDay:'',startDate:'',endDate:'',
        alcances:[],loadTemplate:true,etapas:[],frentes:[]};
-  view='wizard'; render();
+  render(); setTimeout(()=>{ const el=document.getElementById('w-monthly'); if(el) el.focus(); },30);
 }
-function viewWizard(){
-  const c=store.client(wiz.clientId);
-  const stepbar=[1,2,3].map(n=>{const cls=wiz.step===n?'on':(wiz.step>n?'done':'');const lab=['Elegir cliente','Parámetros','Etapas y Frentes'][n-1];return `<div class="ws ${cls}">${wiz.step>n?'✓ ':n+' · '}${lab}</div>`;}).join('');
-  let step='';
-  if(wiz.step===1) step=wizStep1();
-  else if(wiz.step===2) step=wizStep2();
-  else step=wizStep3();
-  return `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${wiz.clientId}')">${c.name}</a> › Nuevo proyecto</div>
-    <div class="sec-title"><h2>Nace un proyecto</h2></div>
-    <div class="wiz-steps">${stepbar}</div>
-    <div class="card">${step}</div>`;
+function closeWizard(){ wiz=null; render(); }
+/* Nuevo proyecto en ventana emergente: 1 · Parámetros  →  2 · Etapas y Frentes (el cliente ya es el de la pantalla) */
+function wizModal(){
+  const c=store.client(wiz.clientId)||{name:''};
+  const stepbar=[1,2].map(n=>{const cls=wiz.step===n?'on':(wiz.step>n?'done':'');const lab=['Parámetros','Etapas y Frentes'][n-1];return `<div class="ws ${cls}">${wiz.step>n?'✓ ':n+' · '}${lab}</div>`;}).join('');
+  const body=wiz.step===1?wizStep2():wizStep3();
+  return `<div class="modal active" onclick="if(event.target===this)closeWizard()"><div class="modal-card" style="max-width:680px">
+    <div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(c.name)}</div><h3 style="margin:8px 0 0">Nuevo proyecto</h3></div><button class="x" onclick="closeWizard()">×</button></div></div>
+    <div class="m-body"><div class="wiz-steps" style="margin-bottom:16px">${stepbar}</div>${body}</div></div></div>`;
 }
+function viewWizard(){ return ''; }
 function wizStep1(){
   const opts=store.d.clients.map(c=>`<div class="opt ${wiz.clientId===c.id?'sel':''}" onclick="wizPick('${c.id}')">
     <h4>${c.name}</h4><div class="muted" style="font-size:.82rem">${c.location} · ${c.people.length} contactos</div></div>`).join('');
@@ -693,25 +693,14 @@ function wizStep1(){
     <div class="wiz-actions"><span></span><button class="btn" onclick="wizNext()">Continuar →</button></div>`;
 }
 function wizStep2(){
-  const svc=store.d.services.map(s=>`<option value="${s.id}" ${wiz.serviceId===s.id?'selected':''}>${s.name}</option>`).join('');
-  const svcObj=store.service(wiz.serviceId)||{};
-  const priceVal=wiz.price || (svcObj.listPrice||'');
-  const alc=wiz.alcances.map((a,i)=>`<span class="chip">${a.item} — ${a.qty}/${a.period} <button onclick="wizDelAlc(${i})">×</button></span>`).join('');
-  return `<p class="muted">Parámetros del proyecto. Un proyecto = un servicio.</p>
-    <div class="field"><label>Servicio</label><select id="w-svc" onchange="wizPickService(this.value)">${svc}</select></div>
-    <div class="field row"><div><label>Precio total</label><input id="w-price" type="number" placeholder="162500" value="${priceVal}"></div>
-      <div><label>Pago por mes</label><input id="w-monthly" type="number" placeholder="27083" value="${wiz.monthlyPay}"></div></div>
-    <div class="field row"><div><label># meses</label><input id="w-months" type="number" placeholder="6" value="${wiz.months}"></div>
-      <div><label>Día de pago</label><input id="w-payday" type="number" placeholder="5" value="${wiz.paymentDay}"></div></div>
-    <div class="field row"><div><label>Inicio</label><input id="w-start" type="date" value="${wiz.startDate}"></div>
-      <div><label>Cierre planeado</label><input id="w-end" type="date" value="${wiz.endDate}"></div></div>
-    <div class="field"><label>Alcances (con cantidad)</label>
-      <div class="alc-row"><input id="w-alc-item" placeholder="Reels"><input id="w-alc-qty" class="q" type="number" placeholder="4">
-        <select id="w-alc-per"><option>mes</option><option>proyecto</option></select>
-        <button class="btn ghost sm" onclick="wizAddAlc()">+ Agregar</button></div>
-      <div class="chiplist">${alc}</div></div>
-    <div class="field"><label><input type="checkbox" id="w-tpl" ${wiz.loadTemplate?'checked':''} style="width:auto"> Cargar Frentes y tareas base del servicio (plantilla)</label></div>
-    <div class="wiz-actions"><button class="btn ghost" onclick="wizBack()">← Atrás</button><button class="btn" onclick="wizNext()">Continuar →</button></div>`;
+  const svc=store.d.services.map(sv=>`<option value="${sv.id}" ${wiz.serviceId===sv.id?'selected':''}>${sv.name}</option>`).join('');
+  return `<div class="field"><label>Servicio</label><select id="w-svc" onchange="wizPickService(this.value)">${svc}</select></div>
+    <div class="field row"><div><label>Pago por mes</label><input id="w-monthly" type="number" placeholder="27083" value="${wiz.monthlyPay}"></div>
+      <div><label># de meses</label><input id="w-months" type="number" placeholder="6" value="${wiz.months}"></div></div>
+    <div class="field row"><div><label>Día de pago</label><input id="w-payday" type="number" min="1" max="31" placeholder="5" value="${wiz.paymentDay}"></div><div></div></div>
+    <div class="field row"><div><label>Fecha de inicio</label><input id="w-start" type="date" value="${wiz.startDate}"></div>
+      <div><label>Fecha de cierre</label><input id="w-end" type="date" value="${wiz.endDate}"></div></div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="closeWizard()">Cancelar</button><button class="btn" onclick="wizNext()">Continuar →</button></div>`;
 }
 function wizStep3(){
   const ets=wiz.etapas.map((e,i)=>`<span class="chip">${e.name}: ${dLabel(e.start)}–${dLabel(e.end)} <button onclick="wizDelEt(${i})">×</button></span>`).join('');
@@ -728,16 +717,14 @@ function wizStep3(){
 }
 function wizPickService(sid){
   wiz.serviceId=sid;
-  wiz.monthlyPay=+val('w-monthly')||0; wiz.months=+val('w-months')||0; wiz.paymentDay=+val('w-payday')||5;
-  wiz.startDate=val('w-start'); wiz.endDate=val('w-end'); const tpl=document.getElementById('w-tpl'); if(tpl) wiz.loadTemplate=tpl.checked;
-  const cur=+val('w-price')||0; const s=store.service(sid);
-  wiz.price = (!cur && s && s.listPrice) ? s.listPrice : cur;
+  wiz.monthlyPay=val('w-monthly'); wiz.months=val('w-months'); wiz.paymentDay=val('w-payday');
+  wiz.startDate=val('w-start'); wiz.endDate=val('w-end');
   render();
 }
 function wizPick(id){wiz.clientId=id; render();}
-function wizSaveStep2(){wiz.serviceId=val('w-svc');wiz.price=+val('w-price')||0;wiz.monthlyPay=+val('w-monthly')||0;wiz.months=+val('w-months')||0;wiz.paymentDay=+val('w-payday')||5;wiz.startDate=val('w-start');wiz.endDate=val('w-end');wiz.loadTemplate=document.getElementById('w-tpl').checked;}
-function wizNext(){ if(wiz.step===2){wizSaveStep2(); if(wiz.loadTemplate&&wiz.frentes.length===0){const sv=store.service(wiz.serviceId); sv.frentes.forEach((f,i)=>wiz.frentes.push({name:f.name,color:f.color||FRENTE_PALETTE[i%FRENTE_PALETTE.length]}));}} wiz.step=Math.min(3,wiz.step+1); render(); }
-function wizBack(){ if(wiz.step===2)wizSaveStep2(); wiz.step=Math.max(1,wiz.step-1); render(); }
+function wizSaveStep2(){wiz.serviceId=val('w-svc')||wiz.serviceId;wiz.monthlyPay=+val('w-monthly')||0;wiz.months=+val('w-months')||0;wiz.paymentDay=+val('w-payday')||5;wiz.startDate=val('w-start');wiz.endDate=val('w-end');}
+function wizNext(){ if(wiz.step===1){ wizSaveStep2(); if(wiz.loadTemplate&&wiz.frentes.length===0){const sv=store.service(wiz.serviceId)||{frentes:[]}; (sv.frentes||[]).forEach((f,i)=>wiz.frentes.push({name:f.name,color:f.color||FRENTE_PALETTE[i%FRENTE_PALETTE.length]}));} } wiz.step=Math.min(2,wiz.step+1); render(); }
+function wizBack(){ if(wiz.step===1)wizSaveStep2(); wiz.step=Math.max(1,wiz.step-1); render(); }
 function wizAddAlc(){const it=val('w-alc-item');const q=val('w-alc-qty');if(!it||!q)return;wiz.alcances.push({item:it,qty:+q,period:val('w-alc-per')});render();}
 function wizDelAlc(i){wiz.alcances.splice(i,1);render();}
 function wizAddEt(){const n=val('w-et-name'),s=val('w-et-start'),e=val('w-et-end');if(!n||!s||!e){alert('Nombre y fechas de la etapa.');return;}wiz.etapas.push({name:n,start:s,end:e});render();}
@@ -745,9 +732,9 @@ function wizDelEt(i){wiz.etapas.splice(i,1);render();}
 function wizAddFr(){const n=val('w-fr-name');if(!n)return;wiz.frentes.push({name:n,color:FRENTE_PALETTE[wiz.frentes.length%FRENTE_PALETTE.length]});render();}
 function wizDelFr(i){wiz.frentes.splice(i,1);render();}
 async function wizCreate(){
-  wizSaveStep2 && (wiz.step===2&&wizSaveStep2());
+  if(wiz.step===1) wizSaveStep2();
   if(wiz.frentes.length===0){alert('Agrega al menos un frente.');return;}
-  if((!wiz.price||wiz.price===0) && wiz.monthlyPay && wiz.months) wiz.price=wiz.monthlyPay*wiz.months;
+  if(!wiz.price){ wiz.price = (wiz.monthlyPay&&wiz.months) ? wiz.monthlyPay*wiz.months : ((store.service(wiz.serviceId)||{}).listPrice||0); }
   const p=store.addProject({clientId:wiz.clientId,serviceId:wiz.serviceId,name:store.service(wiz.serviceId).name,price:wiz.price,monthlyPay:wiz.monthlyPay,months:wiz.months,paymentDay:wiz.paymentDay,startDate:wiz.startDate,endDate:wiz.endDate,status:'active',alcances:wiz.alcances});
   // Guardar el PROYECTO en Supabase y ESPERAR a que exista antes de crear sus frentes/etapas
   // (frentes y etapas dependen del proyecto por llave foránea).
@@ -756,7 +743,7 @@ async function wizCreate(){
   wiz.frentes.forEach(f=>store.addFrente(p.id,f.name,f.color));
   wiz.etapas.forEach(e=>store.addEtapa(p.id,e.name,e.start,e.end));
   // Nota: las TAREAS se conectarán en el Sub-paso B (módulo de Tareas).
-  store.save(); openProject(p.id);
+  store.save(); wiz=null; openProject(p.id);
 }
 function val(id){const e=document.getElementById(id);return e?e.value:'';}
 
