@@ -841,3 +841,46 @@
     .login-grid{grid-template-columns:repeat(3,min(104px,26vw));gap:18px 16px;padding:8px}
     .login-av{border-width:3px;font-size:2rem}
   }
+
+  .cl-logo-prev{width:64px;height:64px;border-radius:12px;border:1.5px dashed var(--line);background:#f6f5ee center/contain no-repeat;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:var(--muted);flex-shrink:0}
+
+  .tem-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .tem-row .tem-t{flex:1;min-width:0}
+  .tem-row .tem-p{width:170px;flex-shrink:0}
+  .tem-badge{font-size:.68rem;font-weight:700;background:#e2ebe6;color:var(--green);border-radius:99px;padding:3px 9px;white-space:nowrap}
+  .ses-resp{border-radius:10px;padding:10px 12px;font-size:.88rem}
+
+  /* ---- Página pública de la sesión ---- */
+  .pub-top{display:flex;align-items:center}
+  .ps-page{max-width:980px;margin:22px auto;padding:0 16px 40px}
+  .ps-head{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:20px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+  .ps-hl{display:flex;align-items:center;gap:14px;min-width:0}
+  .ps-head h1{margin:2px 0 0;font-size:1.6rem;line-height:1.15}
+  .ps-eye{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .ps-when{font-weight:700;color:var(--green);background:#eef6f1;border-radius:12px;padding:10px 16px}
+  .ps-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .ps-card{background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:18px 20px;min-width:0}
+  .ps-card h4{margin:0 0 10px;color:var(--green)}
+  .ps-av{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background-size:cover;background-position:center;color:#fff;font-weight:700;flex-shrink:0;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+  .ps-av.ps-logo{border-radius:10px;background-size:contain;background-repeat:no-repeat;background-color:#fff;border:1px solid var(--line)}
+  .ps-people{display:flex;flex-wrap:wrap;gap:10px}
+  .ps-p{display:flex;flex-direction:column;align-items:center;gap:4px;border:0;background:none;cursor:pointer;padding:4px;border-radius:12px;font-family:inherit}
+  .ps-p:hover{background:#f6f5ee}.ps-pn{font-size:.76rem;font-weight:600}
+  .ps-cl{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:.86rem}
+  .ps-lug{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+  .ps-map{width:100%;height:210px;border:0;border-radius:12px;background:#eee}
+  .ps-tem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f2f1ea}
+  .ps-n{width:24px;height:24px;border-radius:50%;background:#e2ebe6;color:var(--green);font-weight:700;font-size:.78rem;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ps-tt{flex:1;min-width:0;font-weight:600;font-size:.9rem;overflow-wrap:anywhere}
+  .ps-by{display:flex;align-items:center;gap:6px;font-size:.72rem;color:var(--muted);flex-shrink:0;max-width:130px}
+  .ps-by span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ps-actions{display:flex;gap:12px;margin-top:16px}
+  .ps-btn{border:0;border-radius:14px;padding:18px 8px;font-weight:800;letter-spacing:.04em;cursor:pointer;font-family:inherit;font-size:.92rem;box-shadow:var(--shadow)}
+  .ps-btn.cancel{flex:1;background:#fdeceb;color:#c0392b}.ps-btn.repro{flex:1;background:#fff7e0;color:#9a7a00}.ps-btn.ok{flex:2;background:#1f7a44;color:#fff}
+  .ps-btn:hover{filter:brightness(.96)}
+  .ps-done{margin-top:16px;border-radius:14px;padding:16px 20px}
+  .ps-razon{margin-top:6px;color:#333}
+  .ps-contact{display:flex;gap:10px}
+  .ps-cbtn{flex:1;text-align:center;padding:14px 8px;border-radius:12px;font-weight:700;text-decoration:none}
+  .ps-cbtn.wa{background:#25d366;color:#fff}.ps-cbtn.call{background:#1e88e5;color:#fff}
+  @media(max-width:720px){ .ps-grid{grid-template-columns:1fr} .ps-head h1{font-size:1.25rem} .ps-btn{font-size:.74rem;padding:16px 4px} }

@@ -526,11 +526,13 @@ function render(){
   if(session){ saveSession(); saveNav(); }
   setTimeout(notifUpdate,0);
   if(!session){
+    if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
     if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
     app.innerHTML = loginScreen();
     document.getElementById('modal-root').innerHTML = loginUser ? pinModal() : '';
     return;
   }
+  if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
   let body='';
   if(isColab()){
     if(view==='proyecto') body=viewProyecto();
@@ -1807,10 +1809,11 @@ function quickModal(){
     const respOpts='<option value="">— sin asignar —</option>'+staffOptEls(c.generalResponsibleId);
     inner=`<h3>${qm.kind==='clienteEdit'?'Editar cliente':'Nuevo cliente'}</h3>
       <div class="field"><label>Nombre comercial</label><input id="qm-name" value="${esc(c.name)}" placeholder="Ej. ADN Media"></div>
+      <div class="field"><label>Logo del cliente</label><div style="display:flex;align-items:center;gap:12px"><span id="cl-logo-prev" class="cl-logo-prev" style="${c.logo?`background-image:url('${esc(c.logo)}')`:''}">${c.logo?'':'Sin logo'}</span><div><input type="hidden" id="qm-logo" value="${esc(c.logo||'')}"><input type="file" accept="image/*" onchange="photoPickInto(this,'qm-logo','cl-logo-prev','cl-logo-hint','clientes')" style="font-size:.8rem"><div class="hint" id="cl-logo-hint">Aparece en la página de sesión que ve el cliente</div></div></div></div>
       <div class="field"><label>Tipo de cliente</label><select id="qm-tipo"><option value="externo" ${c.tipo==='interno'?'':'selected'}>Externo (genera ingreso y costo)</option><option value="interno" ${c.tipo==='interno'?'selected':''}>Interno (capacitaciones, juntas, RH… cuenta horas, no costo)</option></select></div>
       <div class="field row"><div><label>Razón social</label><input id="qm-razon" value="${esc(c.razon||'')}"></div>
         <div><label>RFC</label><input id="qm-rfc" value="${esc(c.rfc||'')}"></div></div>
-      <div class="field row"><div><label>Ubicación</label><input id="qm-loc" value="${esc(c.location||'')}"></div>
+      <div class="field row"><div><label>Ubicación (dirección completa, para el mapa)</label><input id="qm-loc" value="${esc(c.location||'')}" placeholder="Calle, número, colonia, ciudad"></div>
         <div><label>Responsable Nuwek</label><select id="qm-resp2">${respOpts}</select></div></div>
       <div class="field"><label>Web</label><input id="qm-web" value="${esc(c.web||'')}" placeholder="sitio.mx"></div>
       <div class="se-lbl" style="margin-bottom:8px">Redes sociales</div>
@@ -1825,6 +1828,7 @@ function quickModal(){
     const p=qm.kind==='contactoEdit'?(store.client(qm.cid).people.find(x=>x.id===qm.pid)||{}):{};
     inner=`<h3>${qm.kind==='contactoEdit'?'Editar contacto':'Nuevo contacto'}</h3>
       <div class="field"><label>Nombre</label><input id="qm-name" value="${esc(p.name||'')}"></div>
+      <div class="field"><label>Foto (opcional)</label><div style="display:flex;align-items:center;gap:12px"><span id="ct-prev" class="cl-logo-prev" style="border-radius:50%;${p.photo?`background-image:url('${esc(p.photo)}')`:''}">${p.photo?'':'?'}</span><div><input type="hidden" id="qm-cphoto" value="${esc(p.photo||'')}"><input type="file" accept="image/*" onchange="photoPickInto(this,'qm-cphoto','ct-prev','ct-hint','contactos')" style="font-size:.8rem"><div class="hint" id="ct-hint"></div></div></div></div>
       <div class="field row"><div><label>Teléfono</label><input id="qm-phone" value="${esc(p.phone||'')}"></div>
         <div><label>Correo</label><input id="qm-email" value="${esc(p.email||'')}"></div></div>
       <div class="field row"><div><label>Rol</label><input id="qm-crole" value="${esc(p.role||'')}" placeholder="Ej. Coord. Marketing"></div>
@@ -2026,13 +2030,13 @@ function delFrente(fid,pid){const n=store.tasksOf(pid).filter(t=>t.frenteId===fi
 
 /* ===== Catálogos ===== */
 function openClientForm(){qm={kind:'cliente'};render();}
-function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
+function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
 function openClientEdit(cid){qm={kind:'clienteEdit',cid};render();}
-function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;render();}
+function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;render();}
 function openContactForm(cid){qm={kind:'contacto',cid};render();}
-function saveContact(){const n=val('qm-name');if(!n){alert('El contacto necesita un nombre.');return;}store.addClientPerson(qm.cid,{name:n,phone:val('qm-phone'),email:val('qm-email'),role:val('qm-crole'),birthday:val('qm-bday')});qm=null;render();}
+function saveContact(){const n=val('qm-name');if(!n){alert('El contacto necesita un nombre.');return;}store.addClientPerson(qm.cid,{name:n,phone:val('qm-phone'),email:val('qm-email'),role:val('qm-crole'),birthday:val('qm-bday'),photo:val('qm-cphoto')||''});qm=null;render();}
 function openContactEdit(cid,pid){qm={kind:'contactoEdit',cid,pid};render();}
-function saveContactEdit(){const n=val('qm-name');if(!n){alert('El contacto necesita un nombre.');return;}store.updateClientPerson(qm.cid,qm.pid,{name:n,phone:val('qm-phone'),email:val('qm-email'),role:val('qm-crole'),birthday:val('qm-bday')});qm=null;render();}
+function saveContactEdit(){const n=val('qm-name');if(!n){alert('El contacto necesita un nombre.');return;}store.updateClientPerson(qm.cid,qm.pid,{name:n,phone:val('qm-phone'),email:val('qm-email'),role:val('qm-crole'),birthday:val('qm-bday'),photo:val('qm-cphoto')||''});qm=null;render();}
 function delContact(cid,pid){if(confirm('¿Quitar este contacto?')){store.removeClientPerson(cid,pid);render();}}
 function togglePay(payId,pid){store.togglePayment(payId);render();}
 function openPayForm(pid){qm={kind:'pago',pid};render();}
@@ -2090,6 +2094,18 @@ function openStaffForm(){qm={kind:'persona'};render();}
 function persTab(id){
   document.querySelectorAll('.pers-sec').forEach(s=>s.style.display=(s.dataset.sec===id?'block':'none'));
   document.querySelectorAll('.pers-tab').forEach(b=>b.classList.toggle('active',b.dataset.sec===id));
+}
+function photoPickInto(input,hidId,prevId,hintId,folder){
+  const f=input.files&&input.files[0]; if(!f) return;
+  compressImage(f,(dataUrl)=>{
+    const pv=document.getElementById(prevId), hid=document.getElementById(hidId), hint=document.getElementById(hintId);
+    if(pv){ pv.style.backgroundImage=`url('${dataUrl}')`; pv.textContent=''; }
+    if(hint) hint.textContent='Subiendo…';
+    if(typeof dbUploadImage==='function'){
+      dbUploadImage(dataUrlToBlob(dataUrl),folder||'misc').then(u=>{ if(hid) hid.value=u; if(hint) hint.textContent='Listo ✓'; })
+        .catch(e=>{ console.error('Error subiendo imagen:',e); if(hid) hid.value=dataUrl; if(hint) hint.textContent='No se pudo subir al Storage; se guardará localmente.'; });
+    } else if(hid) hid.value=dataUrl;
+  });
 }
 function persPhotoPick(input){
   const f=input.files&&input.files[0]; if(!f) return;
@@ -2194,7 +2210,8 @@ function taskBody(t,panel){
     const nextOcc=s.isSeries?(subKids(t,s.id).filter(k=>!k.done&&k.date).map(k=>k.date).sort()[0]||''):'';
     const serChip=s.isSeries?`<span class="sub-chip ser" title="Serie por calendario">↻ ${seriesLabel(s.series)}</span>${nextOcc?`<span class="sub-chip" title="Próxima repetición pendiente">Próxima: ${dLabel(nextOcc)}</span>`:''}`:'';
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🤝 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
-    const chips=`${ackBtn}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
+    const chips=`${ackBtn}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}</span>`;
     const right=timing
       ? `<div class="sub-time"><input type="number" min="1" id="stime-${s.id}" placeholder="min"><button class="mini ok" onclick="confirmSubTime('${t.id}','${s.id}')">✓</button><button class="mini no" onclick="cancelSubTime()">×</button></div>`
@@ -2633,6 +2650,7 @@ async function boot(){
   }
   runAllCycles(); runAllSeries();
   restoreSession();
+  if(shareSesionAtLoad){ publicSes=shareSesionAtLoad; shareSesionAtLoad=null; }
   if(shareTaskIdAtLoad){ const sid=shareTaskIdAtLoad; shareTaskIdAtLoad=null; if(session){ openSharedTask(sid); } else { publicTaskId=sid; afterLoginTask=sid; } }
   render();
   startSync();
@@ -2699,10 +2717,17 @@ let notifOpen=false, notifSeen=null;
 function pendingMentions(){ return (store.d.comments||[]).filter(cm=>(cm.mentions||[]).includes(currentUser)&&!(cm.readBy||[]).includes(currentUser)&&cm.userId!==currentUser&&store.task(cm.taskId)).sort((a,b)=>a.ts<b.ts?1:-1); }
 function notifRoot(){ let r=document.getElementById('notif-root'); if(!r){ r=document.createElement('div'); r.id='notif-root'; document.body.appendChild(r); } return r; }
 function notifAvatar(p){ p=p||{}; return p.photo?`<span class="nf-av" style="background-image:url('${p.photo}')"></span>`:`<span class="nf-av" style="background:${p.color||'#3f7d6e'}">${mdEsc((p.name||'?')[0])}</span>`; }
+/* respuestas del cliente a una sesión: avisan al responsable, a los participantes y al responsable de la tarea */
+function pendingClientResp(){ const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ const last=sesLast(s); if(!last) return;
+    const mine=s.personId===currentUser||(s.team||[]).includes(currentUser)||t.responsibleId===currentUser; if(!mine) return;
+    if(((sesOf(s).respAck||{})[currentUser]||0)>=(last.tsN||0)) return; out.push({s,t,last}); }); }); return out.sort((a,b)=>a.last.ts<b.last.ts?1:-1); }
+function ackClientResp(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const ses=Object.assign({},sub.sesion||{}); ses.respAck=Object.assign({},ses.respAck||{}); ses.respAck[currentUser]=Date.now();
+  store.updateSubtask(tid,sid,{sesion:ses}); render(); }
 function notifItems(){
   const m=pendingMentions().map(cm=>({id:'m:'+cm.id,type:'m',ts:cm.ts,cm,tid:cm.taskId}));
   const tm=pendingTeam().map(x=>({id:'t:'+x.s.id,type:'t',ts:x.ts,s:x.s,t:x.t,by:x.by,tid:x.t.id}));
-  return m.concat(tm).sort((a,b)=>a.ts<b.ts?1:-1); }
+  const cr=pendingClientResp().map(x=>({id:'c:'+x.s.id+':'+x.last.id,type:'c',ts:x.last.ts,s:x.s,t:x.t,last:x.last,tid:x.t.id}));
+  return m.concat(tm,cr).sort((a,b)=>a.ts<b.ts?1:-1); }
 function notifUpdate(){
   const r=notifRoot(); if(!session){ r.innerHTML=''; notifSeen=null; return; }
   const list=notifItems(); const ids=list.map(x=>x.id); const me=store.person(currentUser);
@@ -2711,11 +2736,13 @@ function notifUpdate(){
   const items=list.slice(0,30).map(it=>{
     if(it.type==='m'){ const cm=it.cm; const a=store.person(cm.userId), t=store.task(cm.taskId); const txt=(cm.text||'').replace(/\s+/g,' ').slice(0,90);
       return `<div class="nf-it" onclick="goNotif('${cm.taskId}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te mencionó <span class="muted">· ${ago(cm.ts)}</span></div><div class="nf-t">${mdEsc(t.name)}</div><div class="nf-s">${mdEsc(txt)}</div></div><button class="nf-ok" title="Ya lo vi" onclick="event.stopPropagation();markRead('${cm.id}')">✓</button></div>`; }
+    if(it.type==='c'){ const st=SES_ST[it.last.estado]; const cn=(store.client((store.project(it.t.projectId)||{}).clientId)||{}).name||'El cliente';
+      return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:${st.c}">${it.last.estado==='confirmado'?'✓':it.last.estado==='cancelado'?'✕':'↻'}</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(cn)}</b> ${it.last.estado==='confirmado'?'confirmó':it.last.estado==='cancelado'?'canceló':'pidió reprogramar'} <span class="muted">· ${ago(it.last.ts)}</span></div><div class="nf-t">📅 ${mdEsc(it.s.name)}</div><div class="nf-s">${it.last.razon?'«'+mdEsc(it.last.razon)+'»':mdEsc(it.t.name)}</div></div><button class="nf-ok" title="Ya la vi" onclick="event.stopPropagation();ackClientResp('${it.t.id}','${it.s.id}')">✓</button></div>`; }
     const a=store.person(it.by); const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
     return `<div class="nf-it" onclick="goNotif('${it.t.id}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te agregó como participante <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">🤝 ${mdEsc(it.s.name)}</div><div class="nf-s">${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Ya la vi y la atendí" onclick="event.stopPropagation();ackTeam('${it.t.id}','${it.s.id}')">✓</button></div>`; }).join('');
   r.innerHTML=`${notifOpen?`<div class="nf-pop"><div class="nf-pop-h">Pendientes por atender <span class="nf-cnt">${list.length}</span></div><div class="nf-list">${items||'<div class="nf-empty">🎉 Nada pendiente</div>'}</div></div>`:''}
     <button class="nf-fab${fresh.length?' pulse':''}" onclick="event.stopPropagation();toggleNotif()" title="${list.length?list.length+' pendiente(s) por atender':'Nada pendiente'}">${notifAvatar(me)}${list.length?`<span class="nf-badge">${list.length>99?'99+':list.length}</span>`:''}</button>`;
-  if(fresh.length){ const f=fresh[0]; const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); }
+  if(fresh.length){ const f=fresh[0]; if(f.type==='c'){ notifToast('El cliente '+(f.last.estado==='confirmado'?'confirmó':f.last.estado==='cancelado'?'canceló':'pidió reprogramar')+' «'+f.s.name+'»',f.tid); } else { const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); } }
 }
 function notifToast(msg,tid){ const t=document.createElement('div'); t.className='nf-toast'; t.textContent='👋 '+msg; t.onclick=()=>{ t.remove(); goNotif(tid); }; notifRoot().appendChild(t); setTimeout(()=>t.remove(),6000); }
 function toggleNotif(){ notifOpen=!notifOpen; notifUpdate(); }
@@ -2725,7 +2752,7 @@ document.addEventListener('click',ev=>{ if(notifOpen&&!ev.target.closest('#notif
 
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
-function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); },0); }
+function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
 function openClientPop(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); clientPop={tid,sid,sel:((sub&&sub.invitados)||[]).slice(),adding:false}; render(); }
 function closeClientPop(){ clientPop=null; render(); }
@@ -2751,7 +2778,7 @@ function subEditModal(){
   const parentOpts=`<option value="">— Ninguna (nivel principal) —</option>`+(t.subtasks||[]).filter(m=>!subIsChild(t,m)&&m.id!==s.id).map(m=>`<option value="${m.id}" ${s.parentId===m.id?'selected':''}>${esc(m.name)}</option>`).join('');
   const bad=(v)=>v?'':' sm-miss';
   const repAllowed=!s0.parentId&&!s0.seriesId; const repMode=(s0.isSeries||sr.freq)?'cal':(s.repeatAfter?'after':'none'); const missN=subMissing(s0).length; const tab=subEd.tab||'datos';
-  const smTabsBar=`<div class="sm-tabs"><button type="button" class="sm-tab ${tab==='datos'?'on':''}" data-tab="datos" onclick="smTab('datos')">📝 Datos${missN?'<b class="sm-dot"></b>':''}</button><button type="button" class="sm-tab ${tab==='nuwek'?'on':''}" data-tab="nuwek" onclick="smTab('nuwek')">👥 Equipo Nuwek <i id="sm-n-nuwek"></i></button><button type="button" class="sm-tab ${tab==='cli'?'on':''}" data-tab="cli" onclick="smTab('cli')">🤝 Cliente <i id="sm-n-cli"></i></button>${repAllowed?`<button type="button" class="sm-tab ${tab==='rep'?'on':''}" data-tab="rep" onclick="smTab('rep')">↻ Repetir <i id="sm-n-rep"></i></button>`:''}</div>`;
+  const smTabsBar=`<div class="sm-tabs"><button type="button" class="sm-tab ${tab==='datos'?'on':''}" data-tab="datos" onclick="smTab('datos')">📝 Datos${missN?'<b class="sm-dot"></b>':''}</button><button type="button" class="sm-tab ${tab==='nuwek'?'on':''}" data-tab="nuwek" onclick="smTab('nuwek')">👥 Equipo Nuwek <i id="sm-n-nuwek"></i></button><button type="button" class="sm-tab ${tab==='cli'?'on':''}" data-tab="cli" onclick="smTab('cli')">🤝 Cliente <i id="sm-n-cli"></i></button>${repAllowed?`<button type="button" class="sm-tab ${tab==='rep'?'on':''}" data-tab="rep" onclick="smTab('rep')">↻ Repetir <i id="sm-n-rep"></i></button>`:''}${!s0.isSeries?`<button type="button" class="sm-tab ${tab==='ses'?'on':''}" data-tab="ses" onclick="smTab('ses')">📅 Sesión</button>`:''}</div>`;
   return `<div class="modal active" style="z-index:120" onclick="if(event.target===this)closeSubEdit()"><div class="modal-card" style="max-width:640px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(t.name)}</div><h3 style="margin:8px 0 0">Editar ${s.parentId?'sub-subtarea':'subtarea'}</h3></div><button class="x" onclick="closeSubEdit()">×</button></div></div>
     <div class="m-body">
@@ -2768,6 +2795,7 @@ function subEditModal(){
       </div>
       <div class="sm-pane" data-pane="nuwek" style="display:none"><div class="field"><label>Quién más del equipo Nuwek participa</label><div class="gf-list" onchange="smCount()">${team}</div><div class="hint">Les aparece en su calendario y les llega un aviso para confirmar que la vieron.</div></div></div>
       <div class="sm-pane" data-pane="cli" style="display:none"><div class="field"><label>Quién del equipo del cliente participa</label><div class="gf-list" onchange="smCount()">${cli}</div></div></div>
+      ${!s0.isSeries?smSesionPane(s0,t,c):''}
       ${repAllowed?`<div class="sm-pane" data-pane="rep" style="display:none">
         <input type="hidden" id="sm-mode" value="${repMode}">
         <div class="sm-subtabs"><button type="button" class="sm-sub ${repMode==='none'?'on':''}" data-mode="none" onclick="smRepMode('none')">No se repite</button><button type="button" class="sm-sub ${repMode==='cal'?'on':''}" data-mode="cal" onclick="smRepMode('cal')">📅 Por calendario</button><button type="button" class="sm-sub ${repMode==='after'?'on':''}" data-mode="after" onclick="smRepMode('after')">⏱ Después de terminarla</button></div>
@@ -2806,6 +2834,12 @@ function saveSubModal(){
   team.filter(id=>!oldTeam.includes(id)).forEach(id=>{ info[id]={by:currentUser,ts:now}; delete ack[id]; });
   oldTeam.filter(id=>!team.includes(id)).forEach(id=>{ delete info[id]; delete ack[id]; });
   patch.teamInfo=info; patch.teamAck=ack;
+  if(document.getElementById('sm-obj')){   // sesión con el cliente
+    const old=sesOf(s); const tem=[...document.querySelectorAll('#sm-tem .tem-row')].map(r=>{ const ti=(r.querySelector('.tem-t').value||'').trim(); if(!ti) return null; const por=r.querySelector('.tem-p').value;
+      return {id:r.dataset.id||('tm_'+Math.random().toString(36).slice(2,8)),titulo:ti,por:por==='cliente'?'cliente':'nuwek',personId:por==='cliente'?'':por,by:r.dataset.by||currentUser,ts:r.dataset.ts||new Date().toISOString()}; }).filter(Boolean);
+    const sesNew=Object.assign({},s.sesion||{},{objetivo:(val('sm-obj')||'').trim(),lugar:{tipo:val('sm-ltipo')||'meet',link:(val('sm-llink')||'').trim(),direccion:(val('sm-ldir')||'').trim()},temario:tem});
+    if(sesNew.objetivo||sesNew.lugar.link||sesNew.lugar.direccion||tem.length||(s.sesion&&(s.sesion.respuestas||[]).length)) patch.sesion=sesNew;
+  }
   const pe=document.getElementById('sm-parent'); if(pe){ const np=pe.value||''; const okP=!np||(t.subtasks.some(m=>m.id===np&&!m.parentId)&&!subKids(t,sid).length&&np!==sid); if(okP) patch.parentId=np; }
   let freq=document.getElementById('sm-freq')?val('sm-freq'):null; const ruleLocked=!canSubDate(); if(!ruleLocked&&repMode&&repMode!=='cal') freq=''; if(ruleLocked) freq=s.isSeries?s.series.freq:null;   // las reglas de calendario son fechas: solo PM/Gerencia/Dirección
   if(freq){   // ---- serie por calendario ----
@@ -2850,8 +2884,102 @@ function clientPopModal(){
     <div class="m-body"><div class="muted" style="margin-bottom:8px;font-size:.84rem">${esc(s.name)}</div>
       ${empty}<div class="cp-list">${list}</div>${addForm}
       <div class="wiz-actions">${clientPop.adding?'<span></span>':`<button class="btn ghost" ${people.length?'':'style="border-color:var(--green);color:var(--green);font-weight:700"'} onclick="cpShowAdd()">＋ Agregar contacto</button>`}
-        <span style="display:flex;gap:8px"><button class="btn ghost" onclick="closeClientPop()">Cancelar</button><button class="btn" onclick="cpSave()">Guardar</button></span></div></div></div></div>`;
+        <span style="display:flex;gap:8px"><button class="btn ghost" onclick="closeClientPop()">Cancelar</button><button class="btn" onclick="cpSave()">Guardar</button></span></div>
+      <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}')">🔗 Copiar link de la sesión</button> <button class="btn ghost sm" onclick="closeClientPop();openSubEdit('${t.id}','${s.id}');setTimeout(()=>smTab('ses'),40)">📅 Configurar sesión</button></div></div></div></div>`;
 }
+
+/* ================== SESIÓN CON EL CLIENTE (página pública de una subtarea con participantes del cliente) ================== */
+function sesOf(s){ const x=s.sesion||{}; return {objetivo:x.objetivo||'',lugar:Object.assign({tipo:'meet',link:'',direccion:''},x.lugar||{}),temario:x.temario||[],respuestas:x.respuestas||[],reabierta:x.reabierta||0,respAck:x.respAck||{}}; }
+function sesLast(s){ const r=sesOf(s).respuestas; return r.length?r[r.length-1]:null; }
+function sesCanRespond(s){ const x=sesOf(s); const last=sesLast(s); return !last||(x.reabierta&&x.reabierta>last.tsN); }
+function sessionShareUrl(tid,sid,token){ return location.origin+location.pathname+'#/sesion/'+encodeURIComponent(tid)+'/'+encodeURIComponent(sid)+'/'+encodeURIComponent(token); }
+function copySessionLink(tid,sid){ const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
+  let tok=s.shareToken; if(!tok){ tok=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8); store.updateSubtask(tid,sid,{shareToken:tok}); }
+  const url=sessionShareUrl(tid,sid,tok); const done=()=>shareToast('🔗 Link de la sesión copiado. Cualquiera con el link la ve sin iniciar sesión.');
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copia el link:',url)); else prompt('Copia el link:',url); }
+const SES_ST={confirmado:{t:'✅ El cliente confirmó',c:'#1f7a44',bg:'#e8f6ee'},cancelado:{t:'❌ El cliente canceló',c:'#c0392b',bg:'#fdeceb'},reprogramar:{t:'🔁 El cliente pidió reprogramar',c:'#9a7a00',bg:'#fff7e0'}};
+function smTemRow(it,i,staffOpts){ const fromClient=it.por==='cliente'&&it.by==='cliente';
+  return `<div class="tem-row" data-id="${esc(it.id||'')}" data-by="${esc(it.by||'')}" data-ts="${esc(it.ts||'')}">
+    <input class="tem-t" value="${esc(it.titulo||'')}" placeholder="Tema" ${fromClient?'readonly':''}>
+    ${fromClient?`<span class="tem-badge">Agregado por el cliente</span><input type="hidden" class="tem-p" value="cliente">`:`<select class="tem-p"><option value="cliente" ${it.por==='cliente'?'selected':''}>Cliente (logo)</option>${staffOpts.replace('value="'+(it.personId||'')+'"','value="'+(it.personId||'')+'" selected')}</select>`}
+    <button type="button" class="sub-ib" title="Quitar tema" onclick="this.closest('.tem-row').remove()">🗑️</button></div>`; }
+function smTemAdd(){ const box=document.getElementById('sm-tem'); if(!box) return; const t=store.task(subEd.tid); const staffOpts=store.activeStaff().map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
+  const div=document.createElement('div'); div.innerHTML=smTemRow({id:'tm_'+Date.now().toString(36),titulo:'',por:'nuwek',by:currentUser,ts:new Date().toISOString()},0,staffOpts); box.appendChild(div.firstElementChild); const inp=box.lastElementChild.querySelector('.tem-t'); if(inp) inp.focus(); }
+function smLugarChange(){ const k=val('sm-ltipo'); const a=document.getElementById('sm-l-meet'), b=document.getElementById('sm-l-pres'); if(a) a.style.display=(k==='meet')?'block':'none'; if(b) b.style.display=(k==='presencial')?'block':'none'; }
+function smReopen(){ const {tid,sid}=subEd; const t=store.task(tid); const s=t.subtasks.find(x=>x.id===sid); const ses=Object.assign({},s.sesion||{}); ses.reabierta=Date.now(); store.updateSubtask(tid,sid,{sesion:ses}); logEvent(tid,'Permitió que el cliente responda de nuevo la sesión «'+s.name+'»'); openSubEdit(tid,sid); setTimeout(()=>smTab('ses'),30); }
+function smSesionPane(s0,t,c){
+  const ses=sesOf(s0); const staffOpts=store.activeStaff().map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join(''); const last=sesLast(s0);
+  const st=last&&SES_ST[last.estado];
+  const resp=last?`<div class="ses-resp" style="background:${st.bg};color:${st.c}"><b>${st.t}</b> · ${esc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div style="margin-top:4px;color:#333">«${esc(last.razon)}»</div>`:''}${sesCanRespond(s0)?'':`<div style="margin-top:6px"><button type="button" class="btn ghost sm" onclick="smReopen()">Permitir que responda de nuevo</button></div>`}</div>`:'<div class="muted" style="font-size:.82rem">El cliente aún no responde.</div>';
+  const rows=ses.temario.map((it,i)=>smTemRow(it,i,staffOpts)).join('');
+  return `<div class="sm-pane" data-pane="ses" style="display:none">
+    <div class="field"><label>Objetivo de la reunión</label><textarea id="sm-obj" rows="3" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-family:inherit">${esc(ses.objetivo)}</textarea></div>
+    <div class="field"><label>Lugar</label><select id="sm-ltipo" onchange="smLugarChange()"><option value="meet" ${ses.lugar.tipo==='presencial'?'':'selected'}>Videollamada (Meet, Zoom, Teams…)</option><option value="presencial" ${ses.lugar.tipo==='presencial'?'selected':''}>Presencial</option></select>
+      <div id="sm-l-meet" style="margin-top:8px"><input id="sm-llink" placeholder="https://meet.google.com/…" value="${esc(ses.lugar.link)}"></div>
+      <div id="sm-l-pres" style="margin-top:8px;display:none"><input id="sm-ldir" placeholder="Dirección (calle, número, colonia, ciudad)" value="${esc(ses.lugar.direccion||c.location||'')}"><div class="hint">Con esta dirección se arma el mapa de la página del cliente. Si la dejas vacía se usa la ubicación de la ficha del cliente.</div></div></div>
+    <div class="field"><label>Temario (quién presenta cada tema)</label><div id="sm-tem">${rows}</div><button type="button" class="btn ghost sm" style="margin-top:6px" onclick="smTemAdd()">＋ Agregar tema</button></div>
+    <div class="field"><label>Respuesta del cliente</label>${resp}</div>
+    <div class="field"><button type="button" class="btn ghost" onclick="copySessionLink('${t.id}','${s0.id}')">🔗 Copiar link de la sesión para el cliente</button><div class="hint">El cliente ve esta información sin iniciar sesión y puede confirmar, reprogramar o cancelar (con razón).</div></div>
+  </div>`; }
+/* ================== PÁGINA PÚBLICA DE LA SESIÓN (la ve el cliente sin iniciar sesión) ================== */
+let publicSes=null, sesModal=null;
+function takeSesionHash(){ const m=(location.hash||'').match(/^#\/sesion\/([^/]+)\/([^/]+)\/([^/]+)$/); if(!m) return null; const d=x=>{ try{ return decodeURIComponent(x); }catch(_){ return x; } };
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){} return {tid:d(m[1]),sid:d(m[2]),token:d(m[3])}; }
+let shareSesionAtLoad=takeSesionHash();
+function sesFind(){ if(!publicSes) return null; const t=store.task(publicSes.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===publicSes.sid); if(!s||!s.shareToken||s.shareToken!==publicSes.token) return {ok:false};
+  const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{people:[],name:''}; return {ok:true,t,s,p,c}; }
+function sesWhen(s){ if(!s.date) return 'Fecha por confirmar'; const d=new Date(s.date+'T00:00:00'); const wd=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][d.getDay()]; let r=wd+' '+d.getDate()+' de '+MESES[d.getMonth()].toLowerCase()+' de '+d.getFullYear();
+  if(s.time){ r+=' · '+s.time; if(s.durMin){ const [h,m]=s.time.split(':').map(Number); const e=h*60+m+(+s.durMin); r+=' – '+String(Math.floor(e/60)%24).padStart(2,'0')+':'+String(e%60).padStart(2,'0'); } } return r; }
+function sesProvider(url){ try{ const h=new URL(/^https?:\/\//i.test(url)?url:'https://'+url).hostname; if(/meet\.google/.test(h)) return 'Google Meet'; if(/zoom\./.test(h)) return 'Zoom'; if(/teams\./.test(h)) return 'Microsoft Teams'; return h; }catch(_){ return 'videollamada'; } }
+function sesAv(person,size){ person=person||{}; const st=`width:${size}px;height:${size}px`; return person.photo?`<span class="ps-av" style="${st};background-image:url('${person.photo}')"></span>`:`<span class="ps-av" style="${st};background:${person.color||'#3f7d6e'}">${mdEsc((person.name||'?')[0])}</span>`; }
+function sesClientLogo(c,size){ const st=`width:${size}px;height:${size}px`; return c.logo?`<span class="ps-av ps-logo" style="${st};background-image:url('${c.logo}')"></span>`:`<span class="ps-av" style="${st};background:#8a9a93">${mdEsc((c.name||'?')[0])}</span>`; }
+function viewPublicSession(){
+  const f=sesFind(); const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${session?`<button class="btn ghost sm" style="margin-left:auto;color:#fff;border-color:rgba(255,255,255,.4)" onclick="closePublicSes()">← Volver al portal</button>`:''}</div>`;
+  if(!f||!f.ok) return `<div class="pub-wrap">${top}<div class="pub-card"><h2>Este link no es válido</h2><p class="muted">Pudo haber cambiado o estar incompleto. Pídele a tu contacto en Nuwek que te lo vuelva a enviar.</p></div></div>`;
+  const {t,s,c}=f; const ses=sesOf(s); const last=sesLast(s); const staffIds=[...new Set([s.personId,...(s.team||[])].filter(Boolean))].filter(id=>store.d.staff.some(u=>u.id===id));
+  const nuwek=staffIds.map(id=>{ const u=store.person(id); return `<button class="ps-p" onclick="openSesContact('${id}')" title="${esc(u.name)} · clic para contactar">${sesAv(u,64)}<span class="ps-pn">${mdEsc((u.name||'').split(' ')[0])}</span></button>`; }).join('')||'<span class="muted">Por definir</span>';
+  const cli=(c.people||[]).filter(pp=>(s.invitados||[]).includes(pp.id)).map(pp=>`<div class="ps-cl">${sesAv(pp,34)}<span><b>${mdEsc(pp.name)}</b>${pp.role?`<span class="muted"> · ${mdEsc(pp.role)}</span>`:''}</span></div>`).join('');
+  const lug=ses.lugar; let lugarHtml;
+  if(lug.tipo==='presencial'){ const dir=lug.direccion||c.location||''; lugarHtml=dir?`<div class="ps-lug"><b>📍 Presencial</b><div>${mdEsc(dir)}</div><iframe class="ps-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${encodeURIComponent(dir)}&z=15&output=embed"></iframe><a class="btn ghost sm" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}">Abrir en Google Maps ↗</a></div>`:'<div class="muted">Dirección por confirmar.</div>'; }
+  else lugarHtml=lug.link?`<div class="ps-lug"><b>💻 Videollamada · ${mdEsc(sesProvider(lug.link))}</b><a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(/^https?:\/\//i.test(lug.link)?lug.link:'https://'+lug.link)}">Unirse a la reunión ↗</a><div class="muted" style="word-break:break-all;font-size:.76rem">${mdEsc(lug.link)}</div></div>`:'<div class="muted">El link de la reunión se compartirá pronto.</div>';
+  const tem=ses.temario.map((it,i)=>{ const pr=it.por==='cliente'?{logo:true}:store.person(it.personId); return `<div class="ps-tem"><span class="ps-n">${i+1}</span><div class="ps-tt">${mdEsc(it.titulo)}</div>${it.por==='cliente'?`<span class="ps-by" title="${mdEsc(c.name)}">${sesClientLogo(c,34)}<span>${mdEsc(c.name)}</span></span>`:`<span class="ps-by">${sesAv(pr,34)}<span>${mdEsc((pr.name||'').split(' ')[0])}</span></span>`}</div>`; }).join('')||'<div class="muted">Aún sin temario.</div>';
+  const canAdd=!(last&&last.estado==='cancelado');
+  let actions;
+  if(last&&!sesCanRespond(s)){ const st=SES_ST[last.estado]; actions=`<div class="ps-done" style="background:${st.bg};color:${st.c}"><b>${st.t.replace('El cliente','Tu respuesta:')}</b> · ${mdEsc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div class="ps-razon">Razón: «${mdEsc(last.razon)}»</div>`:''}<div class="muted" style="font-size:.78rem;margin-top:6px">Tu respuesta ya quedó registrada y no se puede modificar. Si necesitas algo más, escríbele a tu contacto en Nuwek.</div></div>`; }
+  else actions=`<div class="ps-actions"><button class="ps-btn cancel" onclick="openSesModal('cancelado')">CANCELAR</button><button class="ps-btn repro" onclick="openSesModal('reprogramar')">REPROGRAMAR</button><button class="ps-btn ok" onclick="sesConfirmar()">CONFIRMAR</button></div>`;
+  return `<div class="pub-wrap">${top}<div class="ps-page">
+    <div class="ps-head"><div class="ps-hl">${sesClientLogo(c,54)}<div><div class="ps-eye">Sesión con ${mdEsc(c.name)}</div><h1>${mdEsc(s.name)}</h1></div></div><div class="ps-when">🗓️ ${mdEsc(sesWhen(s))}</div></div>
+    <div class="ps-grid"><div class="ps-card"><h4>🎯 Objetivo de la reunión</h4>${ses.objetivo?`<div class="md">${mdRender(ses.objetivo)}</div>`:'<div class="muted">Por definir.</div>'}</div>
+      <div class="ps-card"><h4>👥 Quiénes participan por Nuwek</h4><div class="ps-people">${nuwek}</div><div class="muted" style="font-size:.74rem;margin-top:4px">Toca una foto para escribirles o llamarles.</div>${cli?`<h4 style="margin-top:14px">Por parte de ${mdEsc(c.name)}</h4>${cli}`:''}</div>
+      <div class="ps-card"><h4>📍 Lugar</h4>${lugarHtml}</div>
+      <div class="ps-card"><h4>📋 Temario</h4>${tem}${canAdd?`<button class="btn ghost sm" style="margin-top:10px" onclick="openSesModal('tema')">＋ Agregar un tema</button>`:''}</div></div>
+    ${actions}</div>${''}</div>`; }
+function closePublicSes(){ publicSes=null; render(); }
+function openSesModal(type,extra){ sesModal=Object.assign({type},extra||{}); render(); setTimeout(()=>{ const el=document.getElementById('ps-in'); if(el) el.focus(); },30); }
+function closeSesModal(){ sesModal=null; render(); }
+function sesPubModal(){ if(!sesModal) return ''; const f=sesFind(); if(!f||!f.ok) return '';
+  const wrap=(title,body)=>`<div class="modal active" style="z-index:150" onclick="if(event.target===this)closeSesModal()"><div class="modal-card" style="max-width:440px"><div class="m-head"><div class="m-top"><h3 style="margin:0">${title}</h3><button class="x" onclick="closeSesModal()">×</button></div></div><div class="m-body">${body}</div></div></div>`;
+  if(sesModal.type==='cancelado'||sesModal.type==='reprogramar'){ const cancel=sesModal.type==='cancelado';
+    return wrap(cancel?'Cancelar la sesión':'Pedir reprogramación',`<p class="muted" style="margin-top:0">Cuéntanos la razón${cancel?'':' y, si puedes, qué fechas te acomodan'}. <b>Es obligatoria</b> y, una vez enviada, no se puede editar.</p><textarea id="ps-in" rows="4" style="width:100%;padding:10px;border:2px solid var(--line);border-radius:10px;font-family:inherit" placeholder="${cancel?'Motivo de la cancelación…':'Motivo y fechas posibles…'}"></textarea><div class="wiz-actions"><button class="btn ghost" onclick="closeSesModal()">Volver</button><button class="btn" style="${cancel?'background:#c0392b;border-color:#c0392b':''}" onclick="sesEnviar('${sesModal.type}')">${cancel?'Enviar cancelación':'Enviar solicitud'}</button></div>`); }
+  if(sesModal.type==='tema') return wrap('Agregar un tema a la agenda',`<p class="muted" style="margin-top:0">Se agregará con el logo de ${mdEsc(f.c.name)}.</p><input id="ps-in" placeholder="Tema que quieres tratar" maxlength="140" onkeydown="if(event.key==='Enter'){event.preventDefault();sesAgregarTema()}"><div class="wiz-actions"><button class="btn ghost" onclick="closeSesModal()">Cancelar</button><button class="btn" onclick="sesAgregarTema()">Agregar</button></div>`);
+  if(sesModal.type==='contacto'){ const u=store.person(sesModal.id); const raw=(u.phoneWork||u.phonePersonal||'').replace(/[^\d]/g,''); const num=raw.length===10?'52'+raw:raw;
+    return wrap(mdEsc(u.name),`<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">${sesAv(u,64)}<div><b>${mdEsc(u.name)}</b><div class="muted">${mdEsc(u.role||'Nuwek')}</div></div></div>${num?`<div class="ps-contact"><a class="ps-cbtn wa" target="_blank" rel="noopener noreferrer" href="https://wa.me/${num}?text=${encodeURIComponent('Hola '+(u.name||'').split(' ')[0]+', te escribo sobre la sesión «'+(f.s.name)+'».')}">💬 WhatsApp</a><a class="ps-cbtn call" href="tel:+${num}">📞 Llamar</a></div>`:'<div class="muted">Esta persona aún no tiene teléfono registrado.</div>'}`); }
+  return ''; }
+async function dbPatchSubtask(tid,sid,fn){
+  const { data, error } = await sb.from('tareas').select('*').eq('id',tid).single(); if(error) throw error;
+  const t=dbToAppTask(data); const sub=(t.subtasks||[]).find(x=>x.id===sid); if(!sub) throw new Error('La sesión ya no existe'); fn(sub,t);
+  const r=await sb.from('tareas').upsert(appToDbTask(t)); if(r.error) throw r.error;
+  const i=store.d.tasks.findIndex(x=>x.id===tid); if(i>=0) store.d.tasks[i]=t; return t; }
+async function sesRespond(estado,razon){ const f=sesFind(); if(!f||!f.ok) return;
+  try{ await dbPatchSubtask(f.t.id,f.s.id,(sub)=>{ if(sesLast(sub)&&!sesCanRespond(sub)) throw new Error('Esta sesión ya tiene una respuesta registrada.');
+      const ses=Object.assign({},sub.sesion||{}); const now=new Date(); ses.respuestas=(ses.respuestas||[]).concat([{id:'rs_'+Date.now().toString(36),ts:now.toISOString(),tsN:now.getTime(),estado,razon:razon||''}]); sub.sesion=ses; });
+    sesModal=null; render(); }catch(e){ alert('No se pudo enviar tu respuesta: '+(e.message||e)); render(); } }
+function sesEnviar(estado){ const r=(val('ps-in')||'').trim(); if(r.length<3){ alert('Escribe la razón (es obligatoria).'); return; } sesRespond(estado,r); }
+function sesConfirmar(){ if(confirm('¿Confirmas tu asistencia a esta sesión?')) sesRespond('confirmado',''); }
+async function sesAgregarTema(){ const ti=(val('ps-in')||'').trim(); if(ti.length<2){ alert('Escribe el tema.'); return; } const f=sesFind(); if(!f||!f.ok) return;
+  try{ await dbPatchSubtask(f.t.id,f.s.id,(sub)=>{ const ses=Object.assign({},sub.sesion||{}); ses.temario=(ses.temario||[]).concat([{id:'tm_'+Date.now().toString(36),titulo:ti,por:'cliente',personId:'',by:'cliente',ts:new Date().toISOString()}]); sub.sesion=ses; });
+    sesModal=null; render(); }catch(e){ alert('No se pudo agregar el tema: '+(e.message||e)); } }
+function openSesContact(id){ openSesModal('contacto',{id}); }
 
 /* ================== LINK COMPARTIBLE POR TAREA ==================
    Formato: <portal>#/tarea/<id>. Al abrirlo se ve la tarea SIN iniciar sesión (solo lectura);
@@ -2890,7 +3018,7 @@ function viewPublicTask(){
     <h4 style="margin:18px 0 6px">Subtareas (${done}/${tot})</h4>${subs||'<div class="muted">Sin subtareas.</div>'}
     <div class="pub-cta"><div class="muted">Vista de solo lectura. Para editar, comentar o marcar avances, inicia sesión.</div><button class="btn" onclick="goLoginFromShare()">Iniciar sesión para editar</button></div>
   </div></div>`; }
-window.addEventListener('hashchange',()=>{ const id=takeShareHash(); if(id) handleShareLink(id); });
+window.addEventListener('hashchange',()=>{ const ss=takeSesionHash(); if(ss){ publicSes=ss; render(); return; } const id=takeShareHash(); if(id) handleShareLink(id); });
 
 /* ================== AVISO DE VERSIÓN NUEVA ==================
    Cada push cambia la versión en index.html (meta app-version + ?v= en los archivos). Si alguien tiene abierta una versión

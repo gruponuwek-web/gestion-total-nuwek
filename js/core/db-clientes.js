@@ -21,7 +21,8 @@ function dbToAppClient(row){
     otro: row.otro || '',
     generalResponsibleId: row.general_responsible_id || null,
     people: Array.isArray(row.contactos) ? row.contactos : [],
-    tipo: row.tipo === 'interno' ? 'interno' : 'externo'
+    tipo: row.tipo === 'interno' ? 'interno' : 'externo',
+    logo: row.logo || ''
   };
 }
 
@@ -42,7 +43,8 @@ function appToDbClient(c){
     otro: c.otro || '',
     general_responsible_id: c.generalResponsibleId || null,
     contactos: c.people || [],
-    tipo: c.tipo === 'interno' ? 'interno' : 'externo'
+    tipo: c.tipo === 'interno' ? 'interno' : 'externo',
+    logo: c.logo || ''
   };
 }
 
@@ -59,10 +61,13 @@ async function dbLoadClientes(){
 // --- GUARDAR (crear o actualizar) un cliente ---
 async function dbSaveClient(c){
   try{
-    let { error } = await sb.from('clientes').upsert(appToDbClient(c));
-    if (error && /\btipo\b/.test(error.message||'')) {   // la columna "tipo" aún no existe: guardar sin ella
-      const row = appToDbClient(c); delete row.tipo;
-      ({ error } = await sb.from('clientes').upsert(row));
+    const row = appToDbClient(c);
+    let { error } = await sb.from('clientes').upsert(row);
+    // si alguna columna nueva ("tipo", "logo") aún no existe en la base, guardar sin ella
+    for (let i = 0; i < 2 && error; i++){
+      const m = (error.message||'').match(/\b(tipo|logo)\b/i); const col = m && m[1].toLowerCase();
+      if (!col || !(col in row)) break;
+      delete row[col]; ({ error } = await sb.from('clientes').upsert(row));
     }
     if (error) {
       console.error('No se pudo guardar el cliente en Supabase:', error.message);
