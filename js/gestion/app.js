@@ -174,7 +174,7 @@ class Store{
   paymentsOf(pid){return this.d.payments.filter(p=>p.projectId===pid);}
   _genPayments(p){ const out=[]; if(!p.startDate)return out; const [y,mo]=p.startDate.split('-').map(Number); for(let m=0;m<(p.months||0);m++){ const dt=new Date(y,(mo-1)+m,p.paymentDay||1); const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); out.push({id:'pay_'+p.id+'_'+m,projectId:p.id,dueDate:ds,amount:p.monthlyPay||0,paid:false,paidDate:null}); } return out; }
   generatePayments(p){ this.d.payments=this.d.payments.filter(x=>x.projectId!==p.id).concat(this._genPayments(p)); this.save(); if(typeof dbReplacePayments==='function') dbReplacePayments(p.id, this.paymentsOf(p.id)); }
-  togglePayment(payId){ const x=this.d.payments.find(p=>p.id===payId); if(x){ x.paid=!x.paid; x.paidDate=x.paid?todayISO():null; this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); } }
+  togglePayment(payId){ const x=this.d.payments.find(p=>p.id===payId); if(x){ x.paid=!x.paid; x.paidDate=x.paid?todayISO():null; x.estado=x.paid?'cobrado':'programado'; x.cobro=x.paid?{monto:+x.amount||0,fecha:todayISO()}:null; if(!x.paid) x.conciliadoFecha=null; this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); } }
   addPayment(pid,dueDate,amount){ const x={id:'pay_'+pid+'_'+Date.now(),projectId:pid,dueDate,amount:+amount||0,paid:false,paidDate:null}; this.d.payments.push(x); this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); }
   updatePayment(payId,patch){ const x=this.d.payments.find(p=>p.id===payId); if(x){ if(patch.amount!==undefined)patch.amount=+patch.amount||0; Object.assign(x,patch); this.save(); if(typeof dbSavePayment==='function') dbSavePayment(x); } }
   removePayment(payId){ this.d.payments=this.d.payments.filter(p=>p.id!==payId); this.save(); if(typeof dbDeletePayment==='function') dbDeletePayment(payId); }
@@ -528,7 +528,7 @@ function taskEtapaIds(t){
 function render(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0);
+  setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
     if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
@@ -584,7 +584,7 @@ function whoSelector(){
 function sessionBar(){
   const u=store.person(session)||{name:'?'};
   const rl=permLabel(u.perm);
-  return `<div class="sessbar">${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
+  return `<div class="sessbar"><button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
 }
 /* ===== LOGIN ===== */
 function getLoginBg(){ return (store.d.settings && store.d.settings.loginBg) || LOGIN_BG; }
@@ -615,6 +615,7 @@ function pinModal(){
 document.addEventListener('keydown',ev=>{
   if(ev.key!=='Escape'||ev.defaultPrevented||!session) return;
   const tg=ev.target; if(tg&&tg.classList&&tg.classList.contains('cmt-in')&&tg.value.trim()&&!tg.id.startsWith('cmt-edit')){ tg.blur(); return; }   // no perder un comentario a medias
+  if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(verbInfo){ closeVerbInfo(); return; }
   if(subEd){ closeSubEdit(); return; }
@@ -768,7 +769,8 @@ function viewCliente(){
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
     <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>
-    ${citasHistorialHtml(c)}`;
+    ${citasHistorialHtml(c)}
+    ${finanzasHtml(c)}`;
 }
 
 function projectHealth(pid){
@@ -1800,6 +1802,15 @@ function quickModal(){
       <div class="card" style="background:#fdeceb;border-color:#e8b4b0;margin:10px 0"><div style="font-size:.88rem">Se eliminarán también: <b>${st.tareas}</b> tarea(s), <b>${st.subtareas}</b> subtarea(s) con sus comentarios y bitácora, <b>${st.pagos}</b> pago(s), <b>${st.frentes}</b> frente(s) y <b>${st.etapas}</b> etapa(s).</div></div>
       <div class="field"><label>Para confirmar, escribe el nombre del proyecto exactamente</label><input id="qm-delname" placeholder="${esc(p2.name)}" autocomplete="off" oninput="document.getElementById('qm-delbtn').disabled=(this.value.trim()!==${JSON.stringify(p2.name.trim()).replace(/"/g,'&quot;')})"></div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" id="qm-delbtn" disabled style="background:#c0392b;border-color:#c0392b" onclick="confirmProjectDel()">Eliminar para siempre</button></div>`;
+  } else if(qm.kind==='pagoEstado'){
+    const x=store.d.payments.find(z=>z.id===qm.payId)||{}; const p2=store.project(x.projectId)||{name:''}; const e=payEstado(x); const f=x.factura||{}, cb=x.cobro||{};
+    inner=`<h3>💰 Estado del pago</h3><div class="muted" style="margin:-4px 0 12px">${esc(p2.name)} · vence ${x.dueDate?dLabel(x.dueDate):'—'} · <b>${money(x.amount)}</b></div>
+      <div class="field"><label>Estado</label><select id="pe-estado" onchange="payEstadoChange()">${Object.keys(PAY_ST).map(k=>`<option value="${k}" ${e===k?'selected':''}>${PAY_ST[k].t}</option>`).join('')}</select></div>
+      <div id="pe-fac" class="sm-series" style="display:none;margin-bottom:12px"><label style="font-weight:700;font-size:.78rem">🧾 FACTURA</label><div class="field row" style="margin-top:6px"><div><label>Folio</label><input id="pe-folio" value="${esc(f.folio||'')}" placeholder="A-1234"></div><div><label>Fecha de factura</label><input id="pe-ffecha" type="date" value="${f.fecha||''}"></div></div></div>
+      <div id="pe-cob" class="sm-series" style="display:none;margin-bottom:12px"><label style="font-weight:700;font-size:.78rem">💵 COBRO</label><div class="field row" style="margin-top:6px"><div><label>Monto cobrado</label><input id="pe-cmonto" type="number" value="${cb.monto!=null?cb.monto:''}" oninput="this.dataset.touched=1"></div><div><label>Fecha de cobro</label><input id="pe-cfecha" type="date" value="${cb.fecha||''}"></div></div></div>
+      <div id="pe-con" class="sm-series" style="display:none;margin-bottom:12px"><label style="font-weight:700;font-size:.78rem">✔ CONCILIACIÓN</label><div class="field" style="margin-top:6px"><label>Fecha de conciliación</label><input id="pe-confecha" type="date" value="${x.conciliadoFecha||''}"></div></div>
+      <div class="field"><label>Nota (opcional)</label><input id="pe-nota" value="${esc(x.nota||'')}" placeholder="Ej. transferencia SPEI, complemento de pago pendiente"></div>
+      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="savePayEstado()">Guardar</button></div>`;
   } else if(qm.kind==='pago' || qm.kind==='pagoEdit'){
     const p2=store.project(qm.pid); const x=qm.kind==='pagoEdit'?store.paymentsOf(qm.pid).find(z=>z.id===qm.payId):{dueDate:p2.startDate,amount:p2.monthlyPay||''};
     inner=`<h3>${qm.kind==='pagoEdit'?'Editar pago':'Nuevo pago'}</h3>
@@ -2601,7 +2612,7 @@ function viewCatalogos(){
 
 /* ================== NAV ================== */
 function go(v){view=v;modalTask=null;render();}
-function openClient(id){selClient=id;view='cliente';citaSel=null;render();}
+function openClient(id){selClient=id;view='cliente';citaSel=null;finSel=null;render();}
 function openProject(id){selProject=id;selTab='gestor';view='proyecto';render();}
 function setTab(t){selTab=t;render();}
 function setGanttZoom(z){ganttZoom=z;render();}
@@ -2730,6 +2741,36 @@ function startSync(){
       rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{ clearTimeout(rtDebounce); rtDebounce=setTimeout(()=>syncTables(new Set([tb==='frentes'||tb==='etapas'?'proyectos':tb])),350); }); });
     rtChannel.subscribe(st=>{ if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){ try{ sb.removeChannel(rtChannel); }catch(_){} } }); } }catch(e){ console.warn('Realtime no disponible:',e&&e.message||e); }
 }
+
+
+/* ================== SIGUIENTES ACTIVIDADES (⏰ junto a tu foto) ================== */
+let nextOpen=false;
+function nextItems(){
+  const me=currentUser; const now=Date.now(); const out=[];
+  store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; (t.subtasks||[]).forEach(s=>{
+    if(s.done||s.isSeries||!s.date) return; if(!(s.personId===me||(s.team||[]).includes(me))) return;
+    const hasT=!!s.time; const at=new Date(s.date+'T'+(s.time||'23:59')+':00').getTime(); if(isNaN(at)||at<now-(hasT?0:0)) return;
+    out.push({s,t,p,at,hasT,part:s.personId!==me}); }); });
+  return out.sort((a,b)=>a.at-b.at).slice(0,14); }
+function nextWhen(it){ const now=new Date(); const d=new Date(it.at); const mins=Math.round((it.at-now.getTime())/60000); const today=todayISO(), tm=addDaysISO(today,1);
+  if(it.hasT&&mins<60) return {t:mins<=1?'¡ahora!':'en '+mins+' min',soon:true};
+  if(it.s.date===today) return {t:it.hasT?'hoy · '+it.s.time:'hoy',soon:it.hasT&&mins<180};
+  if(it.s.date===tm) return {t:'mañana'+(it.hasT?' · '+it.s.time:''),soon:false};
+  return {t:dLabel(it.s.date)+(it.hasT?' · '+it.s.time:''),soon:false}; }
+function nextBtnUpdate(){ const b=document.getElementById('next-btn'); if(!b||!session) return; const its=nextItems(); const soon=its.find(i=>i.hasT&&(i.at-Date.now())<=3600000);
+  b.classList.toggle('soon',!!soon); b.title=soon?('Pronto: '+soon.s.name+' ('+nextWhen(soon).t+')'):'Tus siguientes actividades'; }
+function nextPopHtml(){ const its=nextItems();
+  const rows=its.map(it=>{ const w=nextWhen(it); const cita=subHasCita(it.s); const f=kbFrente(it.t);
+    return `<div class="nx-it${w.soon?' soon':''}" onclick="goNext('${it.t.id}','${it.s.id}')"><div class="nx-when">${w.t}</div><div class="nx-tx"><div class="nx-nm">${cita?'📅 ':''}${it.part?'🤝 ':''}${esc(it.s.name)}</div><div class="nx-sub">${esc(it.p.name)} · ${esc(it.t.name)} · <span style="color:${f.color};font-weight:600">${esc(f.name)}</span></div></div></div>`; }).join('');
+  return `<div class="nx-h">⏰ Lo que sigue <span class="muted">${its.length?its.length+' próxima'+(its.length>1?'s':''):''}</span></div><div class="nx-list">${rows||'<div class="nf-empty">🎉 No tienes actividades próximas programadas</div>'}</div>`; }
+function toggleNext(ev){ ev&&ev.stopPropagation(); nextOpen=!nextOpen; nextRender(); }
+function nextRender(){ let pop=document.getElementById('next-pop'); if(!nextOpen||!session){ if(pop) pop.remove(); return; }
+  if(!pop){ pop=document.createElement('div'); pop.id='next-pop'; document.body.appendChild(pop); }
+  pop.innerHTML=nextPopHtml(); const b=document.getElementById('next-btn'); const r=b?b.getBoundingClientRect():{right:innerWidth-20,bottom:60};
+  pop.style.top=(r.bottom+8)+'px'; pop.style.right=Math.max(8,innerWidth-r.right-8)+'px'; }
+function goNext(tid,sid){ nextOpen=false; nextRender(); openAgItem(tid,sid); }
+document.addEventListener('click',ev=>{ if(nextOpen&&!ev.target.closest('#next-pop')&&!ev.target.closest('#next-btn')){ nextOpen=false; nextRender(); } });
+setInterval(()=>{ if(session&&!document.hidden){ nextBtnUpdate(); if(nextOpen) nextRender(); } },30000);
 
 /* ================== NOTIFICACIONES (@menciones) ================== */
 let notifOpen=false, notifSeen=null;
@@ -2962,6 +3003,48 @@ function citasHistorialHtml(c){
   const det=cur?`<div class="lib-det-h"><h3>${cur[1]} · ${cur[3].length}</h3></div><div class="lib-det-b">${cur[3].map(x=>citaCard(x,false)).join('')||'<div class="muted" style="padding:10px">No hay citas en este estado.</div>'}</div>`
     :`<div class="muted" style="padding:22px;text-align:center">Elige una ficha para ver las citas con su estado.<br><span style="font-size:.78rem">Se crean al agregar participantes del cliente (🤝) a una subtarea.</span></div>`;
   return `<div class="sec-title"><h2>📅 Citas</h2></div>${all.length?`<div class="lib-split"><div class="lib-side">${fichas}</div><div class="lib-det">${det}</div></div>`:'<div class="muted">Este cliente aún no tiene citas. Se crean al agregar participantes del cliente (🤝) a una subtarea.</div>'}`; }
+
+/* ================== FINANZAS POR CLIENTE (solo Dirección): programado · facturado · cobrado parcialmente · cobrado · conciliado ================== */
+const PAY_ST={programado:{t:'Programado',c:'#6b7a73',bg:'#eef0ec'},facturado:{t:'Facturado',c:'#2f5fa8',bg:'#eaf1fb'},parcial:{t:'Cobrado parcialmente',c:'#9a7a00',bg:'#fff7e0'},cobrado:{t:'Cobrado',c:'#1f7a44',bg:'#e8f6ee'},conciliado:{t:'Conciliado',c:'#5b4fc9',bg:'#efecfb'}};
+function canSeeFinance(){ return role==='gerencia'; }
+function payEstado(x){ return x.estado||(x.paid?'cobrado':'programado'); }
+function payCobrado(x){ const e=payEstado(x); if(e==='cobrado'||e==='conciliado') return x.cobro&&x.cobro.monto!=null?+x.cobro.monto:(+x.amount||0); if(e==='parcial') return +(x.cobro&&x.cobro.monto)||0; return 0; }
+function paySaldo(x){ return Math.max(0,(+x.amount||0)-payCobrado(x)); }
+function payVencido(x){ const e=payEstado(x); return (e!=='cobrado'&&e!=='conciliado')&&x.dueDate&&x.dueDate<todayISO()&&paySaldo(x)>0; }
+let finSel=null;
+function selectFinGrp(k){ finSel=(finSel===k?null:k); render(); }
+function payRowHtml(x,p){ const e=payEstado(x), st=PAY_ST[e]; const det=[];
+  if(x.factura&&(x.factura.folio||x.factura.fecha)) det.push('🧾 Factura '+(x.factura.folio?esc(x.factura.folio):'')+(x.factura.fecha?' · '+dLabel(x.factura.fecha):''));
+  if(e==='parcial'||e==='cobrado'||e==='conciliado') det.push('💵 Cobrado '+money(payCobrado(x))+(x.cobro&&x.cobro.fecha?' · '+dLabel(x.cobro.fecha):''));
+  if(e==='conciliado'&&x.conciliadoFecha) det.push('✔ Conciliado '+dLabel(x.conciliadoFecha));
+  if(paySaldo(x)>0&&(e==='parcial'||e==='facturado')) det.push('Saldo '+money(paySaldo(x)));
+  return `<div class="cita-row" style="border-left:4px solid ${st.c}"><div class="cita-when"><b>${x.dueDate?dLabel(x.dueDate):'sin fecha'}</b><span>${payVencido(x)?'<span style="color:#c0392b;font-weight:700">vencido</span>':'vence'}</span></div>
+    <div class="cita-main"><div class="cita-nm">${money(x.amount)}</div><div class="muted" style="font-size:.76rem">${esc(p.name)}</div>${det.map(d=>`<div class="fin-det">${d}</div>`).join('')}${x.nota?`<div class="cita-razon">«${esc(x.nota)}»</div>`:''}</div>
+    <div class="cita-side"><span class="cita-st" style="background:${st.bg};color:${st.c}">${st.t}</span><div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end"><button class="btn ghost sm" title="Cambiar estado o registrar factura, cobro o conciliación" onclick="openPayEstado('${x.id}')">✏️ Editar</button></div></div></div>`; }
+function finanzasHtml(c){
+  if(!canSeeFinance()) return '';
+  const rows=[]; store.projectsOf(c.id).forEach(p=>store.paymentsOf(p.id).forEach(x=>rows.push({x,p}))); rows.sort((a,b)=>(a.x.dueDate||'')<(b.x.dueDate||'')?-1:1);
+  const sum=a=>a.reduce((n,r)=>n+(+r.x.amount||0),0); const by=k=>rows.filter(r=>payEstado(r.x)===k);
+  const groups=[['todos','💰 Todos los pagos','#2c6b4c',rows],['programado','Programados',PAY_ST.programado.c,by('programado')],['facturado','Facturados',PAY_ST.facturado.c,by('facturado')],['parcial','Cobrados parcialmente',PAY_ST.parcial.c,by('parcial')],['cobrado','Cobrados',PAY_ST.cobrado.c,by('cobrado')],['conciliado','Conciliados',PAY_ST.conciliado.c,by('conciliado')]];
+  const cur=groups.find(g=>g[0]===finSel);
+  const contratado=sum(rows), cobrado=rows.reduce((n,r)=>n+payCobrado(r.x),0), saldo=contratado-cobrado, vencido=rows.filter(r=>payVencido(r.x)).reduce((n,r)=>n+paySaldo(r.x),0);
+  const alCorriente=vencido===0;
+  const fichas=groups.map(([k,l,col,arr])=>`<div class="lib-side-it${finSel===k?' on':''}" onclick="selectFinGrp('${k}')"><span class="lib-side-nm"><i class="cita-dot" style="background:${col}"></i>${l}</span><span class="lib-side-n" title="${money(sum(arr))}">${arr.length}</span></div>`).join('');
+  const det=cur?`<div class="lib-det-h"><h3>${cur[1]} · ${cur[3].length} · ${money(sum(cur[3]))}</h3></div><div class="lib-det-b">${cur[3].map(r=>payRowHtml(r.x,r.p)).join('')||'<div class="muted" style="padding:10px">No hay pagos en este estado.</div>'}</div>`:`<div class="muted" style="padding:22px;text-align:center">Elige una ficha para ver los pagos y su estado.</div>`;
+  return `<div class="sec-title"><h2>💰 Finanzas</h2></div>
+    <div class="fin-sum"><div><span>Contratado</span><b>${money(contratado)}</b></div><div><span>Cobrado</span><b style="color:#1f7a44">${money(cobrado)}</b></div><div><span>Saldo pendiente</span><b>${money(saldo)}</b></div><div><span>Vencido</span><b style="color:${vencido?'#c0392b':'#1f7a44'}">${money(vencido)}</b></div><div class="fin-flag" style="background:${alCorriente?'#e8f6ee':'#fdeceb'};color:${alCorriente?'#1f7a44':'#c0392b'}">${rows.length?(alCorriente?'✅ Al corriente':'⚠️ Con saldo vencido'):'Sin pagos programados'}</div></div>
+    ${rows.length?`<div class="lib-split"><div class="lib-side">${fichas}</div><div class="lib-det">${det}</div></div>`:'<div class="muted">Este cliente aún no tiene pagos programados. Se crean con el calendario de pagos de cada proyecto.</div>'}`; }
+function openPayEstado(id){ if(!canSeeFinance()) return; qm={kind:'pagoEstado',payId:id}; render(); setTimeout(payEstadoChange,0); }
+function payEstadoChange(){ const e=val('pe-estado'); const show=(id,on)=>{ const el=document.getElementById(id); if(el) el.style.display=on?'block':'none'; };
+  show('pe-fac',['facturado','parcial','cobrado','conciliado'].includes(e)); show('pe-cob',['parcial','cobrado','conciliado'].includes(e)); show('pe-con',e==='conciliado');
+  const m=document.getElementById('pe-cmonto'); const amt=+((store.d.payments.find(z=>z.id===qm.payId)||{}).amount)||0; if(m&&(e==='cobrado'||e==='conciliado')&&(!m.value||+m.value<amt)&&!m.dataset.touched) m.value=amt;
+  const f=document.getElementById('pe-cfecha'); if(f&&!f.value&&['parcial','cobrado','conciliado'].includes(e)) f.value=todayISO(); const cf=document.getElementById('pe-confecha'); if(cf&&!cf.value&&e==='conciliado') cf.value=todayISO(); }
+function savePayEstado(){ const x=store.d.payments.find(z=>z.id===qm.payId); if(!x||!canSeeFinance()) return; const e=val('pe-estado'); const amt=+x.amount||0;
+  const fac=['facturado','parcial','cobrado','conciliado'].includes(e)?{folio:(val('pe-folio')||'').trim(),fecha:val('pe-ffecha')||''}:null;
+  let cobro=null; if(['parcial','cobrado','conciliado'].includes(e)){ const m=+val('pe-cmonto')||0; if(e==='parcial'&&!(m>0&&m<amt)){ alert('En un cobro parcial el monto debe ser mayor a 0 y menor al total ('+money(amt)+').'); return; } if(e!=='parcial'&&m<=0){ alert('Escribe el monto cobrado.'); return; } cobro={monto:e==='parcial'?m:Math.max(m,amt),fecha:val('pe-cfecha')||todayISO()}; }
+  const patch={estado:e,factura:fac,cobro,conciliadoFecha:e==='conciliado'?(val('pe-confecha')||todayISO()):null,nota:(val('pe-nota')||'').trim(),paid:(e==='cobrado'||e==='conciliado'),paidDate:cobro?cobro.fecha:null};
+  store.updatePayment(x.id,patch); qm=null; render(); }
+
 /* ================== SESIÓN CON EL CLIENTE (página pública de una subtarea con participantes del cliente) ================== */
 function sesOf(s){ const x=s.sesion||{}; return {objetivo:x.objetivo||'',lugar:Object.assign({tipo:'meet',link:'',direccion:''},x.lugar||{}),temario:x.temario||[],respuestas:x.respuestas||[],reabierta:x.reabierta||0,respAck:x.respAck||{}}; }
 function sesLast(s){ const r=sesOf(s).respuestas; return r.length?r[r.length-1]:null; }
