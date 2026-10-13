@@ -2725,7 +2725,7 @@ document.addEventListener('click',ev=>{ if(notifOpen&&!ev.target.closest('#notif
 
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
-function openSubEdit(tid,sid){ subEd={tid,sid}; clientPop=null; render(); setTimeout(()=>{ if(typeof smFreqChange==='function') smFreqChange(); },0); }
+function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
 function openClientPop(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); clientPop={tid,sid,sel:((sub&&sub.invitados)||[]).slice(),adding:false}; render(); }
 function closeClientPop(){ clientPop=null; render(); }
@@ -2750,24 +2750,44 @@ function subEditModal(){
         <div class="hint">La <b>fecha</b> de arriba es el inicio de la serie. Cada repetición queda como una subtarea con el mismo responsable, hora y duración; si la borras, solo se omite esa. Al cambiar la regla se regeneran las repeticiones futuras que aún no están hechas.</div></div></div>`:'';
   const parentOpts=`<option value="">— Ninguna (nivel principal) —</option>`+(t.subtasks||[]).filter(m=>!subIsChild(t,m)&&m.id!==s.id).map(m=>`<option value="${m.id}" ${s.parentId===m.id?'selected':''}>${esc(m.name)}</option>`).join('');
   const bad=(v)=>v?'':' sm-miss';
+  const repAllowed=!s0.parentId&&!s0.seriesId; const repMode=(s0.isSeries||sr.freq)?'cal':(s.repeatAfter?'after':'none'); const missN=subMissing(s0).length; const tab=subEd.tab||'datos';
+  const smTabsBar=`<div class="sm-tabs"><button type="button" class="sm-tab ${tab==='datos'?'on':''}" data-tab="datos" onclick="smTab('datos')">📝 Datos${missN?'<b class="sm-dot"></b>':''}</button><button type="button" class="sm-tab ${tab==='nuwek'?'on':''}" data-tab="nuwek" onclick="smTab('nuwek')">👥 Equipo Nuwek <i id="sm-n-nuwek"></i></button><button type="button" class="sm-tab ${tab==='cli'?'on':''}" data-tab="cli" onclick="smTab('cli')">🤝 Cliente <i id="sm-n-cli"></i></button>${repAllowed?`<button type="button" class="sm-tab ${tab==='rep'?'on':''}" data-tab="rep" onclick="smTab('rep')">↻ Repetir <i id="sm-n-rep"></i></button>`:''}</div>`;
   return `<div class="modal active" style="z-index:120" onclick="if(event.target===this)closeSubEdit()"><div class="modal-card" style="max-width:640px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(t.name)}</div><h3 style="margin:8px 0 0">Editar ${s.parentId?'sub-subtarea':'subtarea'}</h3></div><button class="x" onclick="closeSubEdit()">×</button></div></div>
     <div class="m-body">
-      <div class="field"><label>Nombre</label><input id="sm-name" value="${esc(s.name)}"></div>
-      <div class="sm-req-note">Obligatorios: responsable, fecha, hora y estimación de tiempo. Si falta alguno, el lápiz se queda en rojo.</div>
-      <div class="field row"><div><label>Responsable *</label><select id="sm-person" class="${bad(s.personId).trim()}">${persOpts}</select></div>
-        <div><label>${s0.isSeries?'Inicio de la serie *':'Fecha *'}</label><input id="sm-date" type="date" value="${s.date||''}" class="${bad(s.date).trim()}" oninput="smDateChange()" ${dateLocked?`disabled title="${SUB_DATE_MSG}"`:''}></div></div>
-      <div class="field row"><div><label>Hora *</label><input id="sm-time" type="time" value="${s.time||''}" class="${bad(s.time).trim()}"></div>
-        <div><label>Cuánto tardará *</label><select id="sm-dur" class="${bad(s.durMin).trim()}">${durOpts}</select></div></div>
-      <div class="field"><label>Etapa</label><select id="sm-etapa" onchange="smEtapaChange(this.value)" ${dateLocked||!etapas.length?'disabled':''}>${etOpts}</select><div class="hint">La etapa sale de la fecha; al elegir otra, la fecha se mueve al inicio de esa etapa.</div></div>
-      <div class="field"><label>Quién más del equipo Nuwek participa</label><div class="gf-list">${team}</div></div>
-      <div class="field"><label>Quién del equipo del cliente participa</label><div class="gf-list">${cli}</div></div>
-      ${canParent?`<div class="field"><label>Dentro de</label><select id="sm-parent">${parentOpts}</select></div>`:''}
-      ${serSec}
-      ${(!s.parentId&&!s0.isSeries&&!s0.seriesId)?`<div class="field"><label>↻ Repetir después de terminarla</label><div class="rep-row"><input id="sm-rep" type="number" min="1" placeholder="Días" value="${s.repeatAfter||''}"><span class="muted">días después de terminar</span>${[7,15,30,45,60].map(n=>`<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=${n}">${n}</button>`).join('')}<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=''">Quitar</button></div><div class="hint">Al palomearla, se crea la siguiente con su fecha = el día que la termines + N días, sin importar el calendario.</div></div>`:''}
+      ${smTabsBar}
+      <div class="sm-pane" data-pane="datos">
+        <div class="field"><label>Nombre</label><input id="sm-name" value="${esc(s.name)}"></div>
+        <div class="sm-req-note">Obligatorios: responsable, fecha, hora y estimación de tiempo. Si falta alguno, el lápiz se queda en rojo.</div>
+        <div class="field row"><div><label>Responsable *</label><select id="sm-person" class="${bad(s.personId).trim()}">${persOpts}</select></div>
+          <div><label>${s0.isSeries?'Inicio de la serie *':'Fecha *'}</label><input id="sm-date" type="date" value="${s.date||''}" class="${bad(s.date).trim()}" oninput="smDateChange()" ${dateLocked?`disabled title="${SUB_DATE_MSG}"`:''}></div></div>
+        <div class="field row"><div><label>Hora *</label><input id="sm-time" type="time" value="${s.time||''}" class="${bad(s.time).trim()}"></div>
+          <div><label>Cuánto tardará *</label><select id="sm-dur" class="${bad(s.durMin).trim()}">${durOpts}</select></div></div>
+        <div class="field"><label>Etapa</label><select id="sm-etapa" onchange="smEtapaChange(this.value)" ${dateLocked||!etapas.length?'disabled':''}>${etOpts}</select><div class="hint">La etapa sale de la fecha; al elegir otra, la fecha se mueve al inicio de esa etapa.</div></div>
+        ${canParent?`<div class="field"><label>Dentro de</label><select id="sm-parent">${parentOpts}</select></div>`:''}
+      </div>
+      <div class="sm-pane" data-pane="nuwek" style="display:none"><div class="field"><label>Quién más del equipo Nuwek participa</label><div class="gf-list" onchange="smCount()">${team}</div><div class="hint">Les aparece en su calendario y les llega un aviso para confirmar que la vieron.</div></div></div>
+      <div class="sm-pane" data-pane="cli" style="display:none"><div class="field"><label>Quién del equipo del cliente participa</label><div class="gf-list" onchange="smCount()">${cli}</div></div></div>
+      ${repAllowed?`<div class="sm-pane" data-pane="rep" style="display:none">
+        <input type="hidden" id="sm-mode" value="${repMode}">
+        <div class="sm-subtabs"><button type="button" class="sm-sub ${repMode==='none'?'on':''}" data-mode="none" onclick="smRepMode('none')">No se repite</button><button type="button" class="sm-sub ${repMode==='cal'?'on':''}" data-mode="cal" onclick="smRepMode('cal')">📅 Por calendario</button><button type="button" class="sm-sub ${repMode==='after'?'on':''}" data-mode="after" onclick="smRepMode('after')">⏱ Después de terminarla</button></div>
+        <div class="sm-rpane" data-rpane="none" style="${repMode==='none'?'':'display:none'}"><div class="muted" style="padding:10px 2px">Esta subtarea no se repite. Elige una de las otras pestañas para que se repita.</div></div>
+        <div class="sm-rpane" data-rpane="cal" style="${repMode==='cal'?'':'display:none'}">${serSec}</div>
+        <div class="sm-rpane" data-rpane="after" style="${repMode==='after'?'':'display:none'}"><div class="field"><label>↻ Repetir después de terminarla</label><div class="rep-row"><input id="sm-rep" type="number" min="1" placeholder="Días" value="${s.repeatAfter||''}"><span class="muted">días después de terminar</span>${[7,15,30,45,60].map(n=>`<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=${n}">${n}</button>`).join('')}<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=''">Quitar</button></div><div class="hint">Al palomearla, se crea la siguiente con su fecha = el día que la termines + N días, sin importar el calendario.</div></div></div>
+      </div>`:''}
       <div class="wiz-actions"><button class="btn ghost" onclick="closeSubEdit()">Cancelar</button><button class="btn" onclick="saveSubModal()">Guardar</button></div>
     </div></div></div>`;
 }
+function smTab(name){ if(subEd) subEd.tab=name;
+  document.querySelectorAll('.sm-tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===name));
+  document.querySelectorAll('.sm-pane').forEach(p=>{ p.style.display=(p.dataset.pane===name)?'block':'none'; }); if(name==='rep') smFreqChange(); }
+function smRepMode(mode){ const h=document.getElementById('sm-mode'); if(h) h.value=mode;
+  document.querySelectorAll('.sm-sub').forEach(b=>b.classList.toggle('on',b.dataset.mode===mode));
+  document.querySelectorAll('.sm-rpane').forEach(p=>{ p.style.display=(p.dataset.rpane===mode)?'block':'none'; });
+  if(mode==='cal'){ const f=document.getElementById('sm-freq'); if(f&&!f.value&&!f.disabled) f.value='weekly'; smFreqChange(); } smCount(); }
+function smCount(){ const set=(id,n,txt)=>{ const e=document.getElementById(id); if(e){ e.textContent=n?(txt||n):''; e.style.display=n?'inline-flex':'none'; } };
+  set('sm-n-nuwek',document.querySelectorAll('.sm-team:checked').length); set('sm-n-cli',document.querySelectorAll('.sm-cli:checked').length);
+  const m=(document.getElementById('sm-mode')||{}).value; set('sm-n-rep',(m&&m!=='none')?1:0,'●'); }
 function smFreqChange(){ const f=val('sm-freq'); const box=document.getElementById('sm-ser'); if(!box) return; box.style.display=f?'block':'none';
   const wk=document.getElementById('sm-ser-wk'), mo=document.getElementById('sm-ser-mo'); if(wk) wk.style.display=(f==='weekly')?'block':'none'; if(mo) mo.style.display=(f==='monthly')?'block':'none';
   const e=val('sm-end'); const u=document.getElementById('sm-until'), c=document.getElementById('sm-count'); if(u) u.style.display=(e==='date')?'inline-block':'none'; if(c) c.style.display=(e==='count')?'inline-block':'none'; }
@@ -2779,14 +2799,15 @@ function saveSubModal(){
   const team=[...document.querySelectorAll('.sm-team:checked')].map(i=>i.value).filter(id=>id!==person);
   const cli=[...document.querySelectorAll('.sm-cli:checked')].map(i=>i.value);
   const patch={name,personId:person,date:val('sm-date')||t.dueDate||'',time:val('sm-time')||'',durMin:+val('sm-dur')||null,team,invitados:cli};
-  if(document.getElementById('sm-rep')) patch.repeatAfter=Math.max(0,parseInt(val('sm-rep'),10)||0)||null;
+  const repMode=document.getElementById('sm-mode')?document.getElementById('sm-mode').value:null;
+  if(document.getElementById('sm-rep')) patch.repeatAfter=(repMode==='after')?(Math.max(0,parseInt(val('sm-rep'),10)||0)||null):null;
   // a quién se le avisa: los que se agregaron ahora (por quién y cuándo); si alguien sale, se limpia su aviso
   const srcOld=s.isSeries?seriesTpl(s):s; const oldTeam=srcOld.team||[]; const info=Object.assign({},srcOld.teamInfo||{}); const ack=Object.assign({},srcOld.teamAck||{}); const now=new Date().toISOString();
   team.filter(id=>!oldTeam.includes(id)).forEach(id=>{ info[id]={by:currentUser,ts:now}; delete ack[id]; });
   oldTeam.filter(id=>!team.includes(id)).forEach(id=>{ delete info[id]; delete ack[id]; });
   patch.teamInfo=info; patch.teamAck=ack;
   const pe=document.getElementById('sm-parent'); if(pe){ const np=pe.value||''; const okP=!np||(t.subtasks.some(m=>m.id===np&&!m.parentId)&&!subKids(t,sid).length&&np!==sid); if(okP) patch.parentId=np; }
-  let freq=document.getElementById('sm-freq')?val('sm-freq'):null; const ruleLocked=!canSubDate(); if(ruleLocked) freq=s.isSeries?s.series.freq:null;   // las reglas de calendario son fechas: solo PM/Gerencia/Dirección
+  let freq=document.getElementById('sm-freq')?val('sm-freq'):null; const ruleLocked=!canSubDate(); if(!ruleLocked&&repMode&&repMode!=='cal') freq=''; if(ruleLocked) freq=s.isSeries?s.series.freq:null;   // las reglas de calendario son fechas: solo PM/Gerencia/Dirección
   if(freq){   // ---- serie por calendario ----
     const days=[...document.querySelectorAll('.sm-wd:checked')].map(i=>+i.value);
     if(!ruleLocked&&freq==='weekly'&&!days.length){ alert('Elige al menos un día de la semana.'); return; }

@@ -822,3 +822,22 @@
 
   .sub-chip.ser{background:#e2ebe6;color:var(--green);font-weight:700}
   .sm-series{background:#f6f5ee;border-radius:12px;padding:10px 12px}
+
+  /* Pestañas del modal de subtarea */
+  .sm-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;border-bottom:1.5px solid var(--line);padding-bottom:10px}
+  .sm-tab{position:relative;border:1.5px solid var(--line);background:#fff;border-radius:99px;padding:7px 14px;font-size:.84rem;font-weight:700;color:var(--muted);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px}
+  .sm-tab:hover{background:#f6f5ee}
+  .sm-tab.on{background:var(--green);border-color:var(--green);color:#fff}
+  .sm-tab i{font-style:normal;min-width:18px;height:18px;border-radius:9px;background:#e53935;color:#fff;font-size:.68rem;font-weight:800;display:none;align-items:center;justify-content:center;padding:0 5px}
+  .sm-tab.on i{background:#fff;color:var(--green)}
+  .sm-dot{width:9px;height:9px;border-radius:50%;background:#e53935;display:inline-block}
+  .sm-subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .sm-sub{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:7px 12px;font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted)}
+  .sm-sub.on{border-color:var(--green);background:#eef6f1;color:var(--green)}
+  .sm-rpane .sm-series{background:none;padding:0}
+  .sm-rpane .sm-series>label{display:none}
+  /* Pantalla de entrada en celular: círculos más pequeños, 3 por fila */
+  @media(max-width:640px){
+    .login-grid{grid-template-columns:repeat(3,min(104px,26vw));gap:18px 16px;padding:8px}
+    .login-av{border-width:3px;font-size:2rem}
+  }
