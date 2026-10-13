@@ -908,3 +908,16 @@
   .vb-compact h4{font-size:.78rem;margin:8px 0 3px !important}
   .vb-compact .vb-tips{font-size:.66rem;line-height:1.35}.vb-compact .vb-tips li{margin:2px 0}
   .vb-compact .wiz-actions{margin-top:8px}.vb-compact .wiz-actions .btn{padding:6px 14px;font-size:.78rem}
+
+  .sub-who{font-size:.72rem;font-weight:700;color:var(--green);max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:-1px}
+  .sub-who.none{color:#a0a8a3;font-weight:500;font-style:italic}
+  .sub-chip.cita{background:#eaf1fb;color:#2f5fa8;font-weight:700}
+  .cita-list{display:flex;flex-direction:column;gap:8px}
+  .cita-row{display:flex;gap:14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 14px;box-shadow:var(--shadow)}
+  .cita-when{display:flex;flex-direction:column;min-width:54px;text-align:center;font-size:.8rem}.cita-when span{color:var(--muted);font-size:.72rem}
+  .cita-main{flex:1;min-width:0}.cita-nm{font-weight:700;overflow-wrap:anywhere}
+  .cita-razon{font-size:.78rem;color:#444;margin-top:3px}
+  .cita-prop{font-size:.74rem;color:#9a7a00;margin-top:3px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}.cita-prop span{background:#fff7e0;border-radius:99px;padding:1px 9px;font-weight:600}
+  .cita-side{text-align:right;flex-shrink:0}.cita-st{font-size:.72rem;font-weight:700;border-radius:99px;padding:3px 10px;white-space:nowrap}
+  .cita-leg{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;font-weight:700;margin:6px 0 10px}
+  @media(max-width:560px){.sub-who{display:none}.cita-row{flex-wrap:wrap}}

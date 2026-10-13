@@ -767,7 +767,8 @@ function viewCliente(){
       </dl>
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
-    <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>`;
+    <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>
+    ${citasHistorialHtml(c)}`;
 }
 
 function projectHealth(pid){
@@ -1098,7 +1099,7 @@ function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){ale
   const i=list.findIndex(x=>x.id===f.id); if(i>=0) list[i]=f; else list.push(f);
   saveGestFilters(list); qm=null; applyGestFilter(f.id); }
 function delGestFilter(){ if(!confirm('¿Eliminar esta vista?')) return; saveGestFilters(gestFilters().filter(x=>x.id!==qm.fid)); if(gestFilterId===qm.fid) clearGestFilter(true); qm=null; render(); }
-function setGestSub(v){ gestSub=v; render(); }
+function setGestSub(v){ gestSub=v; if(v==='citas') gestScope='mes'; render(); }
 function setGestScope(s){ gestScope=s; render(); }
 function setGestProject(v){ gestProject=v; render(); }
 function setGestPerson(v){ gestPerson=v; render(); }
@@ -1129,9 +1130,9 @@ function viewGestion(){
   const R=gestRange();
   const projOpts='<option value="">Todos los proyectos</option>'+store.d.projects.map(p=>`<option value="${p.id}" ${gestProject===p.id?'selected':''}>${store.client(p.clientId).name} · ${p.name}</option>`).join('');
   const persOpts='<option value="">Equipo Nuwek</option>'+store.activeStaff().map(u=>`<option value="${u.id}" ${gestPerson===u.id?'selected':''}>${u.name}</option>`).join('');
-  const body = gestSub==='asig' ? gestAsignaciones(R) : gestCalendar(R);
+  const body = gestSub==='asig' ? gestAsignaciones(R) : gestSub==='citas' ? gestCitas() : gestCalendar(R);
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Vista de mando · ${gestSub==='asig'?'quién trabaja en qué':'calendario del equipo'}</div></div>
-    <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button></div>
+    <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button></div>
     <div class="gf-bar"><span class="glabel">Vistas</span>
       <button class="gf-chip${gestFilterId?'':' on'}" onclick="clearGestFilter()">Todo</button>
       ${gestFilters().map(f=>`<button class="gf-chip${f.id===gestFilterId?' on':''}" onclick="applyGestFilter('${f.id}')">${esc(f.name)}${f.id===gestFilterId?` <span class="gf-ed" title="Editar vista" onclick="event.stopPropagation();openGestFilterForm('${f.id}')">✏️</span>`:''}</button>`).join('')}
@@ -1154,7 +1155,12 @@ function gestCalendar(R){
   if(gestScope==='semana') return gestWeekView(byDay);
   return gestMonthView(byDay);
 }
-function gestMonthView(byDay){
+function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
+function gestCitas(){ let all=citasAll().filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
+  const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
+  const [y,m]=gestAnchor.split('-').map(Number); const mi=all.filter(x=>x.s.date.slice(0,7)===gestAnchor.slice(0,7)); const n=k=>mi.filter(x=>x.est.k===k).length;
+  return `<div class="cita-leg"><span style="color:#1f7a44">● Confirmadas ${n('confirmado')}</span><span style="color:#9a7a00">● Piden reprogramar ${n('reprogramar')}</span><span style="color:#c0392b">● Canceladas ${n('cancelado')}</span><span style="color:#6b7a73">● Sin respuesta ${n('pendiente')}</span></div>`+gestMonthView(byDay,citaChip); }
+function gestMonthView(byDay,chipFn){ chipFn=chipFn||gestChip;
   const pad=n=>String(n).padStart(2,'0'); const [y,m]=gestAnchor.split('-').map(Number);
   const last=new Date(Date.UTC(y,m,0)).getUTCDate();
   const firstISO=`${y}-${pad(m)}-01`, lastISO=`${y}-${pad(m)}-${pad(last)}`;
@@ -1163,7 +1169,7 @@ function gestMonthView(byDay){
   let cells=''; let cur=startSun;
   while(cur<=endSat){
     const inMonth=cur.slice(0,7)===`${y}-${pad(m)}`; const items=byDay[cur]||[]; const MAXC=3;
-    const shown=items.slice(0,MAXC).map(gestChip).join('');
+    const shown=items.slice(0,MAXC).map(chipFn).join('');
     const more=items.length>MAXC?`<div class="gc-more" onclick="gestGoDay('${cur}')">+${items.length-MAXC} más</div>`:'';
     cells+=`<div class="gc-cell ${inMonth?'':'out'} ${cur===today?'today':''}"><div class="gc-dn">${+cur.split('-')[2]}</div>${shown}${more}</div>`;
     cur=addDaysISO(cur,1);
@@ -2204,7 +2210,8 @@ function taskBody(t,panel){
     if(anyOut) etNote+=` <div class="etapa-badge out" style="display:inline-block;margin-top:8px">⚠️ Subtareas fuera de las etapas definidas</div>`;
   }
   const clientPeople2=c.people;
-  const subs=subOrder(t).map(({s,depth,kids})=>{
+  const _ord=subOrder(t); const nCita=_ord.filter(x=>subHasCita(x.s)).length; const _ordF=subOnlyCita?_ord.filter(x=>x.depth===0?(subHasCita(x.s)||x.kids.some(subHasCita)):subHasCita(x.s)):_ord;
+  const subs=_ordF.map(({s,depth,kids})=>{
     const _t=s.isSeries?seriesTpl(s):s; const per=store.person(_t.personId); const timing=timingSub===t.id+':'+s.id; const miss=subMissing(s); const cliN=(_t.invitados||[]).length;
     const canChk=canCheckSub(s); const locked=isColab()&&subTimeLocked(s); const chkClickable=canChk&&!locked&&!s.isSeries;
     const lockTag=(s.done&&isColab())?(subTimeLocked(s)?` <span class="sub-lock">🔒</span>`:(s.doneAt?` <span class="sub-editable" title="Editable hasta ${subEditUntil(s)}">✏️ ${subEditUntil(s)}</span>`:'')):'';
@@ -2216,11 +2223,13 @@ function taskBody(t,panel){
     const serChip=s.isSeries?`<span class="sub-chip ser" title="Serie por calendario">↻ ${seriesLabel(s.series)}</span>${nextOcc?`<span class="sub-chip" title="Próxima repetición pendiente">Próxima: ${dLabel(nextOcc)}</span>`:''}`:'';
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🤝 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
-    const chips=`${ackBtn}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const citaBase=(!_l&&subHasCita(s))?`<span class="sub-chip cita" title="Tiene cita con el cliente">📅 Cita</span>`:'';
+    const chips=`${ackBtn}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
     const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}</span>`;
     const right=timing
       ? `<div class="sub-time"><input type="number" min="1" id="stime-${s.id}" placeholder="min"><button class="mini ok" onclick="confirmSubTime('${t.id}','${s.id}')">✓</button><button class="mini no" onclick="cancelSubTime()">×</button></div>`
-      : `<div class="sub-btns">${av}
+      : `<div class="sub-btns">${whoName}${av}
           <button class="sub-ib${cliN?' on':''}" title="${cliN?'Participa el cliente ('+cliN+')':'Participación del cliente: nadie asignado'}" onclick="openClientPop('${t.id}','${s.id}')">🤝${cliN?`<i>${cliN}</i>`:''}</button>
           ${(depth===0&&!s.isSeries)?`<button class="sub-ib" title="Agregar sub-subtarea dentro de esta" onclick="openAddChild('${t.id}','${s.id}')">↳＋</button>`:`<span class="sub-ib-sp"></span>`}
           <button class="sub-ib${miss.length?' bad':''}" title="${miss.length?'Falta: '+miss.join(', ')+' — clic para completar':'Editar'}" onclick="openSubEdit('${t.id}','${s.id}')">✏️</button>
@@ -2288,7 +2297,7 @@ function taskBody(t,panel){
     </div>
     <div class="m-body" ${editingTask===t.id?'style="display:none"':''}>
       <div class="m-sec"><h4>Descripción</h4><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
-      <div class="m-sec"><div class="subs-head"><h4 style="margin:0;display:flex;align-items:center;gap:8px">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length}) <button type="button" class="info-i" title="Cómo escribir subtareas y sub-subtareas" onclick="openVerbInfo()">i</button></h4>
+      <div class="m-sec"><div class="subs-head"><h4 style="margin:0;display:flex;align-items:center;gap:8px">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length}) <button type="button" class="info-i" title="Cómo escribir subtareas y sub-subtareas" onclick="openVerbInfo()">i</button>${(nCita||subOnlyCita)?`<button type="button" class="sm-sub ${subOnlyCita?'on':''}" style="padding:3px 10px;font-size:.72rem" onclick="toggleCitaFilter()" title="Mostrar solo las subtareas con cita">📅 Con cita (${nCita})</button>`:''}</h4>
         <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${!isColab()?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
         ${(subView==='log'&&!isColab())?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
         <div class="inline-add">
@@ -2747,7 +2756,7 @@ function notifUpdate(){
     if(it.type==='m'){ const cm=it.cm; const a=store.person(cm.userId), t=store.task(cm.taskId); const txt=(cm.text||'').replace(/\s+/g,' ').slice(0,90);
       return `<div class="nf-it" onclick="goNotif('${cm.taskId}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te mencionó <span class="muted">· ${ago(cm.ts)}</span></div><div class="nf-t">${mdEsc(t.name)}</div><div class="nf-s">${mdEsc(txt)}</div></div><button class="nf-ok" title="Ya lo vi" onclick="event.stopPropagation();markRead('${cm.id}')">✓</button></div>`; }
     if(it.type==='c'){ const st=SES_ST[it.last.estado]; const cn=(store.client((store.project(it.t.projectId)||{}).clientId)||{}).name||'El cliente';
-      return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:${st.c}">${it.last.estado==='confirmado'?'✓':it.last.estado==='cancelado'?'✕':'↻'}</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(cn)}</b> ${it.last.estado==='confirmado'?'confirmó':it.last.estado==='cancelado'?'canceló':'pidió reprogramar'} <span class="muted">· ${ago(it.last.ts)}</span></div><div class="nf-t">📅 ${mdEsc(it.s.name)}</div><div class="nf-s">${it.last.razon?'«'+mdEsc(it.last.razon)+'»':mdEsc(it.t.name)}</div></div><button class="nf-ok" title="Ya la vi" onclick="event.stopPropagation();ackClientResp('${it.t.id}','${it.s.id}')">✓</button></div>`; }
+      return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:${st.c}">${it.last.estado==='confirmado'?'✓':it.last.estado==='cancelado'?'✕':'↻'}</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(cn)}</b> ${it.last.estado==='confirmado'?'confirmó':it.last.estado==='cancelado'?'canceló':'pidió reprogramar'} <span class="muted">· ${ago(it.last.ts)}</span></div><div class="nf-t">📅 ${mdEsc(it.s.name)}</div><div class="nf-s">${it.last.razon?'«'+mdEsc(it.last.razon)+'»':mdEsc(it.t.name)}</div>${(it.last.propuestas||[]).length?`<div class="nf-s" style="color:#9a7a00;font-weight:600">Propone: ${(it.last.propuestas||[]).map(x=>mdEsc(fmtPropuesta(x))).join(' · ')}</div>`:''}</div><button class="nf-ok" title="Ya la vi" onclick="event.stopPropagation();ackClientResp('${it.t.id}','${it.s.id}')">✓</button></div>`; }
     const a=store.person(it.by); const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
     return `<div class="nf-it" onclick="goNotif('${it.t.id}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te agregó como participante <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">🤝 ${mdEsc(it.s.name)}</div><div class="nf-s">${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Ya la vi y la atendí" onclick="event.stopPropagation();ackTeam('${it.t.id}','${it.s.id}')">✓</button></div>`; }).join('');
   r.innerHTML=`${notifOpen?`<div class="nf-pop"><div class="nf-pop-h">Pendientes por atender <span class="nf-cnt">${list.length}</span></div><div class="nf-list">${items||'<div class="nf-empty">🎉 Nada pendiente</div>'}</div></div>`:''}
@@ -2877,6 +2886,7 @@ function saveSubModal(){
     const sesNew=Object.assign({},s.sesion||{},{objetivo:(val('sm-obj')||'').trim(),lugar:{tipo:val('sm-ltipo')||'meet',link:(val('sm-llink')||'').trim(),direccion:(val('sm-ldir')||'').trim()},temario:tem});
     if(sesNew.objetivo||sesNew.lugar.link||sesNew.lugar.direccion||tem.length||(s.sesion&&(s.sesion.respuestas||[]).length)) patch.sesion=sesNew;
   }
+  { const lr=sesLast(s); if(lr&&lr.estado==='reprogramar'&&(patch.date!==s.date||patch.time!==s.time)){ patch.sesion=Object.assign({},patch.sesion||s.sesion||{},{reabierta:Date.now()}); } }   // nueva fecha: el cliente vuelve a poder confirmar
   const pe=document.getElementById('sm-parent'); if(pe){ const np=pe.value||''; const okP=!np||(t.subtasks.some(m=>m.id===np&&!m.parentId)&&!subKids(t,sid).length&&np!==sid); if(okP) patch.parentId=np; }
   let freq=document.getElementById('sm-freq')?val('sm-freq'):null; const ruleLocked=!canSubDate(); if(!ruleLocked&&repMode&&repMode!=='cal') freq=''; if(ruleLocked) freq=s.isSeries?s.series.freq:null;   // las reglas de calendario son fechas: solo PM/Gerencia/Dirección
   if(freq){   // ---- serie por calendario ----
@@ -2925,6 +2935,26 @@ function clientPopModal(){
       <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}')">🔗 Copiar link de la sesión</button> <button class="btn ghost sm" onclick="closeClientPop();openSubEdit('${t.id}','${s.id}');setTimeout(()=>smTab('ses'),40)">📅 Configurar sesión</button></div></div></div></div>`;
 }
 
+/* ===== Citas con el cliente: subtareas / sub-subtareas con participantes del cliente o sesión configurada ===== */
+function subHasCita(s){ const src=s.isSeries?seriesTpl(s):s; if((src.invitados||[]).length) return true; const x=s.sesion; return !!(x&&(x.objetivo||(x.lugar&&(x.lugar.link||x.lugar.direccion))||(x.temario||[]).length||(x.respuestas||[]).length)); }
+function citaEstadoInfo(s){ const l=sesLast(s); return l?{k:l.estado,t:({confirmado:'Confirmada',cancelado:'Cancelada',reprogramar:'Pide reprogramar'})[l.estado],c:SES_ST[l.estado].c,bg:SES_ST[l.estado].bg,razon:l.razon,prop:l.propuestas||[],ts:l.ts}:{k:'pendiente',t:'Sin respuesta',c:'#6b7a73',bg:'#eef0ec',razon:'',prop:[],ts:''}; }
+function citasAll(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; const c=store.client(p.clientId)||{name:'',id:''};
+  (t.subtasks||[]).forEach(s=>{ if(s.isSeries||!subHasCita(s)) return; out.push({s,t,p,c,est:citaEstadoInfo(s)}); }); });
+  return out; }
+function fmtPropuesta(pr){ if(!pr||!pr.fecha) return ''; const d=new Date(pr.fecha+'T00:00:00'); return ['dom','lun','mar','mié','jue','vie','sáb'][d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3).toLowerCase()+(pr.hora?' · '+pr.hora:''); }
+let citaFilter='todas', subOnlyCita=false;
+function setCitaFilter(v){ citaFilter=v; render(); }
+function toggleCitaFilter(){ subOnlyCita=!subOnlyCita; render(); }
+function citaCard(it,showClient){ const {s,t,p,c,est}=it; const link=s.shareToken?'':'';
+  return `<div class="cita-row" style="border-left:4px solid ${est.c}"><div class="cita-when"><b>${s.date?dLabel(s.date):'sin fecha'}</b><span>${s.time||''}</span></div>
+    <div class="cita-main"><div class="cita-nm">${esc(s.name)}</div><div class="muted" style="font-size:.76rem">${showClient?esc(c.name)+' · ':''}${esc(p.name)} · ${esc(t.name)}</div>
+      ${est.razon?`<div class="cita-razon">«${esc(est.razon)}»</div>`:''}${est.prop.length?`<div class="cita-prop">Propone: ${est.prop.map(x=>`<span>${esc(fmtPropuesta(x))}</span>`).join('')}</div>`:''}</div>
+    <div class="cita-side"><span class="cita-st" style="background:${est.bg};color:${est.c}">${est.t}</span><div style="display:flex;gap:5px;margin-top:6px"><button class="btn ghost sm" onclick="openTask('${t.id}')">Abrir</button><button class="btn ghost sm" title="Copiar link de la sesión" onclick="copySessionLink('${t.id}','${s.id}')">🔗</button></div></div></div>`; }
+function citasHistorialHtml(c){
+  const all=citasAll().filter(x=>x.c.id===c.id).sort((a,b)=>((b.s.date||'')+(b.s.time||''))<((a.s.date||'')+(a.s.time||''))?-1:1);
+  const cnt=k=>all.filter(x=>x.est.k===k).length; const list=all.filter(x=>citaFilter==='todas'||x.est.k===citaFilter);
+  return `<div class="sec-title"><h2>📅 Historial de citas</h2><select class="filter-val" onchange="setCitaFilter(this.value)" style="width:auto"><option value="todas" ${citaFilter==='todas'?'selected':''}>Todas (${all.length})</option><option value="pendiente" ${citaFilter==='pendiente'?'selected':''}>Sin respuesta (${cnt('pendiente')})</option><option value="confirmado" ${citaFilter==='confirmado'?'selected':''}>Confirmadas (${cnt('confirmado')})</option><option value="reprogramar" ${citaFilter==='reprogramar'?'selected':''}>Piden reprogramar (${cnt('reprogramar')})</option><option value="cancelado" ${citaFilter==='cancelado'?'selected':''}>Canceladas (${cnt('cancelado')})</option></select></div>
+    <div class="cita-list">${list.map(x=>citaCard(x,false)).join('')||'<div class="muted">Este cliente aún no tiene citas. Se crean al agregar participantes del cliente (🤝) a una subtarea.</div>'}</div>`; }
 /* ================== SESIÓN CON EL CLIENTE (página pública de una subtarea con participantes del cliente) ================== */
 function sesOf(s){ const x=s.sesion||{}; return {objetivo:x.objetivo||'',lugar:Object.assign({tipo:'meet',link:'',direccion:''},x.lugar||{}),temario:x.temario||[],respuestas:x.respuestas||[],reabierta:x.reabierta||0,respAck:x.respAck||{}}; }
 function sesLast(s){ const r=sesOf(s).respuestas; return r.length?r[r.length-1]:null; }
@@ -2943,11 +2973,12 @@ function smTemRow(it,i,staffOpts){ const fromClient=it.por==='cliente'&&it.by===
 function smTemAdd(){ const box=document.getElementById('sm-tem'); if(!box) return; const t=store.task(subEd.tid); const staffOpts=store.activeStaff().map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
   const div=document.createElement('div'); div.innerHTML=smTemRow({id:'tm_'+Date.now().toString(36),titulo:'',por:'nuwek',by:currentUser,ts:new Date().toISOString()},0,staffOpts); box.appendChild(div.firstElementChild); const inp=box.lastElementChild.querySelector('.tem-t'); if(inp) inp.focus(); }
 function smLugarChange(){ const k=val('sm-ltipo'); const a=document.getElementById('sm-l-meet'), b=document.getElementById('sm-l-pres'); if(a) a.style.display=(k==='meet')?'block':'none'; if(b) b.style.display=(k==='presencial')?'block':'none'; }
+function smUseDate(f,h){ const d=document.getElementById('sm-date'); if(d&&!d.disabled){ d.value=f; } else { alert(SUB_DATE_MSG); return; } const t=document.getElementById('sm-time'); if(t&&h) t.value=h; smDateChange(); smTab('datos'); shareToast('📅 Fecha cargada. Guarda para reprogramar y reabrir la sesión al cliente.'); }
 function smReopen(){ const {tid,sid}=subEd; const t=store.task(tid); const s=t.subtasks.find(x=>x.id===sid); const ses=Object.assign({},s.sesion||{}); ses.reabierta=Date.now(); store.updateSubtask(tid,sid,{sesion:ses}); logEvent(tid,'Permitió que el cliente responda de nuevo la sesión «'+s.name+'»'); openSubEdit(tid,sid); setTimeout(()=>smTab('ses'),30); }
 function smSesionPane(s0,t,c){
   const ses=sesOf(s0); const staffOpts=store.activeStaff().map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join(''); const last=sesLast(s0);
   const st=last&&SES_ST[last.estado];
-  const resp=last?`<div class="ses-resp" style="background:${st.bg};color:${st.c}"><b>${st.t}</b> · ${esc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div style="margin-top:4px;color:#333">«${esc(last.razon)}»</div>`:''}${sesCanRespond(s0)?'':`<div style="margin-top:6px"><button type="button" class="btn ghost sm" onclick="smReopen()">Permitir que responda de nuevo</button></div>`}</div>`:'<div class="muted" style="font-size:.82rem">El cliente aún no responde.</div>';
+  const resp=last?`<div class="ses-resp" style="background:${st.bg};color:${st.c}"><b>${st.t}</b> · ${esc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div style="margin-top:4px;color:#333">«${esc(last.razon)}»</div>`:''}${(last.propuestas||[]).length?`<div style="margin-top:8px"><b style="font-size:.8rem">Fechas que propone:</b>${last.propuestas.map(x=>`<div class="rep-row" style="margin-top:4px"><span class="cita-prop"><span>${esc(fmtPropuesta(x))}</span></span><button type="button" class="rep-chip" onclick="smUseDate('${x.fecha}','${x.hora||''}')">Usar esta fecha</button></div>`).join('')}<div class="hint">Al guardar con la fecha nueva, la sesión se reabre para que el cliente la confirme.</div></div>`:''}${sesCanRespond(s0)?'':`<div style="margin-top:6px"><button type="button" class="btn ghost sm" onclick="smReopen()">Permitir que responda de nuevo</button></div>`}</div>`:'<div class="muted" style="font-size:.82rem">El cliente aún no responde.</div>';
   const rows=ses.temario.map((it,i)=>smTemRow(it,i,staffOpts)).join('');
   return `<div class="sm-pane" data-pane="ses" style="display:none">
     <div class="field"><label>Objetivo de la reunión</label><textarea id="sm-obj" rows="3" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-family:inherit">${esc(ses.objetivo)}</textarea></div>
@@ -2982,7 +3013,7 @@ function viewPublicSession(){
   const tem=ses.temario.map((it,i)=>{ const pr=it.por==='cliente'?{logo:true}:store.person(it.personId); return `<div class="ps-tem"><span class="ps-n">${i+1}</span><div class="ps-tt">${mdEsc(it.titulo)}</div>${it.por==='cliente'?`<span class="ps-by" title="${mdEsc(c.name)}">${sesClientLogo(c,34)}<span>${mdEsc(c.name)}</span></span>`:`<span class="ps-by">${sesAv(pr,34)}<span>${mdEsc((pr.name||'').split(' ')[0])}</span></span>`}</div>`; }).join('')||'<div class="muted">Aún sin temario.</div>';
   const canAdd=!(last&&last.estado==='cancelado');
   let actions;
-  if(last&&!sesCanRespond(s)){ const st=SES_ST[last.estado]; actions=`<div class="ps-done" style="background:${st.bg};color:${st.c}"><b>${st.t.replace('El cliente','Tu respuesta:')}</b> · ${mdEsc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div class="ps-razon">Razón: «${mdEsc(last.razon)}»</div>`:''}<div class="muted" style="font-size:.78rem;margin-top:6px">Tu respuesta ya quedó registrada y no se puede modificar. Si necesitas algo más, escríbele a tu contacto en Nuwek.</div></div>`; }
+  if(last&&!sesCanRespond(s)){ const st=SES_ST[last.estado]; actions=`<div class="ps-done" style="background:${st.bg};color:${st.c}"><b>${st.t.replace('El cliente','Tu respuesta:')}</b> · ${mdEsc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div class="ps-razon">Razón: «${mdEsc(last.razon)}»</div>`:''}${(last.propuestas||[]).length?`<div class="ps-razon">Fechas que propusiste: ${(last.propuestas||[]).map(x=>`<b>${mdEsc(fmtPropuesta(x))}</b>`).join(' · ')}</div>`:''}<div class="muted" style="font-size:.78rem;margin-top:6px">Tu respuesta ya quedó registrada y no se puede modificar. Si necesitas algo más, escríbele a tu contacto en Nuwek.</div></div>`; }
   else actions=`<div class="ps-actions"><button class="ps-btn cancel" onclick="openSesModal('cancelado')">CANCELAR</button><button class="ps-btn repro" onclick="openSesModal('reprogramar')">REPROGRAMAR</button><button class="ps-btn ok" onclick="sesConfirmar()">CONFIRMAR</button></div>`;
   return `<div class="pub-wrap">${top}<div class="ps-page">
     <div class="ps-head"><div class="ps-hl">${sesClientLogo(c,54)}<div><div class="ps-eye">Sesión con ${mdEsc(c.name)}</div><h1>${mdEsc(s.name)}</h1></div></div><div class="ps-when">🗓️ ${mdEsc(sesWhen(s))}</div></div>
@@ -2997,7 +3028,7 @@ function closeSesModal(){ sesModal=null; render(); }
 function sesPubModal(){ if(!sesModal) return ''; const f=sesFind(); if(!f||!f.ok) return '';
   const wrap=(title,body)=>`<div class="modal active" style="z-index:150" onclick="if(event.target===this)closeSesModal()"><div class="modal-card" style="max-width:440px"><div class="m-head"><div class="m-top"><h3 style="margin:0">${title}</h3><button class="x" onclick="closeSesModal()">×</button></div></div><div class="m-body">${body}</div></div></div>`;
   if(sesModal.type==='cancelado'||sesModal.type==='reprogramar'){ const cancel=sesModal.type==='cancelado';
-    return wrap(cancel?'Cancelar la sesión':'Pedir reprogramación',`<p class="muted" style="margin-top:0">Cuéntanos la razón${cancel?'':' y, si puedes, qué fechas te acomodan'}. <b>Es obligatoria</b> y, una vez enviada, no se puede editar.</p><textarea id="ps-in" rows="4" style="width:100%;padding:10px;border:2px solid var(--line);border-radius:10px;font-family:inherit" placeholder="${cancel?'Motivo de la cancelación…':'Motivo y fechas posibles…'}"></textarea><div class="wiz-actions"><button class="btn ghost" onclick="closeSesModal()">Volver</button><button class="btn" style="${cancel?'background:#c0392b;border-color:#c0392b':''}" onclick="sesEnviar('${sesModal.type}')">${cancel?'Enviar cancelación':'Enviar solicitud'}</button></div>`); }
+    return wrap(cancel?'Cancelar la sesión':'Pedir reprogramación',`<p class="muted" style="margin-top:0">Cuéntanos la razón${cancel?'':' y, si puedes, qué fechas te acomodan'}. <b>Es obligatoria</b> y, una vez enviada, no se puede editar.</p><textarea id="ps-in" rows="3" style="width:100%;padding:10px;border:2px solid var(--line);border-radius:10px;font-family:inherit" placeholder="${cancel?'Motivo de la cancelación…':'Motivo de la reprogramación…'}"></textarea>${cancel?'':`<div style="margin-top:12px"><b style="font-size:.86rem">Propón fechas que te acomoden *</b> <span class="muted" style="font-size:.76rem">(al menos una, hasta tres)</span>${[0,1,2].map(i=>`<div class="rep-row" style="margin-top:6px"><input type="date" id="ps-d${i}" min="${todayISO()}" style="flex:1"><input type="time" id="ps-h${i}" style="width:120px"></div>`).join('')}</div>`}<div class="wiz-actions"><button class="btn ghost" onclick="closeSesModal()">Volver</button><button class="btn" style="${cancel?'background:#c0392b;border-color:#c0392b':''}" onclick="sesEnviar('${sesModal.type}')">${cancel?'Enviar cancelación':'Enviar solicitud'}</button></div>`); }
   if(sesModal.type==='tema') return wrap('Agregar un tema a la agenda',`<p class="muted" style="margin-top:0">Se agregará con el logo de ${mdEsc(f.c.name)}.</p><input id="ps-in" placeholder="Tema que quieres tratar" maxlength="140" onkeydown="if(event.key==='Enter'){event.preventDefault();sesAgregarTema()}"><div class="wiz-actions"><button class="btn ghost" onclick="closeSesModal()">Cancelar</button><button class="btn" onclick="sesAgregarTema()">Agregar</button></div>`);
   if(sesModal.type==='contacto'){ const u=store.person(sesModal.id); const raw=(u.phoneWork||u.phonePersonal||'').replace(/[^\d]/g,''); const num=raw.length===10?'52'+raw:raw;
     return wrap(mdEsc(u.name),`<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">${sesAv(u,64)}<div><b>${mdEsc(u.name)}</b><div class="muted">${mdEsc(u.role||'Nuwek')}</div></div></div>${num?`<div class="ps-contact"><a class="ps-cbtn wa" target="_blank" rel="noopener noreferrer" href="https://wa.me/${num}?text=${encodeURIComponent('Hola '+(u.name||'').split(' ')[0]+', te escribo sobre la sesión «'+(f.s.name)+'».')}">💬 WhatsApp</a><a class="ps-cbtn call" href="tel:+${num}">📞 Llamar</a></div>`:'<div class="muted">Esta persona aún no tiene teléfono registrado.</div>'}`); }
@@ -3007,11 +3038,14 @@ async function dbPatchSubtask(tid,sid,fn){
   const t=dbToAppTask(data); const sub=(t.subtasks||[]).find(x=>x.id===sid); if(!sub) throw new Error('La sesión ya no existe'); fn(sub,t);
   const r=await sb.from('tareas').upsert(appToDbTask(t)); if(r.error) throw r.error;
   const i=store.d.tasks.findIndex(x=>x.id===tid); if(i>=0) store.d.tasks[i]=t; return t; }
-async function sesRespond(estado,razon){ const f=sesFind(); if(!f||!f.ok) return;
+async function sesRespond(estado,razon,propuestas){ const f=sesFind(); if(!f||!f.ok) return;
   try{ await dbPatchSubtask(f.t.id,f.s.id,(sub)=>{ if(sesLast(sub)&&!sesCanRespond(sub)) throw new Error('Esta sesión ya tiene una respuesta registrada.');
-      const ses=Object.assign({},sub.sesion||{}); const now=new Date(); ses.respuestas=(ses.respuestas||[]).concat([{id:'rs_'+Date.now().toString(36),ts:now.toISOString(),tsN:now.getTime(),estado,razon:razon||''}]); sub.sesion=ses; });
+      const ses=Object.assign({},sub.sesion||{}); const now=new Date(); ses.respuestas=(ses.respuestas||[]).concat([{id:'rs_'+Date.now().toString(36),ts:now.toISOString(),tsN:now.getTime(),estado,razon:razon||'',propuestas:propuestas||[]}]); sub.sesion=ses; });
     sesModal=null; render(); }catch(e){ alert('No se pudo enviar tu respuesta: '+(e.message||e)); render(); } }
-function sesEnviar(estado){ const r=(val('ps-in')||'').trim(); if(r.length<3){ alert('Escribe la razón (es obligatoria).'); return; } sesRespond(estado,r); }
+function sesEnviar(estado){ const r=(val('ps-in')||'').trim(); if(r.length<3){ alert('Escribe la razón (es obligatoria).'); return; }
+  let prop=[]; if(estado==='reprogramar'){ prop=[0,1,2].map(i=>({fecha:val('ps-d'+i),hora:val('ps-h'+i)})).filter(x=>x.fecha);
+    if(!prop.length){ alert('Propón al menos una fecha que te acomode.'); return; } if(prop.some(x=>x.fecha<todayISO())){ alert('Las fechas propuestas deben ser de hoy en adelante.'); return; } }
+  sesRespond(estado,r,prop); }
 function sesConfirmar(){ if(confirm('¿Confirmas tu asistencia a esta sesión?')) sesRespond('confirmado',''); }
 async function sesAgregarTema(){ const ti=(val('ps-in')||'').trim(); if(ti.length<2){ alert('Escribe el tema.'); return; } const f=sesFind(); if(!f||!f.ok) return;
   try{ await dbPatchSubtask(f.t.id,f.s.id,(sub)=>{ const ses=Object.assign({},sub.sesion||{}); ses.temario=(ses.temario||[]).concat([{id:'tm_'+Date.now().toString(36),titulo:ti,por:'cliente',personId:'',by:'cliente',ts:new Date().toISOString()}]); sub.sesion=ses; });
