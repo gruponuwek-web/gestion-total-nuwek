@@ -894,3 +894,17 @@
   .vb-item b{color:var(--green);font-size:.92rem}.vb-item span{font-size:.72rem;color:var(--muted);line-height:1.25}
   .vb-tips{margin:0;padding-left:1.2em;font-size:.86rem;line-height:1.5}.vb-tips li{margin:4px 0}
   @media(max-width:560px){.vb-grid{grid-template-columns:1fr}}
+
+  /* Guía de verbos: versión compacta (~mitad de tamaño) */
+  .vb-compact .m-head{padding:12px 14px 8px}.vb-compact .m-head h3{font-size:.95rem}
+  .vb-compact .m-body{padding:8px 14px 12px;font-size:.74rem;line-height:1.4}
+  .vb-compact .m-body p{margin-bottom:6px}
+  .vb-compact .vb-formula{padding:5px 8px;font-size:.78rem;border-radius:9px}
+  .vb-compact .muted{font-size:.66rem !important;margin:4px 0 8px !important}
+  .vb-compact .vb-grid{gap:4px}
+  .vb-compact .vb-item{padding:4px 7px;border-radius:8px}
+  .vb-compact .vb-item b{font-size:.74rem}.vb-compact .vb-item span{font-size:.58rem;line-height:1.2}
+  .vb-compact .hint{font-size:.62rem !important;margin-top:3px !important}
+  .vb-compact h4{font-size:.78rem;margin:8px 0 3px !important}
+  .vb-compact .vb-tips{font-size:.66rem;line-height:1.35}.vb-compact .vb-tips li{margin:2px 0}
+  .vb-compact .wiz-actions{margin-top:8px}.vb-compact .wiz-actions .btn{padding:6px 14px;font-size:.78rem}

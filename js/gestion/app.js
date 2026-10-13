@@ -2767,7 +2767,7 @@ function openVerbInfo(){ verbInfo=true; render(); }
 function closeVerbInfo(){ verbInfo=false; render(); }
 function useVerb(v){ verbInfo=false; render(); setTimeout(()=>{ const el=document.getElementById('nc-name')||document.getElementById('ns-name'); if(el){ el.value=v+' '; el.focus(); el.setSelectionRange(el.value.length,el.value.length); el.scrollIntoView({block:'center'}); } },30); }
 function verbInfoModal(){
-  return `<div class="modal active" style="z-index:130" onclick="if(event.target===this)closeVerbInfo()"><div class="modal-card" style="max-width:600px">
+  return `<div class="modal active" style="z-index:130" onclick="if(event.target===this)closeVerbInfo()"><div class="modal-card vb-compact" style="max-width:340px">
     <div class="m-head"><div class="m-top"><div><h3 style="margin:0">ⓘ Cómo escribir subtareas</h3></div><button class="x" onclick="closeVerbInfo()">×</button></div></div>
     <div class="m-body">
       <p style="margin-top:0">Empieza cada subtarea con un <b>verbo en infinitivo</b> que diga la acción, y después <b>qué</b> se hace y, si ayuda, <b>para qué</b>.</p>
