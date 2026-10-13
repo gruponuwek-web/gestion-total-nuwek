@@ -403,7 +403,7 @@ function toggleSubCollapse(sid){ const c=subCollapsedMap(); let m=null; store.d.
 function subOrder(t,ignoreCollapse){ const all=t.subtasks||[]; const col=ignoreCollapse?{}:subCollapsedMap(); const out=[];
   all.filter(x=>!subIsChild(t,x)).forEach(m=>{ const kids=subKids(t,m.id); out.push({s:m,depth:0,kids}); if(!subCollapsedNow(m,col)) kids.forEach(k=>out.push({s:k,depth:1,kids:[]})); });
   return out; }
-let addingChild=null, subEd=null, clientPop=null;
+let addingChild=null, subEd=null, clientPop=null, verbInfo=false;
 function openAddChild(tid,sid){ addingChild={tid,sid}; render(); setTimeout(()=>{ const el=document.getElementById('nc-name'); if(el) el.focus(); },0); }
 function cancelAddChild(){ addingChild=null; render(); }
 function addChildSub(){ if(!addingChild) return; const {tid,sid}=addingChild; const n=(val('nc-name')||'').trim(); if(!n) return; const t=store.task(tid); const m=t.subtasks.find(x=>x.id===sid); if(!m||m.parentId) return;
@@ -558,7 +558,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (lightbox ? lightboxModal() : '');
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
 function openMiEspacio(){ view='op_pendientes'; opSelTask=null; modalTask=null; render(); }
@@ -616,6 +616,7 @@ document.addEventListener('keydown',ev=>{
   if(ev.key!=='Escape'||ev.defaultPrevented||!session) return;
   const tg=ev.target; if(tg&&tg.classList&&tg.classList.contains('cmt-in')&&tg.value.trim()&&!tg.id.startsWith('cmt-edit')){ tg.blur(); return; }   // no perder un comentario a medias
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
+  if(verbInfo){ closeVerbInfo(); return; }
   if(subEd){ closeSubEdit(); return; }
   if(clientPop){ closeClientPop(); return; }
   if(wiz&&!qm){ closeWizard(); return; }
@@ -2287,7 +2288,7 @@ function taskBody(t,panel){
     </div>
     <div class="m-body" ${editingTask===t.id?'style="display:none"':''}>
       <div class="m-sec"><h4>Descripción</h4><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
-      <div class="m-sec"><div class="subs-head"><h4 style="margin:0">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length})</h4>
+      <div class="m-sec"><div class="subs-head"><h4 style="margin:0;display:flex;align-items:center;gap:8px">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length}) <button type="button" class="info-i" title="Cómo escribir subtareas y sub-subtareas" onclick="openVerbInfo()">i</button></h4>
         <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${!isColab()?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
         ${(subView==='log'&&!isColab())?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
         <div class="inline-add">
@@ -2760,6 +2761,24 @@ function goNotif(tid){ notifOpen=false; opFilterClient=''; view='op_pendientes';
 document.addEventListener('click',ev=>{ if(notifOpen&&!ev.target.closest('#notif-root')){ notifOpen=false; notifUpdate(); } });
 
 
+/* ================== GUÍA DE VERBOS PARA ESCRIBIR SUBTAREAS ================== */
+const VERBOS=[['Recabar','reunir información, accesos o materiales'],['Analizar','estudiar los datos o la situación para entenderla'],['Proponer','presentar opciones o una recomendación'],['Diseñar','crear la solución, la pieza o el plan'],['Definir','decidir y dejar por escrito alcances o criterios'],['Validar','confirmar con el cliente o el equipo que está correcto'],['Probar','verificar que funciona antes de entregar'],['Aprobar','conseguir el visto bueno final'],['Ajustar','corregir con base en los comentarios'],['Comunicar','informar a quien corresponda'],['Implementar','poner en marcha'],['Evaluar','medir los resultados contra el objetivo'],['Entregar','hacer llegar el producto final'],['Auditar','revisar el cumplimiento y la calidad']];
+function openVerbInfo(){ verbInfo=true; render(); }
+function closeVerbInfo(){ verbInfo=false; render(); }
+function useVerb(v){ verbInfo=false; render(); setTimeout(()=>{ const el=document.getElementById('nc-name')||document.getElementById('ns-name'); if(el){ el.value=v+' '; el.focus(); el.setSelectionRange(el.value.length,el.value.length); el.scrollIntoView({block:'center'}); } },30); }
+function verbInfoModal(){
+  return `<div class="modal active" style="z-index:130" onclick="if(event.target===this)closeVerbInfo()"><div class="modal-card" style="max-width:600px">
+    <div class="m-head"><div class="m-top"><div><h3 style="margin:0">ⓘ Cómo escribir subtareas</h3></div><button class="x" onclick="closeVerbInfo()">×</button></div></div>
+    <div class="m-body">
+      <p style="margin-top:0">Empieza cada subtarea con un <b>verbo en infinitivo</b> que diga la acción, y después <b>qué</b> se hace y, si ayuda, <b>para qué</b>.</p>
+      <div class="vb-formula"><b>Verbo</b> + qué + (para qué / resultado)</div>
+      <div class="muted" style="font-size:.84rem;margin:6px 0 14px">Ejemplo: «<b>Recabar</b> accesos de redes sociales del cliente» · «<b>Validar</b> el calendario de contenidos con dirección»</div>
+      <div class="vb-grid">${VERBOS.map(([v,d])=>`<button type="button" class="vb-item" onclick="useVerb('${v}')" title="Clic para empezar una subtarea con «${v}»"><b>${v}</b><span>${d}</span></button>`).join('')}</div>
+      <div class="hint" style="margin-top:6px">Toca un verbo para empezar a escribir una subtarea con él.</div>
+      <h4 style="margin:16px 0 6px">Subtarea o sub-subtarea</h4>
+      <ul class="vb-tips"><li><b>Subtarea:</b> un paso completo del trabajo, con un solo verbo principal.</li><li><b>Sub-subtarea:</b> un detalle chico dentro de ese paso. Úsalas para agrupar y no llenar la lista.</li><li>Ejemplo: subtarea «<b>Diseñar</b> la propuesta» → sub-subtareas «<b>Recabar</b> referencias», «<b>Definir</b> la estructura», «<b>Validar</b> con dirección».</li><li>Evita verbos vagos como «ver», «trabajar en» o «checar»: no dicen cuándo termina.</li><li>Cada una necesita responsable, fecha, hora y cuánto tardará.</li></ul>
+      <div class="wiz-actions"><span></span><button class="btn" onclick="closeVerbInfo()">Entendido</button></div>
+    </div></div></div>`; }
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
