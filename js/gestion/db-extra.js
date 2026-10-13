@@ -10,25 +10,34 @@
 function dbToAppComment(row){
   return {
     id: row.id, taskId: row.tarea_id, userId: row.user_id, text: row.text || '',
-    ts: row.ts, attachments: Array.isArray(row.attachments) ? row.attachments : [],
+    ts: row.ts, attachments: Array.isArray(row.attachments) ? row.attachments : undefined,   // undefined = aún no cargados (se piden al abrir la tarea)
     mentions: Array.isArray(row.mentions) ? row.mentions : [],
     readBy: Array.isArray(row.read_by) ? row.read_by : []
   };
 }
 function appToDbComment(c){
-  return {
+  const row = {
     id: c.id, tarea_id: c.taskId, user_id: c.userId, text: c.text || '',
-    ts: c.ts, attachments: c.attachments || [], mentions: c.mentions || [], read_by: c.readBy || []
+    ts: c.ts, mentions: c.mentions || [], read_by: c.readBy || []
   };
+  if (c.attachments !== undefined) row.attachments = c.attachments;   // si no se han cargado, NO se toca la columna
+  return row;
 }
 async function dbDeleteComment(id){
   try{ const { error } = await sb.from('comentarios').delete().eq('id', id); if (error){ console.error('Error borrando comentario:', error.message); alert('No se pudo borrar el comentario en la base de datos.\n\n'+error.message); } }
   catch(e){ console.error('Red al borrar comentario:', e); }
 }
+// Carga LIGERA: sin los adjuntos (las imágenes en base64 pesaban varios MB y se bajaban cada 3 s).
 async function dbLoadComentarios(){
-  const { data, error } = await sb.from('comentarios').select('*').order('ts', { ascending: true });
+  const { data, error } = await sb.from('comentarios').select('id,tarea_id,user_id,text,ts,mentions,read_by').order('ts', { ascending: true });
   if (error) throw error;
   return (data || []).map(dbToAppComment);
+}
+// Adjuntos de los comentarios de UNA tarea (se piden al abrirla).
+async function dbLoadCommentAttachments(tid){
+  const { data, error } = await sb.from('comentarios').select('id,attachments').eq('tarea_id', tid);
+  if (error) throw error;
+  return data || [];
 }
 async function dbSaveComment(c){
   try{

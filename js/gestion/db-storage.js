@@ -29,3 +29,12 @@ async function dbUploadImage(blob, folder){
   const { data } = sb.storage.from('imagenes').getPublicUrl(path);
   return data.publicUrl;
 }
+
+// Sube cualquier archivo (imagen, PDF, Word, Excel…) y devuelve su URL pública.
+async function dbUploadFile(blob, folder, ext, contentType){
+  const path = (folder || 'misc') + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 8) + '.' + (ext || 'bin');
+  const { error } = await sb.storage.from('imagenes').upload(path, blob, { upsert: true, contentType: contentType || 'application/octet-stream' });
+  if (error) throw error;
+  const { data } = sb.storage.from('imagenes').getPublicUrl(path);
+  return data.publicUrl;
+}

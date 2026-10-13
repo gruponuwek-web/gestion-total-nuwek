@@ -14,8 +14,8 @@ function durOptsEl(sel){ return DUR_OPTS.map(m=>`<option value="${m}" ${m===(+se
 class Store{
   constructor(){ this.load(); }
   load(){
-    const s = localStorage.getItem('nuwekPortal');
-    if(s){ const p=JSON.parse(s); if(p.v===DV){ this.d=p; this.normalize(); return; } }
+    let s=null; try{ s = localStorage.getItem('nuwekPortal'); }catch(_){}
+    if(s){ try{ const p=JSON.parse(s); if(p.v===DV){ this.d=p; this.normalize(); return; } }catch(_){} }
     this.d = this.seed(); this.normalize(); this.save();
   }
   normalize(){
@@ -47,7 +47,11 @@ class Store{
     (this.d.services||[]).forEach(s=>{ if(s.listPrice==null) s.listPrice=0; if(s.opCost==null) s.opCost=0; });
     this.save();
   }
-  save(){ lastLocalWrite=Date.now(); this.d.v=DV; localStorage.setItem('nuwekPortal', JSON.stringify(this.d)); }
+  /* La copia en el navegador es solo un respaldo rápido (la verdad está en Supabase). Si ya no cabe (límite ~5 MB), se guarda una versión ligera o se omite: nunca debe tumbar el portal. */
+  save(){ lastLocalWrite=Date.now(); this.d.v=DV;
+    try{ localStorage.setItem('nuwekPortal', JSON.stringify(this.d)); return; }catch(_){}
+    try{ const lite=Object.assign({},this.d,{log:[],comments:(this.d.comments||[]).map(c=>Object.assign({},c,{attachments:(c.attachments||[]).map(a=>({name:a.name,type:a.type}))}))}); localStorage.setItem('nuwekPortal', JSON.stringify(lite)); return; }catch(_){}
+    try{ localStorage.removeItem('nuwekPortal'); }catch(_){} }
   setSetting(k,v){ this.d.settings=this.d.settings||{}; if(v===null||v===undefined||v==='') delete this.d.settings[k]; else this.d.settings[k]=v; this.save(); }
 
   seed(){
@@ -524,7 +528,7 @@ function taskEtapaIds(t){
 function render(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(notifUpdate,0);
+  setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0);
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
     if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
@@ -2488,12 +2492,16 @@ function mentionPick(ev,tid,id){
   ta.focus();
 }
 function mentionBlur(tid){ setTimeout(()=>{ const box=document.getElementById('mention-box-'+tid); if(box){ box.innerHTML=''; box.classList.remove('on'); } },150); }
-function addCmt(tid){
+async function addCmt(tid){
   const el=document.getElementById('cmt-'+tid); const tx=(el.value||'').trim();
   if(!tx && draftAtt.length===0){return;}
   const ments=draftMentions.filter(id=>tx.includes('@'+store.person(id).name));
-  try{ store.addComment(tid,currentUser,tx,draftAtt.slice(),ments); }
-  catch(e){ alert('No se pudo guardar: los adjuntos superan el espacio local. Prueba con archivos más pequeños.'); return; }
+  // los archivos se suben al Storage y en el comentario solo queda su URL (antes se guardaba el archivo entero en la base)
+  const atts=[]; for(const a of draftAtt){ let u=a.dataUrl;
+    if(typeof u==='string'&&u.startsWith('data:')&&typeof dbUploadFile==='function'){ try{ const mime=(u.match(/^data:(.*?);/)||[])[1]||'application/octet-stream'; const ext=(a.name&&a.name.includes('.')?a.name.split('.').pop():(mime.split('/')[1]||'bin')).toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,5)||'bin'; u=await dbUploadFile(dataUrlToBlob(u),'adjuntos',ext,mime); }catch(e){ console.warn('No se pudo subir el adjunto; se guarda en la base:',e&&e.message||e); } }
+    atts.push(Object.assign({},a,{dataUrl:u})); }
+  try{ store.addComment(tid,currentUser,tx,atts,ments); }
+  catch(e){ alert('No se pudo guardar el comentario.'); return; }
   logEvent(tid,'Comentó'+(ments.length?' y mencionó a '+ments.map(id=>store.person(id).name).join(', '):''));
   draftAtt=[]; draftMentions=[]; render();
 }
@@ -2689,6 +2697,7 @@ async function syncTables(set){
     const keys=Object.keys(jobs); const vals=await Promise.all(keys.map(k=>jobs[k])); const got={}; keys.forEach((k,i)=>got[k]=vals[i]);
     if(lastLocalWrite>t0-1500) return;          // acabas de guardar algo: no lo pises, el siguiente ciclo lo trae
     let changed=false; const put=(k,v)=>{ if(JSON.stringify(store.d[k])!==JSON.stringify(v)){ store.d[k]=v; changed=true; } };
+    if(got.comments){ const prev={}; (store.d.comments||[]).forEach(c=>{ if(c.attachments!==undefined) prev[c.id]=c.attachments; }); got.comments.forEach(c=>{ if(c.attachments===undefined&&prev[c.id]!==undefined) c.attachments=prev[c.id]; }); }
     if(got.tasks) put('tasks',got.tasks); if(got.comments) put('comments',got.comments); if(got.log) put('log',got.log); if(got.payments) put('payments',got.payments);
     if(got.pr){ put('projects',got.pr.projects); put('frentes',got.pr.frentes); put('etapas',got.pr.etapas); }
     if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags);
@@ -2754,6 +2763,15 @@ document.addEventListener('click',ev=>{ if(notifOpen&&!ev.target.closest('#notif
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
+let attLoading={};
+function ensureAttNow(){ const id=modalTask||opSelTask; if(id) ensureAtt(id); }
+async function ensureAtt(tid){
+  if(attLoading[tid]||typeof dbLoadCommentAttachments!=='function') return; const need=(store.commentsOf(tid)||[]).filter(c=>c.attachments===undefined); if(!need.length) return;
+  attLoading[tid]=1;
+  try{ const rows=await dbLoadCommentAttachments(tid); let any=false; rows.forEach(r=>{ const c=(store.d.comments||[]).find(x=>x.id===r.id); if(c&&c.attachments===undefined){ c.attachments=Array.isArray(r.attachments)?r.attachments:[]; if(c.attachments.length) any=true; } });
+    (store.commentsOf(tid)||[]).forEach(c=>{ if(c.attachments===undefined) c.attachments=[]; });
+    if(any){ syncDirty=true; syncFlush(); } }catch(e){ console.warn('Adjuntos:',e&&e.message||e); }
+  finally{ delete attLoading[tid]; } }
 function openClientPop(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); clientPop={tid,sid,sel:((sub&&sub.invitados)||[]).slice(),adding:false}; render(); }
 function closeClientPop(){ clientPop=null; render(); }
 function subEditModal(){
