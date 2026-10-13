@@ -921,3 +921,7 @@
   .cita-side{text-align:right;flex-shrink:0}.cita-st{font-size:.72rem;font-weight:700;border-radius:99px;padding:3px 10px;white-space:nowrap}
   .cita-leg{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;font-weight:700;margin:6px 0 10px}
   @media(max-width:560px){.sub-who{display:none}.cita-row{flex-wrap:wrap}}
+
+  .cita-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .lib-side-it.on .cita-dot{box-shadow:0 0 0 2px rgba(255,255,255,.7)}
+  .lib-det .cita-row{box-shadow:none;margin-bottom:8px}
