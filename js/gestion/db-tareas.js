@@ -24,7 +24,11 @@ function dbToAppTask(row){
     subtasks: Array.isArray(row.subtasks) ? row.subtasks : [],
     links: Array.isArray(row.links) ? row.links : [],
     ord: row.ord || 0,
-    urgent: !!row.urgente
+    urgent: !!row.urgente,
+    repeatAfter: (row.ciclo && row.ciclo.repeatAfter) || null,
+    repeatCal: (row.ciclo && row.ciclo.calendar) || null,
+    nextId: (row.ciclo && row.ciclo.nextId) || null,
+    repeatOf: (row.ciclo && row.ciclo.repeatOf) || null
   };
 }
 
@@ -47,7 +51,8 @@ function appToDbTask(t){
     subtasks: t.subtasks || [],
     links: t.links || [],
     ord: t.ord || 0,
-    urgente: !!t.urgent
+    urgente: !!t.urgent,
+    ciclo: (t.repeatAfter||t.repeatCal||t.nextId||t.repeatOf) ? { repeatAfter: t.repeatAfter||null, calendar: t.repeatCal||null, nextId: t.nextId||null, repeatOf: t.repeatOf||null } : null
   };
 }
 
@@ -67,8 +72,8 @@ async function dbSaveTask(t){
     const row = appToDbTask(t);
     let { error } = await sb.from('tareas').upsert(row);
     // si alguna columna nueva ("ord", "urgente") aún no existe en la base, guardar sin ella
-    for (let i = 0; i < 2 && error; i++){
-      const m = (error.message||'').match(/\b(ord|urgente)\b/i); const col = m && m[1].toLowerCase();
+    for (let i = 0; i < 3 && error; i++){
+      const m = (error.message||'').match(/\b(ord|urgente|ciclo)\b/i); const col = m && m[1].toLowerCase();
       if (!col || !(col in row)) break;
       delete row[col]; ({ error } = await sb.from('tareas').upsert(row));
     }
