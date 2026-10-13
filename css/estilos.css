@@ -943,3 +943,8 @@
   .nx-it:hover{background:#f6f5ee}.nx-it.soon{background:#fffbea}
   .nx-when{min-width:86px;font-weight:800;font-size:.8rem;color:var(--green)}.nx-it.soon .nx-when{color:#b8860b}
   .nx-nm{font-weight:700;font-size:.88rem;overflow-wrap:anywhere}.nx-sub{font-size:.72rem;color:var(--muted);margin-top:2px}
+
+  .client-tabs{margin-top:22px}
+  .client-tab-body .sec-title{margin-top:0}
+  .score-soon{display:flex;gap:12px;align-items:center;background:#fff7e0;border:1.5px dashed #e6b800;border-radius:14px;padding:12px 16px}
+  .score-soon>span{font-size:1.6rem}

@@ -738,6 +738,29 @@ function viewClientes(){
 }
 
 /* ================== CLIENTE ================== */
+
+/* ===== Pestañas de la ficha del cliente: Citas · Finanzas · Próximas subtareas · Scorecard ===== */
+let clientTab='citas';
+function setClientTab(k){ clientTab=k; render(); }
+function clientNextSubs(c){ const now=todayISO(); const out=[];
+  store.projectsOf(c.id).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.done||s.isSeries||!s.date||s.date<now) return; out.push({s,t,p}); })));
+  return out.sort((a,b)=>((a.s.date+(a.s.time||'99:99'))<(b.s.date+(b.s.time||'99:99'))?-1:1)).slice(0,8); }
+function clientNextHtml(c){ const items=clientNextSubs(c); const today=todayISO(), tm=addDaysISO(today,1);
+  const rows=items.map(({s,t,p})=>{ const per=store.person(s.personId); const w=s.date===today?'hoy':s.date===tm?'mañana':dLabel(s.date); const f=kbFrente(t);
+    return `<div class="cita-row" style="border-left:4px solid ${f.color}"><div class="cita-when"><b>${w}</b><span>${s.time||'sin hora'}</span></div>
+      <div class="cita-main"><div class="cita-nm">${subHasCita(s)?'📅 ':''}${esc(s.name)}</div><div class="muted" style="font-size:.76rem">${esc(p.name)} · ${esc(t.name)} · <span style="color:${f.color};font-weight:600">${esc(f.name)}</span></div></div>
+      <div class="cita-side" style="display:flex;align-items:center;gap:8px">${s.personId?`${avatar(per,true)}<span style="font-size:.78rem;font-weight:600">${esc((per.name||'').split(' ')[0])}</span>`:'<span class="muted" style="font-size:.76rem;font-style:italic">Sin asignar</span>'}<button class="btn ghost sm" onclick="openTask('${t.id}')">Abrir</button></div></div>`; }).join('');
+  return `<div class="cita-list">${rows||'<div class="muted">No hay subtareas próximas programadas para este cliente.</div>'}</div>${items.length?`<div class="hint" style="margin-top:8px">Las próximas ${items.length} subtareas y sub-subtareas pendientes, de todos sus proyectos.</div>`:''}`; }
+function clientScoreHtml(c){ const rows=[]; store.projectsOf(c.id).forEach(p=>store.scorecardsOf(p.id).forEach(sc=>rows.push({sc,p}))); rows.sort((a,b)=>((a.sc.date||'')<(b.sc.date||'')?1:-1));
+  const list=rows.map(({sc,p})=>{ const href=(sc.url||'').match(/^https?:\/\//)?sc.url:'https://'+sc.url; return `<div class="lib-row"><div class="lib-ico">📊</div><div class="lib-g"><a class="lib-nm" href="${esc(href)}" target="_blank" rel="noopener">${esc(sc.title||sc.url||'Scorecard')}</a><div class="lib-url muted">${esc(p.name)}${sc.date?' · '+dLabel(sc.date):''}</div></div><div class="lib-ops"><a class="btn ghost sm" href="${esc(href)}" target="_blank" rel="noopener">Abrir ↗</a></div></div>`; }).join('');
+  return `<div class="score-soon"><span>🛠️</span><div><b>Estamos afinando el scorecard</b><div class="muted" style="font-size:.8rem">El método de evaluación se está cocinando. Mientras tanto, aquí viven los scorecards ya registrados.</div></div></div><div class="lib-list" style="margin-top:12px">${list||'<div class="muted">Aún no hay scorecards registrados para este cliente.</div>'}</div>`; }
+function clientTabsHtml(c){
+  const tabs=[['citas','📅 Citas'],...(canSeeFinance()?[['finanzas','💰 Finanzas']]:[]),['proximas','🧭 Próximas subtareas'],['score','📊 Scorecard']];
+  if(!tabs.some(t=>t[0]===clientTab)) clientTab=tabs[0][0];
+  const bar=`<div class="ptabs client-tabs">${tabs.map(([k,l])=>`<button class="${clientTab===k?'active':''}" onclick="setClientTab('${k}')">${l}</button>`).join('')}</div>`;
+  const body=clientTab==='citas'?citasHistorialHtml(c):clientTab==='finanzas'?finanzasHtml(c):clientTab==='proximas'?`<div class="sec-title"><h2>🧭 Próximas subtareas</h2></div>${clientNextHtml(c)}`:`<div class="sec-title"><h2>📊 Scorecard</h2></div>${clientScoreHtml(c)}`;
+  return bar+`<div class="client-tab-body">${body}</div>`; }
+
 function viewCliente(){
   const c=store.client(selClient); if(!c) return '';
   const resp=store.person(c.generalResponsibleId);
@@ -769,8 +792,7 @@ function viewCliente(){
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
     <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>
-    ${citasHistorialHtml(c)}
-    ${finanzasHtml(c)}`;
+    ${clientTabsHtml(c)}`;
 }
 
 function projectHealth(pid){
@@ -2612,7 +2634,7 @@ function viewCatalogos(){
 
 /* ================== NAV ================== */
 function go(v){view=v;modalTask=null;render();}
-function openClient(id){selClient=id;view='cliente';citaSel=null;finSel=null;render();}
+function openClient(id){selClient=id;view='cliente';citaSel=null;finSel=null;clientTab='citas';render();}
 function openProject(id){selProject=id;selTab='gestor';view='proyecto';render();}
 function setTab(t){selTab=t;render();}
 function setGanttZoom(z){ganttZoom=z;render();}
