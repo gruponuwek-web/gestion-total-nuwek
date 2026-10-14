@@ -1514,8 +1514,10 @@ function tabGantt(p,cp){
       const pct=tot?Math.round(done/tot*100):(t.status==='done'?100:0);
       lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" onclick="${cp?`openCpTask('${t.id}')`:`ganttPop(event,'${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`; }
       if(open){ const okIds=new Set(subsAll.map(x=>x.id));
-        subOrder(t,true).filter(o=>okIds.has(o.s.id)).forEach(o=>{ const x=o.s; const d1=x.depth||o.depth;
-          labels+=`<div class="g-ll g-sl" style="padding-left:${22+o.depth*16}px" title="${esc(x.name)}"><span class="g-nm">${o.depth?'↳ ':''}${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
+        const parents=subOrder(t,true).filter(o=>o.depth===0&&okIds.has(o.s.id)); const vis=[]; parents.forEach(o=>{ vis.push(o); if(ganttOpen[o.s.id]) o.kids.filter(k=>okIds.has(k.id)).forEach(k=>vis.push({s:k,depth:1,kids:[]})); });
+        vis.forEach(o=>{ const x=o.s; const nk=o.depth?0:o.kids.filter(k=>okIds.has(k.id)).length;
+          const tg=nk?`<span class="g-tg" onclick="ganttToggle('${x.id}')" title="${ganttOpen[x.id]?'Contraer':'Ver sub-subtareas'}">${ganttOpen[x.id]?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
+          labels+=`<div class="g-ll g-sl" style="padding-left:${12+o.depth*18}px" title="${esc(x.name)}">${tg}<span class="g-nm">${o.depth?'↳ ':''}${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
           if(!x.date){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
           const l=Math.max(0,diffDays(rangeStart,x.date))*PX, w=Math.max(PX*0.7,PX); const cy=yy+17;
           rects[x.id]={l,r:l+w,cy};
