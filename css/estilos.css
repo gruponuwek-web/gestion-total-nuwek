@@ -965,3 +965,6 @@
   .g-av{display:inline-flex;margin-left:6px;vertical-align:middle}.g-av .avatar{width:18px;height:18px;margin-left:-5px;border:1.5px solid #fff}
   .tm-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:.84rem}.tm-l{width:120px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:capitalize}
   .tm-bar{flex:1;height:10px;background:#eef0ec;border-radius:99px;overflow:hidden}.tm-bar i{display:block;height:100%;background:var(--green);border-radius:99px}
+
+  .dep-list{border:1.5px solid var(--line);border-radius:12px;max-height:240px;overflow-y:auto}
+  .dep-row{display:flex;justify-content:space-between;gap:10px;padding:7px 12px;border-bottom:1px solid #f2f1ea;font-size:.8rem}.dep-row:last-child{border-bottom:0}.dep-row span{color:var(--muted);text-align:right}

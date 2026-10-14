@@ -560,7 +560,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
 function openMiEspacio(){ view='op_pendientes'; opSelTask=null; modalTask=null; render(); }
@@ -620,6 +620,7 @@ document.addEventListener('keydown',ev=>{
   const tg=ev.target; if(tg&&tg.classList&&tg.classList.contains('cmt-in')&&tg.value.trim()&&!tg.id.startsWith('cmt-edit')){ tg.blur(); return; }   // no perder un comentario a medias
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
+  if(depPrev){ depCancel(); return; }
   if(verbInfo){ closeVerbInfo(); return; }
   if(subEd){ closeSubEdit(); return; }
   if(clientPop){ closeClientPop(); return; }
@@ -1323,7 +1324,7 @@ function agBlockDown(ev){
     let min=AG.H0*60+agSnap(topPx/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
     const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
     if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes cambiar la hora dentro del mismo día.'); render(); return; }
-    store.updateSubtask(tid,sid,{date:body.dataset.day,time}); logEvent(tid,'Movió la subtarea «'+sub.name+'» a '+body.dataset.day+' '+time); agSel={tid,sid}; render(); };
+    depApply(tid,sid,{date:body.dataset.day,time},()=>{ logEvent(tid,'Movió la subtarea «'+sub.name+'» a '+body.dataset.day+' '+time); agSel={tid,sid}; render(); }); };
   document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
 }
 function agResizeDown(ev){
@@ -1333,7 +1334,7 @@ function agResizeDown(ev){
   const onUp=e=>{ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp);
     const h=blk.getBoundingClientRect().height; let dur=Math.max(15,agSnap(h/AG.rowH*60));
     const t=store.task(tid); const sub=t.subtasks.find(x=>x.id===sid); const [hh,mm]=(sub.time||'10:00').split(':').map(Number); dur=Math.min(dur,AG.H1*60-(hh*60+mm));
-    blk.classList.remove('resizing'); store.updateSubtask(tid,sid,{durMin:dur}); logEvent(tid,'Cambió la duración de «'+sub.name+'» a '+fmtDurShort(dur)); render(); };
+    blk.classList.remove('resizing'); depApply(tid,sid,{durMin:dur},()=>{ logEvent(tid,'Cambió la duración de «'+sub.name+'» a '+fmtDurShort(dur)); render(); }); };
   document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
 }
 /* ---- arrastrar desde la lista al calendario ---- */
@@ -1346,7 +1347,7 @@ function agListDrop(ev){ if(!agListDrag) return; ev.preventDefault(); const body
   const r=body.getBoundingClientRect(); let min=AG.H0*60+agSnap((ev.clientY-r.top)/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
   const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
   if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
-  store.updateSubtask(d.tid,d.sid,{date:body.dataset.day,time}); logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+body.dataset.day+' '+time); agSel=d; render(); }
+  depApply(d.tid,d.sid,{date:body.dataset.day,time},()=>{ logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+body.dataset.day+' '+time); agSel=d; render(); }); }
 function agNotes(days){ let h=''; const si=agSelInfo();
   if(si&&si.t.dueDate&&!days.includes(si.t.dueDate)) h+=`<button class="ag-note dl" onclick="agGoDeadline()" title="Ir a la semana del deadline">🏁 Deadline de «${esc(si.t.name)}»: ${dLabel(si.t.dueDate)} ${si.t.dueDate<days[0]?'←':'→'}</button>`;
   const wk=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(x=>{ if(x.personId===agPerson&&x.date&&x.time&&!x.done&&[0,6].includes(isoWeekday(x.date))&&x.date>=addDaysISO(days[0],-1)&&x.date<=addDaysISO(days[4],2)) wk.push(x); }));
@@ -2271,7 +2272,8 @@ function taskBody(t,panel){
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🤝 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
     const citaBase=(!_l&&subHasCita(s))?`<span class="sub-chip cita" title="Tiene cita con el cliente">📅 Cita</span>`:'';
-    const chips=`${ackBtn}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const predS=s.dependsOn?(t.subtasks||[]).find(x=>x.id===s.dependsOn):null; const depChip=`${predS?`<span class="sub-chip" title="Empieza cuando termina «${esc(predS.name)}»">⛓ tras «${esc(predS.name.length>22?predS.name.slice(0,21)+'…':predS.name)}»</span>`:''}${s.fija?'<span class="sub-chip" title="Fecha fija: no se mueve con las dependencias">📌 fija</span>':''}`;
+    const chips=`${ackBtn}${depChip}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
     const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}</span>`;
     const right=timing
@@ -2727,7 +2729,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -2865,6 +2867,80 @@ function verbInfoModal(){
       <ul class="vb-tips"><li><b>Subtarea:</b> un paso completo del trabajo, con un solo verbo principal.</li><li><b>Sub-subtarea:</b> un detalle chico dentro de ese paso. Úsalas para agrupar y no llenar la lista.</li><li>Ejemplo: subtarea «<b>Diseñar</b> la propuesta» → sub-subtareas «<b>Recabar</b> referencias», «<b>Definir</b> la estructura», «<b>Validar</b> con dirección».</li><li>Evita verbos vagos como «ver», «trabajar en» o «checar»: no dicen cuándo termina.</li><li>Cada una necesita responsable, fecha, hora y cuánto tardará.</li></ul>
       <div class="wiz-actions"><span></span><button class="btn" onclick="closeVerbInfo()">Entendido</button></div>
     </div></div></div>`; }
+
+/* ================== DEPENDENCIAS ENTRE SUBTAREAS ==================
+   Regla única: la subtarea B «empieza cuando termina» la subtarea A (una sola, dentro de la misma tarea).
+   Calendario laboral: lunes a viernes, 9:00 a 18:00 (comida y festivos se acomodan a mano).
+   Al mover A, sus dependientes (B, C, C1…) siguen la regla; antes de aplicar se muestra una vista previa. */
+const WK={s:9*60,e:18*60};
+const toMin=t=>{ const m=/^(\d{1,2}):(\d{2})/.exec(t||''); return m?(+m[1])*60+(+m[2]):null; };
+const fromMin=m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+const isWork=d=>{ const w=isoWeekday(d); return w>=1&&w<=5; };
+function nextWork(d){ while(!isWork(d)) d=addDaysISO(d,1); return d; }
+function instCmp(a,b){ return a.d<b.d?-1:a.d>b.d?1:a.m-b.m; }
+function wStart(i){ let d=i.d,m=i.m; if(!isWork(d)){ d=nextWork(d); m=WK.s; } if(m<WK.s) m=WK.s; if(m>=WK.e){ d=nextWork(addDaysISO(d,1)); m=WK.s; } return {d,m}; }
+function wEnd(st,dur){ let {d,m}=wStart(st); let rem=Math.max(0,+dur||0); for(let g=0;g<400;g++){ const room=WK.e-m; if(rem<=room) return {d,m:m+rem}; rem-=room; d=nextWork(addDaysISO(d,1)); m=WK.s; } return {d,m}; }
+const WK_BASE='2020-01-06';   // lunes
+function wTotal(i){ const days=daysBetween(WK_BASE,i.d); const weeks=Math.floor(days/7), dow=((days%7)+7)%7; const L=WK.e-WK.s; const before=weeks*5+Math.min(dow,5); const within=dow<5?Math.min(Math.max(i.m-WK.s,0),L):0; return before*L+within; }
+function wFrom(total){ const L=WK.e-WK.s; const w=Math.floor(total/L), rem=((total%L)+L)%L; const weeks=Math.floor(w/5), dw=((w%5)+5)%5; return {d:addDaysISO(WK_BASE,weeks*7+dw),m:WK.s+rem}; }
+const wDiff=(a,b)=>wTotal(b)-wTotal(a);
+const instStart=s=>({d:s.date,m:toMin(s.time)==null?WK.s:toMin(s.time)});
+const instEnd=s=>wEnd(instStart(s),s.durMin||0);
+const instLabel=i=>dLabel(i.d)+' '+fromMin(i.m);
+function depKids(t,id){ return (t.subtasks||[]).filter(x=>x.dependsOn===id&&x.id!==id); }
+function depWouldCycle(t,sid,predId){ let cur=predId,g=0; while(cur&&g++<200){ if(cur===sid) return true; const x=(t.subtasks||[]).find(y=>y.id===cur); cur=x&&x.dependsOn; } return false; }
+function subFixed(s){ if(s.fija) return {why:'📌 fecha fija'}; const l=sesLast(s); if(l&&l.estado==='confirmado'&&!sesCanRespond(s)) return {why:'🔒 cita confirmada por el cliente'}; return null; }
+/* Calcula qué cambia al aplicar `patch` a la subtarea s. mode: 'shift' (mover todas igual) | 'push' (solo las que se encimen) | 'none' */
+function depPlan(t,s,patch,mode){
+  const merged=Object.assign({},s,patch); let selfNote=null;
+  const pred=merged.dependsOn?(t.subtasks||[]).find(x=>x.id===merged.dependsOn):null;
+  if(pred&&merged.date){ const pe=instEnd(pred); const st=wStart(instStart(merged)); if(instCmp(st,pe)<0){ const ns=wStart(pe); merged.date=ns.d; merged.time=fromMin(ns.m); selfNote='Empieza cuando termina «'+pred.name+'» ('+instLabel(pe)+'): se acomoda a '+instLabel(ns)+'.'; } }
+  const out={merged:{date:merged.date,time:merged.time},selfNote,delta:0,changes:[],conflicts:[]};
+  if(!s.date||!merged.date) return out;
+  const oldE=instEnd(s), newE=instEnd(merged); const delta=wDiff(oldE,newE); out.delta=delta;
+  if(mode==='none'||!depKids(t,s.id).length) return out;
+  const seen=new Set([s.id]); const q=[{id:s.id,oldE,newE,delta,name:s.name}];
+  while(q.length){ const n=q.shift();
+    depKids(t,n.id).forEach(D=>{ if(seen.has(D.id)) return; seen.add(D.id); if(!D.date) return;
+      const fx=D.done?{why:'✔ ya está hecha'}:subFixed(D); const stD=wStart(instStart(D)); let ns=stD;
+      if(mode==='shift'&&n.delta!==0) ns=wFrom(wTotal(stD)+n.delta);
+      if(instCmp(ns,n.newE)<0) ns=wStart(n.newE);          // la regla siempre se respeta
+      if(fx){ if(instCmp(stD,wStart(n.newE))<0) out.conflicts.push({id:D.id,name:D.name,why:fx.why+': no se mueve y queda antes de que termine «'+n.name+'»'}); else if(instCmp(ns,stD)!==0) out.conflicts.push({id:D.id,name:D.name,why:fx.why+': no se mueve'}); return; }
+      if(instCmp(ns,stD)===0) return;
+      const ne=wEnd(ns,D.durMin||0); const oe=wEnd(stD,D.durMin||0);
+      out.changes.push({id:D.id,name:D.name,from:instLabel(stD),to:instLabel(ns),patch:{date:ns.d,time:D.time?fromMin(ns.m):D.time}});
+      q.push({id:D.id,oldE:oe,newE:ne,delta:wDiff(oe,ne),name:D.name}); }); }
+  return out; }
+let depPrev=null;
+/* Punto de entrada único para cambios de fecha/hora/duración/dependencia de una subtarea */
+function depApply(tid,sid,patch,done){
+  const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); const fin=()=>{ if(done) done(); };
+  if(!s||!canSubDate()){ store.updateSubtask(tid,sid,patch); fin(); return; }
+  const touches=['date','time','durMin','dependsOn'].some(k=>(k in patch)&&(patch[k]||'')!==(s[k]||''));
+  if(!touches){ store.updateSubtask(tid,sid,patch); fin(); return; }
+  const plan=depPlan(t,s,patch,'shift');
+  if(!plan.selfNote&&!plan.changes.length&&!plan.conflicts.length){ store.updateSubtask(tid,sid,patch); fin(); return; }
+  depPrev={tid,sid,patch,mode:'shift',done}; render(); }
+function depSetMode(m){ if(depPrev){ depPrev.mode=m; render(); } }
+function depCancel(){ depPrev=null; render(); }
+function depConfirm(){ const d=depPrev; if(!d) return; const t=store.task(d.tid); const s=t.subtasks.find(x=>x.id===d.sid); const plan=depPlan(t,s,d.patch,d.mode);
+  const full=Object.assign({},d.patch); if(plan.merged.date){ full.date=plan.merged.date; full.time=plan.merged.time; }
+  depPrev=null; store.updateSubtask(d.tid,d.sid,full);
+  plan.changes.forEach(c=>{ const sub=t.subtasks.find(x=>x.id===c.id); if(sub) Object.assign(sub,c.patch); });
+  if(plan.changes.length){ store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(d.tid,'Movió «'+s.name+'» y acomodó '+plan.changes.length+' subtarea(s) que dependen de ella'); }
+  if(d.done) d.done(); else render(); }
+function depPrevModal(){ const d=depPrev; const t=store.task(d.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===d.sid); if(!s){ depPrev=null; return ''; }
+  const plan=depPlan(t,s,d.patch,d.mode); const hasKids=depKids(t,s.id).length>0; const dl=plan.delta;
+  const newI=plan.merged.date?{d:plan.merged.date,m:toMin(plan.merged.time)==null?WK.s:toMin(plan.merged.time)}:null;
+  const opts=hasKids&&dl!==0?(dl>0?[['shift','Mover también todas las que dependen, el mismo tiempo'],['push','Empujar solo las que se encimen con ella'],['none','Mover solo esta (las demás se quedan)']]:[['shift','Adelantar también todas las que dependen, el mismo tiempo'],['none','Dejar las demás donde están']]):[];
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)depCancel()"><div class="modal-card" style="max-width:560px"><div class="m-head"><div class="m-top"><h3 style="margin:0">⛓ Acomodar dependencias</h3><button class="x" onclick="depCancel()">×</button></div></div><div class="m-body">
+    <div style="margin-bottom:10px"><b>${esc(s.name)}</b>${newI?`<div class="muted" style="font-size:.84rem">Queda: <b>${esc(instLabel(newI))}</b></div>`:''}</div>
+    ${plan.selfNote?`<div class="ses-resp" style="background:#fff7e0;color:#7a5f00;margin-bottom:10px">${esc(plan.selfNote)}</div>`:''}
+    ${opts.length?`<div class="field"><label>¿Qué hago con las que dependen de ella?</label>${opts.map(([k,l])=>`<label class="gf-opt" style="margin:4px 0"><input type="radio" name="dep-mode" ${d.mode===k?'checked':''} onchange="depSetMode('${k}')"> ${l}</label>`).join('')}</div>`:''}
+    ${plan.changes.length?`<div class="field"><label>Se moverán ${plan.changes.length} subtarea(s)</label><div class="dep-list">${plan.changes.map(c=>`<div class="dep-row"><b>${esc(c.name)}</b><span>${esc(c.from)} → <b>${esc(c.to)}</b></span></div>`).join('')}</div></div>`:(opts.length?'<div class="muted">Con esta opción ninguna otra subtarea cambia.</div>':'')}
+    ${plan.conflicts.length?`<div class="field"><label style="color:#c0392b">⚠️ No se mueven</label><div class="dep-list">${plan.conflicts.map(c=>`<div class="dep-row"><b>${esc(c.name)}</b><span>${esc(c.why)}</span></div>`).join('')}</div></div>`:''}
+    <div class="wiz-actions"><button class="btn ghost" onclick="depCancel()">Cancelar</button><button class="btn" onclick="depConfirm()">Aplicar</button></div></div></div></div>`; }
+
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
@@ -2915,6 +2991,8 @@ function subEditModal(){
           <div><label>Cuánto tardará *</label><select id="sm-dur" class="${bad(s.durMin).trim()}">${durOpts}</select></div></div>
         <div class="field"><label>Etapa</label><select id="sm-etapa" onchange="smEtapaChange(this.value)" ${dateLocked||!etapas.length?'disabled':''}>${etOpts}</select><div class="hint">La etapa sale de la fecha; al elegir otra, la fecha se mueve al inicio de esa etapa.</div></div>
         ${canParent?`<div class="field"><label>Dentro de</label><select id="sm-parent">${parentOpts}</select></div>`:''}
+        ${(!s0.isSeries&&!s0.seriesId)?`<div class="field"><label>⛓ Empieza cuando termina…</label><select id="sm-dep" ${dateLocked?'disabled':''}><option value="">— No depende de nada —</option>${(t.subtasks||[]).filter(m=>m.id!==s0.id&&!m.isSeries&&!m.seriesId&&!depWouldCycle(t,s0.id,m.id)).map(m=>`<option value="${m.id}" ${s0.dependsOn===m.id?'selected':''}>${esc(m.name)}${m.parentId?' (sub-subtarea)':''}</option>`).join('')}</select><div class="hint">Solo una. Si esa otra subtarea se mueve, esta (y las que dependan de esta) se acomodan en días y horas laborales (lunes a viernes, 9:00 a 18:00).</div>
+          <label class="gf-opt" style="margin-top:6px"><input type="checkbox" id="sm-fija" ${s0.fija?'checked':''} ${dateLocked?'disabled':''}> 📌 Fecha fija: no se mueve con las dependencias (ej. sesiones diarias a la misma hora)</label></div>`:''}
       </div>
       <div class="sm-pane" data-pane="nuwek" style="display:none"><div class="field"><label>Quién más del equipo Nuwek participa</label><div class="gf-list" onchange="smCount()">${team}</div><div class="hint">Les aparece en su calendario y les llega un aviso para confirmar que la vieron.</div></div></div>
       <div class="sm-pane" data-pane="cli" style="display:none"><div class="field"><label>Quién del equipo del cliente participa</label><div class="gf-list" onchange="smCount()">${cli}</div></div></div>
@@ -2984,7 +3062,8 @@ function saveSubModal(){
   if(s.isSeries&&!ruleLocked){   // se quitó la repetición: la madre vuelve a ser una subtarea normal y sus repeticiones se quedan
     const tp=seriesTpl(s); Object.assign(patch,{isSeries:false,series:null,personId:patch.personId,done:false}); t.subtasks.filter(x=>x.seriesId===sid).forEach(x=>{ delete x.seriesId; delete x.occDate; });
   }
-  store.updateSubtask(tid,sid,patch); logEvent(tid,'Editó la subtarea «'+name+'»'); subEd=null; render();
+  if(document.getElementById('sm-dep')){ patch.dependsOn=val('sm-dep')||null; patch.fija=!!(document.getElementById('sm-fija')||{}).checked; }
+  depApply(tid,sid,patch,()=>{ logEvent(tid,'Editó la subtarea «'+name+'»'); subEd=null; render(); });
 }
 function cpToggle(id){ if(!clientPop) return; const i=clientPop.sel.indexOf(id); if(i>=0) clientPop.sel.splice(i,1); else clientPop.sel.push(id); }
 function cpShowAdd(){ clientPop.adding=true; render(); setTimeout(()=>{ const el=document.getElementById('cp-name'); if(el) el.focus(); },0); }
