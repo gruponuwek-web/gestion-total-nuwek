@@ -246,10 +246,10 @@ class Store{
   /* Clona una tarea con TODAS sus subtareas, con las fechas movidas a la nueva fecha límite. det=true => ids fijos (dos usuarios no duplican) */
   cloneTaskShifted(t,nd,opts){ opts=opts||{}; const shift=daysBetween(t.dueDate||nd,nd); const now=new Date().toISOString(); const nt=JSON.parse(JSON.stringify(t)); const tag=nd.replace(/-/g,''); const idMap={};
     const mk=(base,pfx)=>opts.det?(pfx+base.replace(/^[st]_/,'').replace(/_\d{8}$/,'')+'_'+tag):uid(pfx);
-    Object.assign(nt,{id:mk(t.id,'t_'),status:'to-do',dueDate:nd,nextId:null,repeatOf:t.id}); delete nt.ord; if(opts.name) nt.name=opts.name;
+    Object.assign(nt,{id:mk(t.id,'t_'),status:'to-do',dueDate:nd,nextId:null,repeatOf:t.id}); delete nt.ord; delete nt.impCode; if(opts.name) nt.name=opts.name;
     const keep=(nt.subtasks||[]).filter(x=>!x.seriesId);                                 // las repeticiones de una serie se regeneran solas
     keep.forEach(x=>{ idMap[x.id]=mk(x.id,'s_'); });
-    nt.subtasks=keep.map(x=>{ const o=Object.assign({},x,{id:idMap[x.id],parentId:x.parentId?idMap[x.parentId]:undefined,done:false,doneAt:null,timeSpent:0,nextId:null,dateConflict:false,teamAck:{},seriesId:undefined,repeatOf:undefined,occDate:undefined});
+    nt.subtasks=keep.map(x=>{ const o=Object.assign({},x,{impCode:undefined,id:idMap[x.id],parentId:x.parentId?idMap[x.parentId]:undefined,done:false,doneAt:null,timeSpent:0,nextId:null,dateConflict:false,teamAck:{},seriesId:undefined,repeatOf:undefined,occDate:undefined});
       if(o.date) o.date=addDaysISO(o.date,shift);
       if(o.isSeries&&o.series){ o.series=Object.assign({},o.series,{startDate:o.series.startDate?addDaysISO(o.series.startDate,shift):'',skip:[]}); if(o.series.tpl&&(o.series.tpl.team||[]).length){ o.series.tpl=Object.assign({},o.series.tpl,{teamAck:{},teamInfo:Object.fromEntries(o.series.tpl.team.map(id=>[id,{by:opts.by||currentUser,ts:now}]))}); } }
       if((o.team||[]).length){ o.teamInfo={}; o.team.forEach(id=>{ o.teamInfo[id]={by:opts.by||currentUser,ts:now}; }); }
@@ -2779,7 +2779,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3037,8 +3037,8 @@ function copyDo(){ const S=copyS; if(!S||!canCopy()) return; const blk=copyBlock
     const nt=JSON.parse(JSON.stringify(t)); const idMap={}; subs.forEach(x=>idMap[x.id]=uid('s_'));
     Object.assign(nt,{id:uid('t_'),projectId:S.destPid,frenteId:S.frenteId,subtitle:dc.name,status:'to-do',responsibleId:'',nextId:null,repeatOf:undefined,
       dueDate:S.mode==='none'?(et?et.end:''):mapD(t.dueDate)});
-    delete nt.ord;
-    nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x));
+    delete nt.ord; delete nt.impCode;
+    nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x)); delete o.impCode;
       Object.assign(o,{id:idMap[x.id],parentId:x.parentId&&idMap[x.parentId]?idMap[x.parentId]:undefined,dependsOn:x.dependsOn&&idMap[x.dependsOn]?idMap[x.dependsOn]:undefined,
         done:false,doneAt:null,timeSpent:0,personId:'',team:[],teamInfo:{},teamAck:{},time:'',nextId:null,dateConflict:false,repeatOf:undefined,seriesId:undefined,occDate:undefined,
         invitados:sameClient?(x.invitados||[]):[],date:mapD(x.date)});
@@ -3077,9 +3077,9 @@ function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS
 let impS=null;
 const IMP_COLS=['codigo','nivel','padre','frente','nombre','descripcion','etiquetas','fecha','hora','duracion_min','responsable','depende_de','fecha_fija','urgente','cita_objetivo','cita_lugar','cita_link','cita_direccion','cita_temario','invitados'];
 function canImport(){ return role==='gerencia'||role==='gerente'; }
-function openImport(pid){ if(!canImport()) return; impS={pid:pid||'',step:1}; view='importar'; modalTask=null; render(); }
+function openImport(pid){ if(!canImport()) return; impS={pid:pid||'',step:1,rows:null}; view='importar'; modalTask=null; render(); }
 function impBack(){ const pid=impS&&impS.pid; impS=null; if(pid&&store.project(pid)) openProject(pid); else go(role==='gerencia'?'catalogos':'clientes'); }
-function impSetProject(v){ impS.pid=v; render(); }
+function impSetProject(v){ impS.pid=v; if(impS.rows) impValidate(); render(); }
 function impCtx(){ const p=impS.pid?store.project(impS.pid):null; const c=p?store.client(p.clientId):null;
   const frentes=p?store.frentesOf(p.id).map(f=>f.name):[]; const staff=store.activeStaff().map(u=>u.name);
   const inv=c?(c.people||[]).map(x=>x.name).filter(Boolean):[];
@@ -3156,10 +3156,164 @@ ${ex}
 Ahora te adjunto mi Excel. Conviértelo.`; }
 function impCopyPrompt(){ const t=impPrompt(); const done=()=>shareToast('📋 Texto copiado. Pégalo en Claude junto con tu Excel.'); if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done,()=>impShowPrompt()); else impShowPrompt(); }
 function impShowPrompt(){ impS.showPrompt=true; render(); }
+/* ---------- Paso 2 y 3: subir, revisar y corregir en pantalla, importar ---------- */
+const IMP_NIVEL={tarea:'Tarea',subtarea:'Subtarea',subsubtarea:'Subsubtarea'};
+const impNz=v=>String(v==null?'':v).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const IMP_ALIAS={duracion:'duracion_min',duracion_minutos:'duracion_min',minutos:'duracion_min',codigo_:'codigo',id:'codigo',tipo:'nivel',padre_codigo:'padre',tarea_padre:'padre',dependencia:'depende_de',depende:'depende_de',fija:'fecha_fija',fechafija:'fecha_fija',etiqueta:'etiquetas',tags:'etiquetas',invitado:'invitados',lugar:'cita_lugar',objetivo:'cita_objetivo',temario:'cita_temario',link:'cita_link',direccion:'cita_direccion'};
+function impDateNorm(v){ v=String(v==null?'':v).trim(); if(!v) return ''; let m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(v); if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  m=/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/.exec(v); if(m){ let y=m[3].length===2?'20'+m[3]:m[3]; return y+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'); } return v; }
+function impTimeNorm(v){ v=String(v==null?'':v).trim(); if(!v) return ''; const m=/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm|a\. m\.|p\. m\.)?/i.exec(v); if(!m) return v; let h=+m[1]; const ap=(m[3]||'').toLowerCase(); if(ap.startsWith('p')&&h<12) h+=12; if(ap.startsWith('a')&&h===12) h=0; return String(h).padStart(2,'0')+':'+m[2]; }
+const impYN=v=>{ const t=impNz(v); return ['si','s','yes','y','true','1','x'].includes(t)?'SI':'NO'; };
+const impLevel=v=>{ const t=impNz(v).replace(/ /g,''); return IMP_NIVEL[t]||''; };
+function impReadFile(inp){ const f=inp.files&&inp.files[0]; if(!f) return; if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión a internet.'); return; }
+  const csv=/\.csv$/i.test(f.name); const fr=new FileReader();
+  fr.onload=()=>{ try{ const wb=XLSX.read(fr.result,{type:csv?'string':'array',cellDates:true}); const nm=wb.SheetNames.find(n=>impNz(n)==='importar')||wb.SheetNames[0]; const ws=wb.Sheets[nm];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}); impLoad(raw,f.name); }catch(e){ console.error(e); alert('No pude leer ese archivo. Revisa que sea un Excel (.xlsx) o un CSV.'); } inp.value=''; };
+  if(csv) fr.readAsText(f); else fr.readAsArrayBuffer(f); }
+function impLoad(raw,fname){ let hi=raw.findIndex(r=>r.some(c=>impNz(c)));
+  if(hi<0){ alert('El archivo está vacío.'); return; }
+  const heads=raw[hi].map(h=>{ let k=impNz(h).replace(/ /g,'_'); return IMP_ALIAS[k]||k; });
+  const miss=['codigo','nivel','nombre'].filter(k=>!heads.includes(k)); if(miss.length){ alert('A tu archivo le faltan columnas obligatorias: '+miss.join(', ')+'.\n\nDescarga la plantilla para ver el formato.'); return; }
+  const rows=[]; raw.slice(hi+1).forEach(r=>{ if(!r.some(c=>String(c).trim())) return; const o={}; IMP_COLS.forEach(k=>o[k]=''); heads.forEach((k,i)=>{ if(IMP_COLS.includes(k)) o[k]=String(r[i]==null?'':r[i]).trim(); });
+    o.nivel=impLevel(o.nivel)||o.nivel; o.fecha=impDateNorm(o.fecha); o.hora=impTimeNorm(o.hora); o.fecha_fija=impYN(o.fecha_fija); o.urgente=impYN(o.urgente);
+    o.n=++impSeq; rows.push(o); });
+  if(!rows.length){ alert('No encontré filas con datos.'); return; }
+  impS.rows=rows; impS.file=fname; impS.step=3; impS.view='tabla'; impS.onlyBad=false; impS.open={}; impS.result=null; render(); }
+let impSeq=0;
+function impByCode(){ const m={}; (impS.rows||[]).forEach(r=>{ if(r.codigo&&!m[r.codigo]) m[r.codigo]=r; }); return m; }
+function impRoot(r,by){ let cur=r,g=0; while(cur&&cur.nivel!=='Tarea'&&g++<5) cur=by[cur.padre]; return cur&&cur.nivel==='Tarea'?cur:null; }
+function impFindPerson(name){ const t=impNz(name); if(!t) return null; const st=store.activeStaff(); let u=st.find(x=>impNz(x.name)===t||impNz(fullName(x))===t); if(u) return u;
+  const c=st.filter(x=>impNz(fullName(x)).startsWith(t+' ')||impNz(x.name).split(' ')[0]===t); return c.length===1?c[0]:null; }
+function impFindClientPerson(name){ const cx=impCtx(); const t=impNz(name); return cx.c?(cx.c.people||[]).find(x=>impNz(x.name)===t)||null:null; }
+function impFindFrente(name){ const t=impNz(name); return t?store.frentesOf(impS.pid).find(f=>impNz(f.name)===t)||null:null; }
+function impValidate(){ const rows=impS.rows, by=impByCode(); const E={}, W={}, bad=(o,n,f,m)=>{ (o[n]=o[n]||{})[f]=m; };
+  const seen={}; const cnt={}; rows.forEach(r=>{ cnt[r.codigo]=(cnt[r.codigo]||0)+1; });
+  rows.forEach(r=>{ const n=r.n;
+    if(!r.nombre) bad(E,n,'nombre','Falta el nombre');
+    if(!r.codigo) bad(E,n,'codigo','Falta el código'); else if(cnt[r.codigo]>1) bad(E,n,'codigo','Código repetido');
+    if(!IMP_NIVEL[impNz(r.nivel).replace(/ /g,'')]) bad(E,n,'nivel','Nivel inválido: usa Tarea, Subtarea o Subsubtarea');
+    else {
+      if(r.nivel==='Tarea'){ if(r.padre) bad(W,n,'padre','Una tarea no lleva padre (se ignora)'); if(!r.frente) bad(E,n,'frente','Falta el frente de la tarea'); else if(!impFindFrente(r.frente)) bad(W,n,'frente','Frente nuevo: se creará'); }
+      else { const pa=by[r.padre]; const need=r.nivel==='Subtarea'?'Tarea':'Subtarea';
+        if(!r.padre) bad(E,n,'padre','Falta el padre'); else if(!pa) bad(E,n,'padre','El código «'+r.padre+'» no existe'); else if(pa.nivel!==need) bad(E,n,'padre','El padre debe ser una '+need.toLowerCase());
+        else if(!impRoot(r,by)) bad(E,n,'padre','No llega a ninguna tarea'); }
+    }
+    if(r.fecha&&!/^\d{4}-\d{2}-\d{2}$/.test(r.fecha)) bad(E,n,'fecha','Fecha inválida (AAAA-MM-DD)'); else if(r.fecha&&!isWork(r.fecha)) bad(W,n,'fecha','Cae en fin de semana');
+    if(r.hora&&!/^\d{2}:\d{2}$/.test(r.hora)) bad(E,n,'hora','Hora inválida (HH:MM)');
+    if(r.duracion_min&&!(+r.duracion_min>0)) bad(E,n,'duracion_min','Debe ser un número de minutos');
+    if(r.responsable&&!impFindPerson(r.responsable)) bad(W,n,'responsable','No encontrado: se importa sin responsable');
+    if(r.nivel!=='Tarea'&&r.nivel){ if(!r.fecha&&!r.depende_de) bad(W,n,'fecha','Sin fecha: tomará la fecha límite de la tarea'); }
+    if(r.depende_de){ const d=by[r.depende_de];
+      if(r.nivel==='Tarea') bad(E,n,'depende_de','Las tareas no tienen dependencia');
+      else if(!d) bad(E,n,'depende_de','El código «'+r.depende_de+'» no existe');
+      else if(d===r) bad(E,n,'depende_de','No puede depender de sí misma');
+      else if(d.nivel==='Tarea') bad(E,n,'depende_de','Debe ser una subtarea o sub-subtarea');
+      else if(impRoot(d,by)!==impRoot(r,by)) bad(E,n,'depende_de','Debe ser de la misma tarea');
+      else { let cur=d,g=0; while(cur&&cur.depende_de&&g++<60){ cur=by[cur.depende_de]; if(cur===r){ bad(E,n,'depende_de','Dependencia circular'); break; } } } }
+    const hasC=r.cita_objetivo||r.cita_link||r.cita_direccion||r.cita_temario||r.invitados;
+    if(hasC&&r.nivel==='Tarea') bad(W,n,'cita_objetivo','La sesión solo aplica a subtareas (se ignora)');
+    if(r.cita_lugar&&!['videollamada','presencial','meet'].includes(impNz(r.cita_lugar))) bad(W,n,'cita_lugar','Usa videollamada o presencial');
+    if(r.invitados){ const miss=r.invitados.split(';').map(x=>x.trim()).filter(x=>x&&!impFindClientPerson(x)); if(miss.length) bad(W,n,'invitados','No encontrados en el cliente: '+miss.join(', ')); }
+  });
+  // fechas calculadas y choques con dependencias
+  const calc={}; const inst=(r)=>{ const d=r.fecha||(calc[r.n]&&calc[r.n].fecha); if(!d) return null; const t=r.fecha?r.hora:(calc[r.n]&&calc[r.n].hora)||''; return {d,m:toMin(t)==null?WK.s:toMin(t)}; };
+  for(let pass=0;pass<30;pass++){ let ch=false; rows.forEach(r=>{ if(E[r.n]&&E[r.n].depende_de) return; const d=r.depende_de&&r.nivel!=='Tarea'?by[r.depende_de]:null; if(!d||r.fecha) return; const pi=inst(d); if(!pi) return;
+      const st=wStart(wEnd(pi,+d.duracion_min||0)); const c=calc[r.n]; if(!c||c.fecha!==st.d||c.hora!==fromMin(st.m)){ calc[r.n]={fecha:st.d,hora:fromMin(st.m)}; ch=true; } }); if(!ch) break; }
+  rows.forEach(r=>{ if(E[r.n]&&E[r.n].depende_de) return; const d=r.depende_de&&r.nivel!=='Tarea'?by[r.depende_de]:null; if(!d||!r.fecha) return; const pi=inst(d); if(!pi) return; const pe=wEnd(pi,+d.duracion_min||0); const si=wStart({d:r.fecha,m:toMin(r.hora)==null?WK.s:toMin(r.hora)});
+    if(instCmp(si,pe)<0) bad(W,r.n,'fecha','Empieza antes de que termine «'+d.nombre+'» ('+instLabel(pe)+')'); });
+  rows.forEach(r=>{ if(calc[r.n]&&W[r.n]&&W[r.n].fecha&&/Sin fecha/.test(W[r.n].fecha)) delete W[r.n].fecha; });
+  impS.E=E; impS.W=W; impS.calc=calc; }
+function impCounts(){ const E=impS.E||{},W=impS.W||{}; const c={t:0,s:0,ss:0,e:0,w:0,rowsE:0,newF:new Set()}; impS.rows.forEach(r=>{ if(r.nivel==='Tarea'){ c.t++; if(r.frente&&!impFindFrente(r.frente)) c.newF.add(impNz(r.frente)); } else if(r.nivel==='Subtarea') c.s++; else if(r.nivel==='Subsubtarea') c.ss++; if(E[r.n]){ c.e+=Object.keys(E[r.n]).length; c.rowsE++; } if(W[r.n]) c.w+=Object.keys(W[r.n]).length; }); return c; }
+function impSet(n,f,v){ const r=impS.rows.find(x=>x.n===n); if(!r) return; if(f==='fecha_fija'||f==='urgente') v=v?'SI':'NO'; if(f==='fecha') v=impDateNorm(v); if(f==='hora') v=impTimeNorm(v); if(f==='nivel'&&v==='Tarea'){ r.padre=''; r.depende_de=''; }
+  if(f==='codigo'&&v&&v!==r.codigo){ const old=r.codigo; impS.rows.forEach(x=>{ if(x.padre===old) x.padre=v; if(x.depende_de===old) x.depende_de=v; }); }
+  r[f]=(f==='fecha_fija'||f==='urgente')?v:String(v==null?'':v).trim(); impRender(); }
+function impRender(){ impValidate(); renderKeepScroll(); }
+function impDelRow(n){ if(!confirm('¿Quitar esta fila del archivo? Las filas que cuelgan de ella quedarán marcadas con error.')) return; impS.rows=impS.rows.filter(r=>r.n!==n); impRender(); }
+function impAddRow(){ const o={}; IMP_COLS.forEach(k=>o[k]=''); Object.assign(o,{n:++impSeq,nivel:'Subtarea',fecha_fija:'NO',urgente:'NO',codigo:'N'+impSeq}); impS.rows.push(o); impS.open[o.n]=true; impRender(); }
+function impToggle(n){ impS.open[n]=!impS.open[n]; renderKeepScroll(); }
+function impSetView(v){ impS.view=v; render(); }
+function impOnlyBad(v){ impS.onlyBad=v; render(); }
+function impAcomodar(){ const by=impByCode(); let moved=0; for(let pass=0;pass<30;pass++){ let ch=false; impS.rows.forEach(r=>{ if(r.fecha_fija==='SI'||r.nivel==='Tarea'||!r.depende_de) return; if(impS.E[r.n]&&impS.E[r.n].depende_de) return; const d=by[r.depende_de]; if(!d||!d.fecha) return;
+      const pe=wEnd({d:d.fecha,m:toMin(d.hora)==null?WK.s:toMin(d.hora)},+d.duracion_min||0); const si=wStart({d:r.fecha||pe.d,m:r.fecha?(toMin(r.hora)==null?WK.s:toMin(r.hora)):pe.m});
+      if(!r.fecha||instCmp(si,pe)<0){ const st=wStart(pe); r.fecha=st.d; r.hora=fromMin(st.m); ch=true; moved++; } }); if(!ch) break; }
+  impRender(); shareToast(moved?'⛓ Se acomodaron '+moved+' fila(s) según sus dependencias.':'No había nada que acomodar.'); }
+function impReset(){ if(impS.rows&&!confirm('Se descarta lo que llevas en pantalla. ¿Seguir?')) return; impS.rows=null; impS.step=1; impS.result=null; render(); }
+function impBatches(){ try{ return JSON.parse(localStorage.getItem('nuwek_imp_batches')||'[]'); }catch(_){ return []; } }
+function impSaveBatches(b){ try{ localStorage.setItem('nuwek_imp_batches',JSON.stringify(b.slice(-15))); }catch(_){} }
+function impDo(){ if(!impS||!canImport()) return; impValidate(); const cnt=impCounts(); if(cnt.e){ alert('Aún hay '+cnt.e+' error(es) en rojo. Corrígelos o quita esas filas.'); return; }
+  const p=store.project(impS.pid); if(!p){ alert('Elige el proyecto de destino.'); return; } const c=store.client(p.clientId); const by=impByCode(); const now=new Date().toISOString();
+  const newFrentes=[]; const frId={}; impS.rows.filter(r=>r.nivel==='Tarea').forEach(r=>{ const k=impNz(r.frente); if(frId[k]) return; const ex=impFindFrente(r.frente); if(ex) frId[k]=ex.id; else { const f=store.addFrente(p.id,r.frente.trim()); frId[k]=f.id; newFrentes.push(f.id); } });
+  (impS.rows.flatMap(r=>r.nivel==='Tarea'&&r.etiquetas?r.etiquetas.split(';').map(x=>x.trim()).filter(Boolean):[])).forEach(tg=>{ if(!(store.d.tags||[]).some(t=>impNz(t.name)===impNz(tg))) store.addTag(tg); });
+  const tagName=tg=>{ const t=(store.d.tags||[]).find(x=>impNz(x.name)===impNz(tg)); return t?t.name:tg; };
+  const tok=()=>Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8); const created=[]; const idOf={};
+  impS.rows.forEach(r=>{ idOf[r.n]=uid(r.nivel==='Tarea'?'t_':'s_'); });
+  const dateOf=r=>r.fecha||(impS.calc[r.n]&&impS.calc[r.n].fecha)||''; const timeOf=r=>r.fecha?r.hora:((impS.calc[r.n]&&impS.calc[r.n].hora)||'');
+  impS.rows.filter(r=>r.nivel==='Tarea').forEach(tr=>{ const kids=impS.rows.filter(x=>x.nivel!=='Tarea'&&impRoot(x,by)===tr);
+    const dates=kids.map(dateOf).filter(Boolean).sort(); const due=tr.fecha||(dates.length?dates[dates.length-1]:p.startDate);
+    const resp={}; kids.forEach(k=>{ const u=impFindPerson(k.responsable); if(u) resp[u.id]=(resp[u.id]||0)+1; }); const top=Object.keys(resp).sort((a,b)=>resp[b]-resp[a])[0]||'';
+    const tid=idOf[tr.n]; const subs=kids.map(k=>{ const u=impFindPerson(k.responsable); const inv=(k.invitados||'').split(';').map(x=>impFindClientPerson(x.trim())).filter(Boolean).map(x=>x.id);
+      const o={id:idOf[k.n],name:k.nombre,personId:u?u.id:'',date:dateOf(k)||due,time:timeOf(k)||'',durMin:+k.duracion_min||null,invitados:inv,done:false,timeSpent:0,links:[],team:[],teamInfo:{},teamAck:{},impCode:k.codigo};
+      if(k.nivel==='Subsubtarea') o.parentId=idOf[by[k.padre].n]; if(k.depende_de) o.dependsOn=idOf[by[k.depende_de].n]; if(k.fecha_fija==='SI') o.fija=true; if(k.urgente==='SI') o.urgent=true;
+      if(k.cita_objetivo||k.cita_link||k.cita_direccion||k.cita_temario){ const pres=impNz(k.cita_lugar)==='presencial'||(!k.cita_link&&k.cita_direccion);
+        o.sesion={objetivo:k.cita_objetivo,lugar:{tipo:pres?'presencial':'meet',link:k.cita_link,direccion:k.cita_direccion},temario:(k.cita_temario||'').split(';').map(x=>x.trim()).filter(Boolean).map(t=>({id:'tm_'+Math.random().toString(36).slice(2,8),titulo:t,por:'nuwek',personId:'',by:currentUser,ts:now}))}; o.shareToken=tok(); }
+      return o; });
+    const nt={id:tid,projectId:p.id,frenteId:frId[impNz(tr.frente)],name:tr.nombre,subtitle:c.name,description:tr.descripcion||'',tags:(tr.etiquetas||'').split(';').map(x=>x.trim()).filter(Boolean).map(tagName),workLink:'',deliverables:[],responsibleId:top,status:'to-do',dueDate:due,viaticos:0,urgente:tr.urgente==='SI',subtasks:subs,links:[],impCode:tr.codigo};
+    store.d.tasks.push(nt); created.push(nt); });
+  store.save(); created.forEach(nt=>{ if(typeof dbSaveTask==='function') dbSaveTask(nt); });
+  const batch={id:uid('ib_'),ts:now,by:currentUser,file:impS.file,dest:p.name,pid:p.id,tids:created.map(x=>x.id),frentes:newFrentes,subs:created.reduce((a,t)=>a+t.subtasks.length,0)};
+  const b=impBatches(); b.push(batch); impSaveBatches(b);
+  created.forEach(nt=>logEvent(nt.id,'Importada desde Excel «'+impS.file+'» al proyecto «'+p.name+'» ('+nt.subtasks.length+' subtareas)'));
+  impS.result=batch; impS.step=4; impS.rows=null; render(); }
+function impUndo(bid){ const b=impBatches(); const x=b.find(y=>y.id===bid); if(!x) return; if(!confirm('¿Deshacer esta importación? Se eliminarán las '+x.tids.length+' tarea(s) importadas (con sus subtareas) y los frentes que se crearon si quedan vacíos.')) return;
+  x.tids.forEach(id=>{ if(store.task(id)) store.removeTask(id); }); (x.frentes||[]).forEach(fid=>{ if(!store.d.tasks.some(t=>t.frenteId===fid)) store.removeFrente(fid); });
+  impSaveBatches(b.filter(y=>y.id!==bid)); if(impS&&impS.result&&impS.result.id===bid){ impS.result=null; impS.step=1; } render(); }
+function impCell(r,f,html){ const e=impS.E[r.n]&&impS.E[r.n][f], w=impS.W[r.n]&&impS.W[r.n][f]; return `<td class="${e?'imp-e':w?'imp-w':''}" title="${esc(e||w||'')}">${html}</td>`; }
+function impInp(r,f,type,w){ return `<input type="${type||'text'}" value="${esc(r[f])}" style="width:${w||100}px" onchange="impSet(${r.n},'${f}',this.value)">`; }
+function impSel(r,f,opts,w,blank){ let o=opts.slice(); if(r[f]&&!o.some(x=>x[0]===r[f])) o.push([r[f],r[f]+' ⚠']); return `<select style="max-width:${w||130}px" onchange="impSet(${r.n},'${f}',this.value)"><option value="">${blank||'—'}</option>${o.map(x=>`<option value="${esc(x[0])}" ${x[0]===r[f]?'selected':''}>${esc(x[1])}</option>`).join('')}</select>`; }
+function impTable(){ const rows=impS.rows, by=impByCode(); const staff=store.activeStaff().map(u=>[u.name,u.name]); const fr=store.frentesOf(impS.pid).map(f=>[f.name,f.name]);
+  const newF=[...new Set(rows.filter(r=>r.nivel==='Tarea'&&r.frente&&!impFindFrente(r.frente)).map(r=>r.frente))].map(x=>[x,'✚ '+x+' (nuevo)']);
+  const list=impS.onlyBad?rows.filter(r=>(impS.E[r.n]&&Object.keys(impS.E[r.n]).length)||(impS.W[r.n]&&Object.keys(impS.W[r.n]).length)):rows;
+  const head=['','Código','Nivel','Padre','Frente','Nombre','Fecha','Hora','Min','Responsable','Depende de','Fija','Urg.',''].map(h=>`<th>${h}</th>`).join('');
+  const body=list.map(r=>{ const e=impS.E[r.n]&&Object.keys(impS.E[r.n]).length, w=impS.W[r.n]&&Object.keys(impS.W[r.n]).length; const calc=impS.calc[r.n]; const open=impS.open[r.n];
+    const parents=rows.filter(x=>x.nivel===(r.nivel==='Subsubtarea'?'Subtarea':'Tarea')&&x!==r).map(x=>[x.codigo,x.codigo+' · '+x.nombre.slice(0,24)]);
+    const root=impRoot(r,by); const deps=rows.filter(x=>x!==r&&x.nivel!=='Tarea'&&root&&impRoot(x,by)===root).map(x=>[x.codigo,x.codigo+' · '+x.nombre.slice(0,22)]);
+    const main=`<tr class="${e?'imp-rowe':w?'imp-roww':''} ${r.nivel==='Tarea'?'imp-rowt':''}"><td><span class="imp-ic">${e?'⛔':w?'⚠️':'✅'}</span> <a class="imp-tg" onclick="impToggle(${r.n})">${open?'▾':'▸'}</a></td>
+      ${impCell(r,'codigo',impInp(r,'codigo','text',70))}${impCell(r,'nivel',impSel(r,'nivel',[['Tarea','Tarea'],['Subtarea','Subtarea'],['Subsubtarea','Subsubtarea']],110,'Nivel…'))}
+      ${impCell(r,'padre',r.nivel==='Tarea'?'<span class="muted">—</span>':impSel(r,'padre',parents,130,'Padre…'))}${impCell(r,'frente',r.nivel==='Tarea'?impSel(r,'frente',[...fr,...newF],130,'Frente…'):'<span class="muted">hereda</span>')}
+      ${impCell(r,'nombre',impInp(r,'nombre','text',230))}
+      ${impCell(r,'fecha',`<input type="date" value="${esc(/^\d{4}-\d{2}-\d{2}$/.test(r.fecha)?r.fecha:'')}" onchange="impSet(${r.n},'fecha',this.value)">${calc&&!r.fecha?`<div class="imp-calc" title="Se calcula sola con la dependencia">⛓ ${esc(dLabel(calc.fecha))} ${calc.hora}</div>`:''}${r.fecha&&!/^\d{4}-\d{2}-\d{2}$/.test(r.fecha)?`<div class="imp-calc" style="color:#c0392b">${esc(r.fecha)}</div>`:''}`)}
+      ${impCell(r,'hora',impInp(r,'hora','time',84))}${impCell(r,'duracion_min',impInp(r,'duracion_min','number',60))}
+      ${impCell(r,'responsable',impSel(r,'responsable',staff,120,'Sin asignar'))}${impCell(r,'depende_de',r.nivel==='Tarea'?'<span class="muted">—</span>':impSel(r,'depende_de',deps,130,'Ninguna'))}
+      <td><input type="checkbox" ${r.fecha_fija==='SI'?'checked':''} onchange="impSet(${r.n},'fecha_fija',this.checked)"></td><td><input type="checkbox" ${r.urgente==='SI'?'checked':''} onchange="impSet(${r.n},'urgente',this.checked)"></td>
+      <td><a class="imp-del" title="Quitar fila" onclick="impDelRow(${r.n})">🗑</a></td></tr>`;
+    const msgs=[...Object.entries(impS.E[r.n]||{}).map(([k,m])=>`<span class="imp-m e">⛔ ${esc(m)}</span>`),...Object.entries(impS.W[r.n]||{}).map(([k,m])=>`<span class="imp-m w">⚠️ ${esc(m)}</span>`)].join('');
+    const det=(msgs||open)?`<tr class="imp-det"><td></td><td colspan="13">${msgs}${open?`<div class="imp-extra"><label>Descripción${impInp(r,'descripcion','text',220)}</label><label>Etiquetas (;)${impInp(r,'etiquetas','text',140)}</label><label>Sesión · objetivo${impInp(r,'cita_objetivo','text',200)}</label><label>Lugar${impSel(r,'cita_lugar',[['videollamada','videollamada'],['presencial','presencial']],110,'—')}</label><label>Link${impInp(r,'cita_link','text',170)}</label><label>Dirección${impInp(r,'cita_direccion','text',150)}</label><label>Temario (;)${impInp(r,'cita_temario','text',200)}</label><label>Invitados (;)${impInp(r,'invitados','text',160)}</label></div>`:''}</td></tr>`:'';
+    return main+det; }).join('');
+  return `<div class="imp-wrap"><table class="imp-tbl"><thead><tr>${head}</tr></thead><tbody>${body||'<tr><td colspan="14" class="muted" style="padding:16px">Sin filas que mostrar.</td></tr>'}</tbody></table></div>`; }
+function impTree(){ const rows=impS.rows, by=impByCode(); const flag=r=>(impS.E[r.n]&&Object.keys(impS.E[r.n]).length)?'⛔':(impS.W[r.n]&&Object.keys(impS.W[r.n]).length)?'⚠️':'';
+  const line=(r,d)=>{ const dep=r.depende_de&&by[r.depende_de]?` <span class="muted">⛓ tras «${esc(by[r.depende_de].nombre)}»</span>`:''; const cal=impS.calc[r.n]; const dt=r.fecha||(cal&&cal.fecha); const msg=[...Object.values(impS.E[r.n]||{}),...Object.values(impS.W[r.n]||{})].join(' · ');
+    return `<div class="imp-tr" style="margin-left:${d*22}px" title="${esc(msg)}">${flag(r)} <b>${esc(r.codigo)}</b> ${esc(r.nombre||'(sin nombre)')}${dt?` <span class="muted">· ${esc(dLabel(dt))}${(r.fecha?r.hora:cal&&cal.hora)?' '+(r.fecha?r.hora:cal.hora):''}</span>`:''}${r.responsable?` <span class="muted">· ${esc(r.responsable)}</span>`:''}${r.fecha_fija==='SI'?' 📌':''}${dep}${r.cita_objetivo?' 📅':''}</div>`; };
+  const kids=(r,d)=>rows.filter(x=>x.padre===r.codigo&&x.nivel===(r.nivel==='Tarea'?'Subtarea':'Subsubtarea')).map(x=>line(x,d)+kids(x,d+1)).join('');
+  const orphans=rows.filter(r=>r.nivel!=='Tarea'&&!impRoot(r,by)); const fs={}; rows.filter(r=>r.nivel==='Tarea').forEach(r=>{ (fs[r.frente||'(sin frente)']=fs[r.frente||'(sin frente)']||[]).push(r); });
+  return `<div class="imp-treewrap">${Object.entries(fs).map(([f,list])=>`<div class="imp-fr">${esc(f)}${impFindFrente(f)||f==='(sin frente)'?'':' <span class="pill yellow">nuevo</span>'}</div>${list.map(t=>line(t,0)+kids(t,1)).join('')}`).join('')}${orphans.length?`<div class="imp-fr" style="color:#c0392b">Filas sin tarea</div>${orphans.map(o=>line(o,0)).join('')}`:''}</div>`; }
+function impPreview(){ impValidate(); const c=impCounts(); const p=store.project(impS.pid); const ok=!c.e;
+  return `<div class="card imp-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div><h3 style="margin:0">3 · Revisa y corrige</h3><div class="muted" style="font-size:.82rem">${esc(impS.file)} → <b>${esc(p?p.name:'(sin proyecto)')}</b></div></div>
+      <div class="imp-sum"><span><b>${c.t}</b> tareas</span><span><b>${c.s}</b> subtareas</span><span><b>${c.ss}</b> sub-subtareas</span>${c.newF.size?`<span>✚ <b>${c.newF.size}</b> frente(s) nuevo(s)</span>`:''}<span class="${c.e?'imp-bad':'imp-good'}">⛔ <b>${c.e}</b> errores</span><span>⚠️ <b>${c.w}</b> avisos</span></div></div>
+    <div class="imp-bar"><div class="subtoggle sm"><button class="${impS.view==='tabla'?'on':''}" onclick="impSetView('tabla')">Tabla</button><button class="${impS.view==='arbol'?'on':''}" onclick="impSetView('arbol')">Árbol</button></div>
+      <label class="gf-opt"><input type="checkbox" ${impS.onlyBad?'checked':''} onchange="impOnlyBad(this.checked)"> Solo filas con problemas</label>
+      <button class="btn ghost sm" onclick="impAcomodar()" title="Acomoda las fechas de las filas que empiezan antes de que termine su dependencia (calendario laboral)">⛓ Acomodar según dependencias</button><button class="btn ghost sm" onclick="impAddRow()">+ Fila</button></div>
+    ${impS.view==='arbol'?impTree():impTable()}
+    <div class="hint" style="margin-top:8px">Cambia cualquier celda: se vuelve a revisar al instante. Pulsa ▸ en una fila para editar descripción, etiquetas y sesión con cliente. Los frentes nuevos se crean al importar.</div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="impReset()">← Elegir otro archivo</button><button class="btn" onclick="impDo()" ${ok&&impS.pid?'':'disabled'}>${ok?(impS.pid?'Importar '+c.t+' tarea(s)':'Elige proyecto'):'Corrige los errores para importar'}</button></div></div>`; }
+function impDone(){ const r=impS.result; return `<div class="card imp-card"><div class="ses-resp" style="background:#e6f6ec;color:#1d6b3a">✅ Se importaron <b>${r.tids.length}</b> tarea(s) con <b>${r.subs}</b> subtarea(s) a «${esc(r.dest)}»${(r.frentes||[]).length?` y se crearon ${r.frentes.length} frente(s)`:''}. Lo que no traía responsable quedó sin asignar: revísalo en la agenda.</div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="impUndo('${r.id}')">↩ Deshacer esta importación</button><button class="btn ghost" onclick="impS.step=1;impS.result=null;render()">Importar otro archivo</button><button class="btn" onclick="openProject('${r.pid}')">Ver el proyecto</button></div></div>`; }
+
 function viewImportar(){ if(!impS){ impS={pid:'',step:1}; } const cx=impCtx();
   const projs=store.d.projects.map(p=>({p,c:store.client(p.clientId)})).sort((a,b)=>(a.c.name+a.p.name).localeCompare(b.c.name+b.p.name));
-  const steps=['Instrucciones','Subir archivo','Revisar y corregir','Listo'];
-  const stepbar=`<div class="imp-steps">${steps.map((l,i)=>`<div class="imp-st ${i===0?'on':''}"><span>${i+1}</span>${l}</div>`).join('')}</div>`;
+  const steps=['Instrucciones','Subir archivo','Revisar y corregir','Listo']; const cur=impS.step===4?3:impS.step===3?2:0;
+  const stepbar=`<div class="imp-steps">${steps.map((l,i)=>`<div class="imp-st ${i<=cur?'on':''}"><span>${i+1}</span>${l}</div>`).join('')}</div>`;
+  if(impS.step===3&&impS.rows) return `<div class="crumb"><a onclick="impBack()">${cx.p?esc(cx.p.name):'Catálogos'}</a> › Importar tareas</div><div class="sec-title"><h2>⬆ Importar tareas</h2></div>${stepbar}${impPreview()}`;
+  if(impS.step===4&&impS.result) return `<div class="crumb"><a onclick="impBack()">${cx.p?esc(cx.p.name):'Catálogos'}</a> › Importar tareas</div><div class="sec-title"><h2>⬆ Importar tareas</h2></div>${stepbar}${impDone()}`;
   const sel=`<select onchange="impSetProject(this.value)"><option value="">Sin proyecto (plantilla genérica)</option>${projs.map(x=>`<option value="${x.p.id}" ${x.p.id===impS.pid?'selected':''}>${esc(x.c.name)} · ${esc(x.p.name)}</option>`).join('')}</select>`;
   return `<div class="crumb"><a onclick="impBack()">${cx.p?esc(cx.p.name):'Catálogos'}</a> › Importar tareas</div>
     <div class="sec-title"><h2>⬆ Importar tareas</h2></div>${stepbar}
@@ -3178,7 +3332,11 @@ function viewImportar(){ if(!impS){ impS={pid:'',step:1}; } const cx=impCtx();
       <li>Si un <b>responsable</b> no coincide con nadie, la fila se importa sin responsable y con aviso.</li>
       <li><b>depende_de</b>: la fila empieza cuando termina otra de la misma tarea (lunes a viernes, 9 a 18). Sin fecha, se calcula sola.</li>
       <li>Antes de guardar vas a ver una vista previa donde se corrige todo en la pantalla.</li></ul></div>
-    <div class="card imp-card" style="opacity:.75"><h3 style="margin:0 0 6px">2 · Subir mi archivo</h3><p class="muted" style="margin:0">Se activa en la siguiente entrega: subir el Excel o CSV, revisar y corregir en pantalla, importar y poder deshacer.</p></div>`; }
+    <div class="card imp-card"><h3 style="margin:0 0 6px">2 · Sube tu archivo</h3><p class="muted" style="margin-top:0">Excel (.xlsx) o CSV con el formato de la plantilla. No se guarda nada hasta que lo revises y confirmes.</p>
+      ${impS.pid?'':'<div class="ses-resp" style="background:#fff7e0;color:#7a5f00;margin-bottom:10px">Elige arriba el proyecto de destino para poder importar.</div>'}
+      <label class="btn" style="display:inline-block;cursor:pointer">⬆ Elegir archivo<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impReadFile(this)"></label>
+      ${impBatches().length?`<div class="field" style="margin-top:14px"><label>Importaciones recientes</label>${impBatches().slice().reverse().slice(0,5).map(b=>`<div class="dep-row"><b>${b.tids.length} tarea(s) · ${esc(b.dest)}</b><span>${esc(b.file||'')} · ${new Date(b.ts).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} <a style="cursor:pointer;color:#c0392b" onclick="impUndo('${b.id}')">deshacer</a></span></div>`).join('')}</div>`:''}
+    </div>`; }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
