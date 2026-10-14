@@ -555,6 +555,7 @@ function render(){
     else if(view==='wizard') body=viewWizard();
     else if(view==='proyecto') body=viewProyecto();
     else if(view==='catalogos') body=viewCatalogos();
+    else if(view==='importar') body=canImport()?viewImportar():viewClientes();
     else if(view==='gestion') body=viewGestion();
     else body=viewClientes();
     app.innerHTML = shell(body);
@@ -1411,7 +1412,7 @@ function viewProyecto(){
     ? `<div class="crumb"><a onclick="go('op_tableros')">Tableros</a> › ${p.name}</div>`
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
-  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
+  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button><button class="btn ghost sm" onclick="openImport('${p.id}')">⬆ Importar</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
   return `${crumb}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
@@ -2641,6 +2642,8 @@ function viewCatalogos(){
   const tags=store.d.tags.map(t=>`<span class="chip tag-chip"><span class="tag-sw" style="background:${t.color}"></span>${t.name} <button class="chip-e" title="Editar" onclick="openTagEdit('${esc(t.name)}')">✏️</button><button class="chip-x" title="Eliminar" onclick="delTag('${esc(t.name)}')">×</button></span>`).join('') || '<span class="muted">Sin etiquetas</span>';
   return `<div class="crumb">Catálogos</div><div class="sec-title"><h2>Catálogos</h2></div>
     <p class="muted">La base reutilizable. Los <b>Servicios</b> son plantillas: al crear un proyecto precargan sus frentes y tareas.</p>
+    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
+    <p class="muted" style="margin-top:-4px">Pasa un listado de tareas, subtareas y sub-subtareas desde Excel o CSV. También lo encuentras dentro de cada proyecto.</p>
     <div class="sec-title"><h2 style="font-size:1.1rem">Servicios</h2><button class="btn sm" onclick="openSvcForm()">+ Nuevo servicio</button></div>
     <div class="svc-list">${svc||'<div class="muted">Sin servicios.</div>'}</div>
     <div class="sec-title"><h2 style="font-size:1.1rem">Personal Nuwek</h2><button class="btn sm" onclick="openStaffForm()">+ Nueva persona</button></div>
@@ -3057,6 +3060,115 @@ function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS
     ${recents.length?`<div class="field"><label>Copias recientes</label>${recents.map(b=>`<div class="dep-row"><b>${b.tids.length} tarea(s)</b><span>${esc(b.src)} → ${esc(b.dest)} · ${new Date(b.ts).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} <a style="cursor:pointer;color:#c0392b" onclick="copyUndo('${b.id}')">deshacer</a></span></div>`).join('')}</div>`:''}
     <div class="wiz-actions"><span class="muted" style="margin-right:auto;font-size:.8rem">${n} tarea(s) · ${ns} subtarea(s)</span><button class="btn ghost" onclick="closeCopy()">Cancelar</button><button class="btn" onclick="copyDo()" ${blk||!n?'disabled':''}>Copiar</button></div>`;
   return `<div class="modal active" style="z-index:145" onclick="if(event.target===this)closeCopy()"><div class="modal-card" style="max-width:640px"><div class="m-head"><div class="m-top"><h3 style="margin:0">⧉ Copiar tareas</h3><button class="x" onclick="closeCopy()">×</button></div></div><div class="m-body">${body}</div></div></div>`; }
+
+
+/* ================== IMPORTAR TAREAS (Gerencia y Dirección) ==================
+   Paso 1: instrucciones, plantilla de Excel y texto para Claude (se arman con los frentes y personas del proyecto elegido). */
+let impS=null;
+const IMP_COLS=['codigo','nivel','padre','frente','nombre','descripcion','etiquetas','fecha','hora','duracion_min','responsable','depende_de','fecha_fija','urgente','cita_objetivo','cita_lugar','cita_link','cita_direccion','cita_temario','invitados'];
+function canImport(){ return role==='gerencia'||role==='gerente'; }
+function openImport(pid){ if(!canImport()) return; impS={pid:pid||'',step:1}; view='importar'; modalTask=null; render(); }
+function impBack(){ const pid=impS&&impS.pid; impS=null; if(pid&&store.project(pid)) openProject(pid); else go(role==='gerencia'?'catalogos':'clientes'); }
+function impSetProject(v){ impS.pid=v; render(); }
+function impCtx(){ const p=impS.pid?store.project(impS.pid):null; const c=p?store.client(p.clientId):null;
+  const frentes=p?store.frentesOf(p.id).map(f=>f.name):[]; const staff=store.activeStaff().map(u=>u.name);
+  const inv=c?(c.people||[]).map(x=>x.name).filter(Boolean):[];
+  return {p,c,frentes,staff,inv,generic:!p}; }
+function impDates(){ let d=nextWork(addDaysISO(todayISO(),1)); const out=[]; for(let i=0;i<8;i++){ out.push(d); d=nextWork(addDaysISO(d,1)); } return out; }
+function impExampleRows(cx){ const f1=cx.frentes[0]||'Onboarding', f2=cx.frentes[1]||cx.frentes[0]||'Operación';
+  const r1=cx.staff[0]||'Nombre Apellido', r2=cx.staff[1]||cx.staff[0]||'Nombre Apellido', iv=cx.inv[0]||'Contacto del cliente'; const D=impDates();
+  const R=(o)=>IMP_COLS.map(k=>o[k]==null?'':o[k]);
+  return [
+    R({codigo:'T1',nivel:'Tarea',frente:f1,nombre:'Kit de bienvenida',descripcion:'Arranque operativo y accesos.',etiquetas:'Alta',fecha:D[5]}),
+    R({codigo:'T1.1',nivel:'Subtarea',padre:'T1',nombre:'Brief interno',fecha:D[0],hora:'10:00',duracion_min:60,responsable:r1}),
+    R({codigo:'T1.2',nivel:'Subtarea',padre:'T1',nombre:'Reunión de arranque con el cliente',fecha:D[1],hora:'11:00',duracion_min:60,responsable:r1,depende_de:'T1.1',urgente:'NO',cita_objetivo:'Presentar el plan y acordar accesos',cita_lugar:'videollamada',cita_link:'https://meet.google.com/xxx-xxxx-xxx',cita_temario:'Bienvenida; Alcance; Accesos; Dudas',invitados:iv}),
+    R({codigo:'T1.2.1',nivel:'Subsubtarea',padre:'T1.2',nombre:'Preparar la presentación',fecha:D[0],duracion_min:90,responsable:r2}),
+    R({codigo:'T1.3',nivel:'Subtarea',padre:'T1',nombre:'Enviar minuta (sin fecha: se calcula sola al terminar la reunión)',duracion_min:30,responsable:r1,depende_de:'T1.2'}),
+    R({codigo:'T2',nivel:'Tarea',frente:f2,nombre:'Seguimiento semanal',descripcion:'Revisión con el cliente.',etiquetas:'Media',fecha:D[7]}),
+    R({codigo:'T2.1',nivel:'Subtarea',padre:'T2',nombre:'Llamada de seguimiento',fecha:D[4],hora:'09:30',duracion_min:30,responsable:r2,fecha_fija:'SI',urgente:'SI'}),
+  ]; }
+function impInstructions(){ return [
+  ['CÓMO LLENAR ESTA PLANTILLA'],[''],
+  ['• Una fila por cada tarea, subtarea o sub-subtarea. Borra las filas de ejemplo y pon las tuyas en la hoja «Importar».'],
+  ['• codigo: una clave corta y única que tú inventas (T1, T1.1, T1.1.1…). Sirve para unir las filas entre sí y, después, para actualizar sin duplicar. No la cambies entre versiones.'],
+  ['• nivel: Tarea, Subtarea o Subsubtarea (nada más).'],
+  ['• padre: el código de la fila que la contiene. Vacío en las tareas. Una subtarea apunta a una tarea; una sub-subtarea apunta a una subtarea.'],
+  ['• frente: solo en las tareas. Si el frente ya existe en el proyecto debe escribirse igual; si no existe, se crea. Las subtareas heredan el frente de su tarea.'],
+  ['• nombre: obligatorio. descripcion y etiquetas (separadas por ;) solo aplican a tareas.'],
+  ['• fecha: AAAA-MM-DD. En las tareas es la fecha límite; en las subtareas, su día. Si la fila tiene depende_de, puede ir vacía y se calcula sola.'],
+  ['• hora (opcional): HH:MM. duracion_min: minutos estimados.'],
+  ['• responsable: nombre de una persona de Nuwek tal como aparece en la hoja «Listas». Si no coincide, la fila se importa sin responsable y con un aviso.'],
+  ['• depende_de: código de UNA subtarea o sub-subtarea de la misma tarea que debe terminar antes. La regla es: esta empieza cuando termina aquella. Se respeta el calendario laboral (lunes a viernes, 9:00 a 18:00).'],
+  ['• fecha_fija: SI si la fila no debe moverse cuando se acomoden dependencias (sesiones diarias a la misma hora, por ejemplo). urgente: SI/NO.'],
+  ['• Sesión con el cliente (opcional): cita_objetivo, cita_lugar (videollamada o presencial), cita_link (si es videollamada), cita_direccion (si es presencial), cita_temario (puntos separados por ;) e invitados (personas del cliente separadas por ;).'],
+  ['• Las reglas de repetición no se importan todavía.'],
+  [''],['Al subir el archivo verás una vista previa donde puedes corregir todo antes de guardar.'] ]; }
+function impLists(cx){ const n=Math.max(cx.frentes.length,cx.staff.length,cx.inv.length,2); const rows=[['Frentes del proyecto','Responsables (Nuwek)','Invitados del cliente','Lugar de la sesión']];
+  const lug=['videollamada','presencial']; for(let i=0;i<n;i++) rows.push([cx.frentes[i]||'',cx.staff[i]||'',cx.inv[i]||'',lug[i]||'']); return rows; }
+function impDownload(){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión a internet e inténtalo de nuevo.'); return; }
+  const cx=impCtx(); const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([IMP_COLS,...impExampleRows(cx)]); ws['!cols']=IMP_COLS.map(k=>({wch:({nombre:44,descripcion:30,cita_objetivo:30,cita_link:32,cita_temario:30,cita_direccion:24}[k])||14}));
+  XLSX.utils.book_append_sheet(wb,ws,'Importar');
+  const wi=XLSX.utils.aoa_to_sheet(impInstructions()); wi['!cols']=[{wch:130}]; XLSX.utils.book_append_sheet(wb,wi,'Instrucciones');
+  const wl=XLSX.utils.aoa_to_sheet(impLists(cx)); wl['!cols']=[{wch:28},{wch:26},{wch:28},{wch:20}]; XLSX.utils.book_append_sheet(wb,wl,'Listas');
+  const nm='Plantilla-importacion-'+(cx.p?cx.p.name.replace(/[^\wÁÉÍÓÚáéíóúñÑ-]+/g,'-'):'generica')+'.xlsx'; XLSX.writeFile(wb,nm); }
+function impPrompt(){ const cx=impCtx(); const ex=impExampleRows(cx).map(r=>r.join(' | ')).join('\n');
+  const ctx=cx.p?`Proyecto destino: «${cx.p.name}» del cliente «${cx.c.name}».
+Frentes que ya existen (si una tarea cae en uno de estos, usa el nombre EXACTO; si no encaja en ninguno, propón un frente nuevo con nombre corto): ${cx.frentes.join(', ')||'(todavía no tiene frentes)'}.
+Responsables posibles (usa el nombre EXACTO): ${cx.staff.join(', ')}.
+Personas del cliente que pueden ser invitadas a sesiones (nombre EXACTO): ${cx.inv.join(', ')||'(ninguna registrada)'}.`
+  :`No hay proyecto elegido todavía: usa nombres de frentes cortos y claros (por ejemplo Onboarding, Estrategia, Implementación, Medición) y escribe los responsables tal como vienen en mi archivo; los corregiré en el portal.`;
+  return `Actúa como un asistente que ordena planes de trabajo. Te voy a dar mi Excel actual con tareas y subtareas. Conviértelo EXACTAMENTE al formato de importación del Portal Nuwek que describo abajo y entrégame el resultado como un archivo .xlsx (o CSV con comas y UTF-8) con UNA sola hoja y esta fila de encabezados, en este orden:
+
+${IMP_COLS.join(',')}
+
+${ctx}
+
+REGLAS
+1. Una fila por cada tarea, subtarea o sub-subtarea. Jerarquía de máximo 3 niveles: Tarea > Subtarea > Subsubtarea.
+2. codigo: clave única y estable que tú asignas: T1, T2… para tareas; T1.1, T1.2… para subtareas; T1.1.1… para sub-subtareas. Respeta el orden de mi archivo.
+3. nivel: solo «Tarea», «Subtarea» o «Subsubtarea». padre: el codigo de la fila que la contiene (vacío en tareas).
+4. frente: solo en las tareas. Las subtareas lo heredan.
+5. nombre: obligatorio, claro y empezando con un verbo en infinitivo (Recabar, Analizar, Proponer, Diseñar, Definir, Validar, Probar, Aprobar, Ajustar, Comunicar, Implementar, Evaluar, Entregar, Auditar).
+6. descripcion y etiquetas (separadas por punto y coma) solo en tareas; etiquetas posibles: Alta, Media, Baja, En-proceso, Revisión.
+7. fecha en formato AAAA-MM-DD (en tareas es la fecha límite; en subtareas, su día). hora en HH:MM, solo si la conozco. duracion_min en minutos (estima si no viene: 30, 60, 90 o 120).
+8. Calendario laboral: lunes a viernes, de 9:00 a 18:00. No pongas fechas en fin de semana.
+9. depende_de: el codigo de UNA sola subtarea o sub-subtarea de la MISMA tarea que debe terminar antes (la fila empieza cuando termina aquella). Proponlas cuando el orden sea lógico. Si una fila depende de otra y no tengo su fecha, deja la fecha vacía: el portal la calculará.
+10. fecha_fija: SI únicamente para sesiones o actividades que ocurren a una fecha y hora exactas; en los demás casos déjalo vacío. urgente: SI solo si lo indico.
+11. Si una fila es una sesión o reunión con el cliente, llena cita_objetivo, cita_lugar («videollamada» o «presencial»), cita_link (videollamada) o cita_direccion (presencial), cita_temario (puntos separados por punto y coma) e invitados (nombres separados por punto y coma). Si no, deja esas columnas vacías.
+12. No inventes información que no esté en mi archivo (fechas, nombres, links). Si falta algo, deja la celda vacía.
+13. Al final, escríbeme una lista corta de DUDAS o supuestos que tomaste (frentes que creaste, dependencias que propusiste, filas ambiguas) para corregirlos en el portal.
+
+EJEMPLO DE FILAS (columnas separadas por « | »):
+${IMP_COLS.join(' | ')}
+${ex}
+
+Ahora te adjunto mi Excel. Conviértelo.`; }
+function impCopyPrompt(){ const t=impPrompt(); const done=()=>shareToast('📋 Texto copiado. Pégalo en Claude junto con tu Excel.'); if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done,()=>impShowPrompt()); else impShowPrompt(); }
+function impShowPrompt(){ impS.showPrompt=true; render(); }
+function viewImportar(){ if(!impS){ impS={pid:'',step:1}; } const cx=impCtx();
+  const projs=store.d.projects.map(p=>({p,c:store.client(p.clientId)})).sort((a,b)=>(a.c.name+a.p.name).localeCompare(b.c.name+b.p.name));
+  const steps=['Instrucciones','Subir archivo','Revisar y corregir','Listo'];
+  const stepbar=`<div class="imp-steps">${steps.map((l,i)=>`<div class="imp-st ${i===0?'on':''}"><span>${i+1}</span>${l}</div>`).join('')}</div>`;
+  const sel=`<select onchange="impSetProject(this.value)"><option value="">Sin proyecto (plantilla genérica)</option>${projs.map(x=>`<option value="${x.p.id}" ${x.p.id===impS.pid?'selected':''}>${esc(x.c.name)} · ${esc(x.p.name)}</option>`).join('')}</select>`;
+  return `<div class="crumb"><a onclick="impBack()">${cx.p?esc(cx.p.name):'Catálogos'}</a> › Importar tareas</div>
+    <div class="sec-title"><h2>⬆ Importar tareas</h2></div>${stepbar}
+    <div class="card imp-card"><h3 style="margin:0 0 6px">1 · Prepara tu archivo</h3>
+      <p class="muted" style="margin-top:0">Pasa tu listado de tareas, subtareas y sub-subtareas del Excel al portal sin capturar una por una. Puedes usar tu archivo tal cual con ayuda de Claude, o llenar la plantilla.</p>
+      <div class="field"><label>¿A qué proyecto lo vas a importar?</label>${sel}<div class="hint">${cx.p?'La plantilla y el texto para Claude usarán los <b>frentes</b> ('+(cx.frentes.length||'sin frentes aún')+'), los <b>responsables</b> de Nuwek y las <b>personas del cliente</b> de este proyecto.':'Sin proyecto, la plantilla trae ejemplos genéricos. Si eliges uno, se llena con sus frentes y personas.'}</div></div>
+      <div class="imp-opts">
+        <div class="imp-opt"><b>A · Ya tengo mi Excel</b><p class="muted">Copia este texto y pégalo en Claude junto con tu Excel. Te devuelve el archivo en el formato exacto.</p><button class="btn" onclick="impCopyPrompt()">📋 Copiar texto para Claude</button></div>
+        <div class="imp-opt"><b>B · Lo lleno yo</b><p class="muted">Descarga la plantilla con ejemplos, instrucciones y listas de frentes y personas.</p><button class="btn" onclick="impDownload()">⬇ Descargar plantilla de Excel</button></div>
+      </div>
+      ${impS.showPrompt?`<div class="field" style="margin-top:12px"><label>Selecciona y copia este texto</label><textarea readonly rows="10" style="width:100%;font-size:.78rem" onfocus="this.select()">${esc(impPrompt())}</textarea></div>`:''}
+    </div>
+    <div class="card imp-card"><h3 style="margin:0 0 6px">Reglas en corto</h3><ul class="imp-rules">
+      <li>Una fila por tarea, subtarea o sub-subtarea; se unen con un <b>código</b> (T1, T1.1, T1.1.1).</li>
+      <li>La columna <b>frente</b> va en las tareas: si ya existe en el proyecto debe coincidir; si no, se crea.</li>
+      <li>Si un <b>responsable</b> no coincide con nadie, la fila se importa sin responsable y con aviso.</li>
+      <li><b>depende_de</b>: la fila empieza cuando termina otra de la misma tarea (lunes a viernes, 9 a 18). Sin fecha, se calcula sola.</li>
+      <li>Antes de guardar vas a ver una vista previa donde se corrige todo en la pantalla.</li></ul></div>
+    <div class="card imp-card" style="opacity:.75"><h3 style="margin:0 0 6px">2 · Subir mi archivo</h3><p class="muted" style="margin:0">Se activa en la siguiente entrega: subir el Excel o CSV, revisar y corregir en pantalla, importar y poder deshacer.</p></div>`; }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }

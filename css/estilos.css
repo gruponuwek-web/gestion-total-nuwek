@@ -983,3 +983,6 @@
   .ga-task{display:flex;align-items:center;gap:6px;justify-content:space-between}.ga-tn{overflow:hidden;text-overflow:ellipsis}
   .ga-n{flex:0 0 auto;min-width:20px;height:20px;border-radius:10px;background:var(--green);color:#fff;font-size:.68rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}.ga-n.ok{background:#b9c4bf}
   .gc-cell,.gc-wd,.gc-wcol,.cal-day{min-width:0}
+
+  .imp-steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.imp-st{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:20px;background:#eceae0;color:var(--muted);font-size:.8rem;font-weight:600}.imp-st span{width:20px;height:20px;border-radius:50%;background:#cfcdc2;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem}.imp-st.on{background:var(--green);color:#fff}.imp-st.on span{background:var(--yellow);color:#223c36}
+  .imp-card{margin-bottom:14px}.imp-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:6px}.imp-opt{border:1.5px solid var(--line);border-radius:14px;padding:14px}.imp-opt p{font-size:.82rem;margin:4px 0 10px}.imp-rules{margin:0;padding-left:18px;font-size:.84rem;line-height:1.7}
