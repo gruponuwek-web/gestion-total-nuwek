@@ -217,6 +217,7 @@ class Store{
   updateClient(id,patch){ const c=this.client(id); if(c){Object.assign(c,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
   addClientPerson(cid,o){ const c=this.client(cid); if(!c)return; const p=Object.assign({id:'p_'+Date.now(),type:'cliente',bossId:null},o); c.people.push(p); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); return p; }
   updateClientPerson(cid,pid,patch){ const c=this.client(cid); if(!c)return; const p=c.people.find(x=>x.id===pid); if(p){Object.assign(p,patch); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c);} }
+  removeClient(cid){ if(this.projectsOf(cid).length) return false; this.d.clients=this.d.clients.filter(c=>c.id!==cid); this.save(); if(typeof dbDeleteClient==='function') dbDeleteClient(cid); return true; }
   removeClientPerson(cid,pid){ const c=this.client(cid); if(!c)return; c.people=c.people.filter(x=>x.id!==pid); this.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); }
   addEtapa(pid,name,start,end){ const ord=this.etapasOf(pid).length+1; const e={id:uid('et_'),projectId:pid,name:name||('Etapa '+ord),start,end,order:ord}; this.d.etapas.push(e); this.save(); if(typeof dbSaveEtapa==='function') dbSaveEtapa(e); return e; }
   updateEtapa(eid,patch){ const e=this.d.etapas.find(x=>x.id===eid); if(e){Object.assign(e,patch); this.save(); if(typeof dbSaveEtapa==='function') dbSaveEtapa(e);} }
@@ -724,21 +725,23 @@ function myFavClients(){ const u=store.d.staff.find(x=>x.id===currentUser); if(u
 function toggleFavClient(cid){ const cur=myFavClients().slice(); const i=cur.indexOf(cid); if(i>=0) cur.splice(i,1); else cur.push(cid);
   try{ localStorage.setItem('favClients_'+currentUser,JSON.stringify(cur)); }catch(_){}
   const u=store.d.staff.find(x=>x.id===currentUser); if(u) store.updateStaff(u.id,{favClients:cur}); render(); }
+let showInactive=false;
 function viewClientes(){
   const favs=myFavClients();
   const card=c=>{
     const n=store.projectsOf(c.id).length; const fav=favs.includes(c.id);
-    return `<div class="card click${fav?' is-fav':''}" onclick="openClient('${c.id}')">
+    return `<div class="card click${fav?' is-fav':''}${c.activo===false?' cl-off':''}" onclick="openClient('${c.id}')">
       <button class="fav-btn${fav?' on':''}" title="${fav?'Quitar de favoritos':'Marcar como favorito'}" onclick="event.stopPropagation();toggleFavClient('${c.id}')">${fav?'★':'☆'}</button>
-      <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>
+      <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}
       <h3 style="margin:8px 0 4px">${c.name}</h3>
       <div class="muted" style="font-size:.85rem">${c.location} · ${n} proyecto${n===1?'':'s'} vivo${n===1?'':'s'}</div>
     </div>`; };
-  const favList=favs.map(id=>store.client(id)).filter(Boolean);
-  const rest=store.d.clients.filter(c=>!favs.includes(c.id));
+  const inact=store.d.clients.filter(c=>c.activo===false); const vis=c=>showInactive||c.activo!==false;
+  const favList=favs.map(id=>store.client(id)).filter(Boolean).filter(vis);
+  const rest=store.d.clients.filter(c=>!favs.includes(c.id)).filter(vis);
   const add=isGerencia()?`<div class="card click" style="display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed" onclick="openClientForm()">+ Nuevo cliente</div>`:'';
   return `<div class="crumb">Clientes</div>
-    <div class="sec-title"><h2>Clientes</h2></div>
+    <div class="sec-title"><h2>Clientes</h2>${isGerencia()&&inact.length?`<button class="btn ghost sm" onclick="showInactive=!showInactive;render()">${showInactive?'Ocultar':'Ver'} inactivos (${inact.length})</button>`:''}</div>
     ${favList.length?`<div class="fav-title">★ Favoritos</div><div class="grid cols-3">${favList.map(card).join('')}</div><div class="fav-title" style="margin-top:22px">Todos los clientes</div>`:''}
     <div class="grid cols-3">${rest.map(card).join('')}
       ${add}
@@ -792,8 +795,8 @@ function viewCliente(){
   return `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › ${c.name}</div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
-        <div><div class="pill green">Cliente</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
-        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
+        <div><div class="pill green">Cliente</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}<h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
+        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button><button class="btn ghost" title="${c.activo===false?'Reactivar cliente':'Desactivar cliente (se conserva todo, pero se oculta y sus usuarios no entran)'}" onclick="toggleClientActive('${c.id}')">${c.activo===false?'↩ Reactivar':'⏸ Desactivar'}</button><button class="btn ghost" title="Eliminar cliente" style="color:#c0392b" onclick="deleteClient('${c.id}')">🗑️</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
       </div>
       <dl class="kv" style="margin-top:16px">
         <dt>RFC</dt><dd>${c.rfc||'—'}</dd>
@@ -2109,6 +2112,13 @@ function delFrente(fid,pid){const n=store.tasksOf(pid).filter(t=>t.frenteId===fi
 /* ===== Catálogos ===== */
 function openClientForm(){qm={kind:'cliente'};render();}
 function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
+function toggleClientActive(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const off=c.activo!==false;
+  if(off&&!confirm('¿Desactivar a «'+c.name+'»?\n\nSe conservan sus proyectos y tareas, pero el cliente se oculta de la lista y sus usuarios del portal ya no podrán entrar. Puedes reactivarlo cuando quieras.')) return;
+  c.activo=off?false:true; store.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); if(off){ shareToast('⏸ Cliente desactivado'); go('clientes'); } else { shareToast('↩ Cliente reactivado'); render(); } }
+function deleteClient(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const n=store.projectsOf(cid).length;
+  if(n){ alert('«'+c.name+'» tiene '+n+' proyecto(s).\n\nPara no perder información, primero elimina sus proyectos o, mejor, usa «Desactivar», que lo oculta y bloquea a sus usuarios sin borrar nada.'); return; }
+  if(!confirm('¿Eliminar definitivamente a «'+c.name+'»? Se borran también sus contactos y accesos. No se puede deshacer.')) return;
+  store.removeClient(cid); shareToast('🗑 Cliente eliminado'); go('clientes'); }
 function openClientEdit(cid){qm={kind:'clienteEdit',cid};render();}
 function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;render();}
 function openContactForm(cid){qm={kind:'contacto',cid};render();}
@@ -3701,7 +3711,7 @@ function openSesContact(id){ openSesModal('contacto',{id}); }
    OJO: todavía no hay seguridad a nivel de base de datos (eso es la siguiente etapa). */
 let clientSess=null, showClientLogin=false, cpView='inicio', cpTaskId=null, cpUserEd=null, cpLoginErr='', cpFails={}, cpProj='';
 const normU=s=>String(s||'').trim().toLowerCase();
-function findPortalUser(user){ const u=normU(user); if(!u) return null; for(const c of store.d.clients){ for(const p of (c.people||[])){ if(p.portal&&p.portal.user&&normU(p.portal.user)===u) return {c,p}; } } return null; }
+function findPortalUser(user){ const u=normU(user); if(!u) return null; for(const c of store.d.clients){ if(c.activo===false) continue; for(const p of (c.people||[])){ if(p.portal&&p.portal.user&&normU(p.portal.user)===u) return {c,p}; } } return null; }
 function openClientLogin(){ showClientLogin=true; cpLoginErr=''; render(); setTimeout(()=>{ const e=document.getElementById('cl-user'); if(e) e.focus(); },30); }
 function closeClientLogin(){ showClientLogin=false; render(); }
 function clientLoginScreen(){
@@ -3721,7 +3731,7 @@ function clientLogin(){
 function saveClientSession(){ try{ if(clientSess) localStorage.setItem('nuwekClient',JSON.stringify(Object.assign({},clientSess,{exp:Date.now()+SESSION_TTL_MS}))); }catch(_){} }
 function restoreClientSession(){ try{ const o=JSON.parse(localStorage.getItem('nuwekClient')||'null'); if(!o||Date.now()>o.exp){ localStorage.removeItem('nuwekClient'); return; } clientSess={cid:o.cid,pid:o.pid}; if(!cpCtx()){ clientSess=null; localStorage.removeItem('nuwekClient'); return; } const s=sessionStorage.getItem('nuwekCpView'); if(s) cpView=s; else cpView=cpCtx().isAdmin?'inicio':'tareas'; }catch(_){} }
 function clientLogout(){ clientSess=null; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
-function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
+function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||c.activo===false||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
 function setCpView(v){ cpView=v; try{ sessionStorage.setItem('nuwekCpView',v); }catch(_){} render(); window.scrollTo(0,0); }
 function cpSecs(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas']]; }
 function renderClientPortal(){

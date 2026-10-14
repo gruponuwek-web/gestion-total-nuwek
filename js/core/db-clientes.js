@@ -22,7 +22,8 @@ function dbToAppClient(row){
     generalResponsibleId: row.general_responsible_id || null,
     people: Array.isArray(row.contactos) ? row.contactos : [],
     tipo: row.tipo === 'interno' ? 'interno' : 'externo',
-    logo: row.logo || ''
+    logo: row.logo || '',
+    activo: row.activo !== false
   };
 }
 
@@ -44,7 +45,8 @@ function appToDbClient(c){
     general_responsible_id: c.generalResponsibleId || null,
     contactos: c.people || [],
     tipo: c.tipo === 'interno' ? 'interno' : 'externo',
-    logo: c.logo || ''
+    logo: c.logo || '',
+    activo: c.activo !== false
   };
 }
 
@@ -64,8 +66,8 @@ async function dbSaveClient(c){
     const row = appToDbClient(c);
     let { error } = await sb.from('clientes').upsert(row);
     // si alguna columna nueva ("tipo", "logo") aún no existe en la base, guardar sin ella
-    for (let i = 0; i < 2 && error; i++){
-      const m = (error.message||'').match(/\b(tipo|logo)\b/i); const col = m && m[1].toLowerCase();
+    for (let i = 0; i < 3 && error; i++){
+      const m = (error.message||'').match(/\b(tipo|logo|activo)\b/i); const col = m && m[1].toLowerCase();
       if (!col || !(col in row)) break;
       delete row[col]; ({ error } = await sb.from('clientes').upsert(row));
     }
@@ -79,4 +81,12 @@ async function dbSaveClient(c){
     console.error('Error de red al guardar cliente:', e);
     alert('No hay conexión con la base de datos para guardar el cliente.');
   }
+}
+
+// --- BORRAR un cliente (solo si ya no tiene proyectos) ---
+async function dbDeleteClient(id){
+  try{
+    const { error } = await sb.from('clientes').delete().eq('id', id);
+    if (error){ console.error('No se pudo eliminar el cliente:', error.message); alert('Ojo: no se pudo eliminar el cliente en la base de datos.\n\n' + error.message); }
+  }catch(e){ console.error('Red al eliminar cliente:', e); }
 }

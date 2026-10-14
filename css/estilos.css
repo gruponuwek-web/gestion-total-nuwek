@@ -999,3 +999,5 @@
   .imp-treewrap{margin-top:10px;border:1.5px solid var(--line);border-radius:12px;padding:10px 14px;max-height:62vh;overflow:auto;font-size:.82rem}.imp-fr{font-family:'Syne';font-weight:700;color:var(--green);margin:10px 0 4px}.imp-tr{padding:2px 0}
 
   .acc-cred{font-size:.78rem;color:var(--muted)}.acc-cred b{color:var(--ink)}.acc-code{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}.acc-eye{cursor:pointer;margin-left:4px}
+
+  .cl-off{opacity:.55}
