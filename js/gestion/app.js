@@ -561,7 +561,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -623,6 +623,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(accEd){ closeAcc(); return; }
   if(copyS){ closeCopy(); return; }
   if(verbInfo){ closeVerbInfo(); return; }
   if(subEd){ closeSubEdit(); return; }
@@ -2640,7 +2641,7 @@ function viewCatalogos(){
     </div>`;
   }).join('') || '<div class="muted">Sin personal.</div>';
   const tags=store.d.tags.map(t=>`<span class="chip tag-chip"><span class="tag-sw" style="background:${t.color}"></span>${t.name} <button class="chip-e" title="Editar" onclick="openTagEdit('${esc(t.name)}')">✏️</button><button class="chip-x" title="Eliminar" onclick="delTag('${esc(t.name)}')">×</button></span>`).join('') || '<span class="muted">Sin etiquetas</span>';
-  const CT=[['servicios','🧩 Servicios'],['personal','👥 Personal Nuwek'],['etiquetas','🏷️ Etiquetas'],['importar','⬆ Importar tareas'],['login','🎨 Apariencia del login']];
+  const CT=[['servicios','🧩 Servicios'],['personal','👥 Personal Nuwek'],['etiquetas','🏷️ Etiquetas'],['accesos','🔑 Accesos de clientes'],['importar','⬆ Importar tareas'],['login','🎨 Apariencia del login']];
   const bars=CT.map(([k,l])=>`<button class="${catTab===k?'active':''}" onclick="setCatTab('${k}')">${l}</button>`).join('');
   const panes={servicios:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Servicios</h2><button class="btn sm" onclick="openSvcForm()">+ Nuevo servicio</button></div>
     <div class="svc-list">${svc||'<div class="muted">Sin servicios.</div>'}</div>
@@ -2648,7 +2649,7 @@ function viewCatalogos(){
     <div class="team-list">${staff}</div>
 `,etiquetas:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Etiquetas</h2><button class="btn sm" onclick="openTagForm()">+ Nueva etiqueta</button></div>
     <div class="chiplist">${tags}</div>
-`,importar:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
+`,accesos:()=>accesosHtml(),importar:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
     <p class="muted" style="margin-top:-4px">Pasa un listado de tareas, subtareas y sub-subtareas desde Excel o CSV. También lo encuentras dentro de cada proyecto.</p>
 `,login:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Apariencia del login</h2></div>
     <div class="card">
@@ -2779,7 +2780,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3337,6 +3338,48 @@ function viewImportar(){ if(!impS){ impS={pid:'',step:1}; } const cx=impCtx();
       <label class="btn" style="display:inline-block;cursor:pointer">⬆ Elegir archivo<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="impReadFile(this)"></label>
       ${impBatches().length?`<div class="field" style="margin-top:14px"><label>Importaciones recientes</label>${impBatches().slice().reverse().slice(0,5).map(b=>`<div class="dep-row"><b>${b.tids.length} tarea(s) · ${esc(b.dest)}</b><span>${esc(b.file||'')} · ${new Date(b.ts).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} <a style="cursor:pointer;color:#c0392b" onclick="impUndo('${b.id}')">deshacer</a></span></div>`).join('')}</div>`:''}
     </div>`; }
+
+/* ================== ACCESOS DE CLIENTES (Catálogos) ================== */
+let accOpen={}, accShow={}, accEd=null, accQ='';
+function accToggle(cid){ accOpen[cid]=!accOpen[cid]; render(); }
+function accReveal(pid){ accShow[pid]=!accShow[pid]; render(); }
+function accSearch(v){ accQ=v; render(); setTimeout(()=>{ const e=document.getElementById('acc-q'); if(e){ e.focus(); e.setSelectionRange(v.length,v.length); } },0); }
+function accRow(c,p){ const po=p.portal; const off=po&&po.activo===false;
+  return `<div class="cat-row ${off?'off':''}">${avatar(p,true)}<span class="cat-nm">${esc(p.name)}</span><span class="muted" style="font-size:.8rem">${esc(p.role||'Sin puesto')}${p.phone?' · '+esc(p.phone):''}</span>
+    ${po?`<span class="acc-cred">usuario <b>${esc(po.user)}</b></span><span class="acc-cred">código <b class="acc-code">${accShow[p.id]?esc(po.code):'••••••'}</b> <a class="acc-eye" title="${accShow[p.id]?'Ocultar':'Mostrar'}" onclick="accReveal('${p.id}')">${accShow[p.id]?'🙈':'👁'}</a></span><span class="pill ${off?'gray':po.rol==='admin'?'yellow':'green'}">${off?'Inactivo':po.rol==='admin'?'Administrador':'Colaborador'}</span>`
+    :'<span class="muted" style="font-size:.78rem">Sin acceso al portal</span>'}
+    <span class="cat-ops"><button class="btn ghost sm" title="${po?'Editar acceso':'Dar acceso'}" onclick="openAcc('${c.id}','${p.id}')">${po?'✏️':'🔑'}</button>${po?`<button class="btn ghost sm" title="${off?'Reactivar':'Desactivar'}" onclick="accToggleActive('${c.id}','${p.id}')">${off?'↩︎':'⏸'}</button>`:''}</span></div>`; }
+function accesosHtml(){ const q=impNz(accQ); let tot=0,act=0;
+  const groups=store.d.clients.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const ppl=(c.people||[]); const withA=ppl.filter(x=>x.portal); tot+=withA.length; act+=withA.filter(x=>x.portal.activo!==false).length;
+    const list=q?ppl.filter(x=>impNz(x.name+' '+(x.portal?x.portal.user:'')+' '+c.name).includes(q)):ppl; if(q&&!list.length) return '';
+    const open=q?true:!!accOpen[c.id];
+    return `<div class="team-grp"><div class="team-head" onclick="accToggle('${c.id}')"><span class="svc-chev">${open?'▾':'▸'}</span><span class="team-nm">${esc(c.name)}</span><span class="team-cnt">${withA.length} con acceso</span><span class="muted" style="font-size:.74rem;margin-left:6px">${ppl.length} contacto(s)</span></div>
+      ${open?`<div class="cat-list">${list.map(x=>accRow(c,x)).join('')||'<div class="muted" style="padding:8px">Este cliente aún no tiene contactos.</div>'}<div style="padding:6px 0"><button class="btn ghost sm" onclick="openAcc('${c.id}','')">+ Usuario para ${esc(c.name)}</button></div></div>`:''}</div>`; }).join('');
+  return `<div class="sec-title"><h2 style="font-size:1.1rem">Accesos de clientes</h2><button class="btn sm" onclick="openAcc('','')">+ Nuevo acceso</button></div>
+    <p class="muted" style="margin-top:-4px">Todos los usuarios del portal del cliente en un solo lugar: <b>${act}</b> activos de <b>${tot}</b>. Los códigos están ocultos; pulsa 👁 para verlos. Cada cliente administra a su gente desde su portal, pero aquí puedes crear, cambiar o desactivar accesos.</p>
+    <div class="field" style="max-width:340px"><input id="acc-q" placeholder="Buscar cliente, persona o usuario…" value="${esc(accQ)}" oninput="accSearch(this.value)"></div>
+    <div class="team-list">${groups||'<div class="muted">Sin resultados.</div>'}</div>`; }
+function openAcc(cid,pid){ accEd={cid,pid,gen:''}; render(); }
+function closeAcc(){ accEd=null; render(); }
+function accGen(){ const c=String(Math.floor(Math.random()*900000)+100000); const e=document.getElementById('ac-code'); if(e) e.value=c; }
+function accSyncPerson(){ const e=document.getElementById('ac-person'); if(!e) return; const nw=e.value==='__new'; const b=document.getElementById('ac-newbox'); if(b) b.style.display=nw?'block':'none'; }
+function accCli(v){ accEd.cid=v; accEd.pid=''; render(); }
+function accModal(){ const E=accEd; const c=store.client(E.cid); const p=c&&E.pid?(c.people||[]).find(x=>x.id===E.pid):null; const po=(p&&p.portal)||{rol:'colab',activo:true};
+  const cli=`<div class="field"><label>Cliente *</label><select id="ac-cli" ${E.pid?'disabled':''} onchange="accCli(this.value)"><option value="">Elige…</option>${store.d.clients.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<option value="${x.id}" ${x.id===E.cid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>`;
+  const per=c?(E.pid?`<div class="field"><label>Persona</label><div><b>${esc(p.name)}</b> <span class="muted">${esc(p.role||'')}</span></div></div>`
+    :`<div class="field"><label>Persona *</label><select id="ac-person" onchange="accSyncPerson()"><option value="__new">➕ Nuevo contacto…</option>${(c.people||[]).filter(x=>!x.portal).map(x=>`<option value="${x.id}">${esc(x.name)}${x.role?' · '+esc(x.role):''}</option>`).join('')}</select></div><div id="ac-newbox"><div class="field row"><div><label>Nombre *</label><input id="ac-name"></div><div><label>Puesto</label><input id="ac-puesto"></div></div></div>`):'';
+  return `<div class="modal active" style="z-index:145" onclick="if(event.target===this)closeAcc()"><div class="modal-card" style="max-width:520px"><div class="m-head"><div class="m-top"><h3 style="margin:0">${p&&p.portal?'Editar acceso':'Dar acceso al portal'}</h3><button class="x" onclick="closeAcc()">×</button></div></div><div class="m-body">${cli}${per}
+    ${c?`<div class="field row"><div><label>Usuario *</label><input id="ac-user" value="${esc(po.user||'')}" autocapitalize="off" placeholder="ej. maria.lopez"></div><div><label>Código de 6 cifras * <a class="muted" style="cursor:pointer;font-size:.74rem" onclick="accGen()">🎲 generar</a></label><input id="ac-code" inputmode="numeric" maxlength="6" value="${esc(po.code||'')}" placeholder="123456"></div></div>
+    <div class="field"><label>Rol</label><select id="ac-rol"><option value="admin" ${po.rol==='admin'?'selected':''}>Administrador (Gantt, finanzas, tiempos, notas, scorecard, usuarios)</option><option value="colab" ${po.rol!=='admin'?'selected':''}>Colaborador (solo sus tareas)</option></select></div>
+    <label class="gf-opt"><input type="checkbox" id="ac-act" ${po.activo!==false?'checked':''}> Usuario activo</label>`:'<div class="muted">Elige un cliente para continuar.</div>'}
+    <div class="wiz-actions">${p&&p.portal?'<button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="accQuitar()">Quitar acceso</button>':''}<button class="btn ghost" onclick="closeAcc()">Cancelar</button><button class="btn" onclick="saveAcc()" ${c?'':'disabled'}>Guardar</button></div></div></div></div>`; }
+function saveAcc(){ const E=accEd; const c=store.client(E.cid); if(!c) return; const user=(val('ac-user')||'').trim(), code=(val('ac-code')||'').trim(); let pid=E.pid; let name='';
+  if(pid){ name=(c.people.find(x=>x.id===pid)||{}).name; } else { const sel=val('ac-person'); if(sel&&sel!=='__new'){ pid=sel; name=(c.people.find(x=>x.id===pid)||{}).name; } else name=(val('ac-name')||'').trim(); }
+  if(!cpValidateUser(name,user,code,pid||null)) return; const portal={user,code,rol:val('ac-rol')||'colab',activo:!!document.getElementById('ac-act').checked};
+  if(pid) store.updateClientPerson(c.id,pid,{portal}); else store.addClientPerson(c.id,{name,role:(val('ac-puesto')||'').trim(),phone:'',email:'',portal});
+  accOpen[c.id]=true; accEd=null; render(); shareToast('🔑 Acceso guardado'); }
+function accQuitar(){ const E=accEd; if(!E||!E.pid||!confirm('¿Quitarle el acceso al portal? Seguirá como contacto.')) return; store.updateClientPerson(E.cid,E.pid,{portal:null}); accEd=null; render(); }
+function accToggleActive(cid,pid){ const c=store.client(cid); const x=c&&(c.people||[]).find(y=>y.id===pid); if(!x||!x.portal) return; store.updateClientPerson(cid,pid,{portal:Object.assign({},x.portal,{activo:x.portal.activo===false})}); render(); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
