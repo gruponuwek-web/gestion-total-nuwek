@@ -22,7 +22,8 @@ function dbToAppProject(row){
     status: row.status || 'active',
     alcances: Array.isArray(row.alcances) ? row.alcances : [],
     links: Array.isArray(row.links) ? row.links : [],
-    scorecards: Array.isArray(row.scorecards) ? row.scorecards : []
+    scorecards: Array.isArray(row.scorecards) ? row.scorecards : [],
+    notasCliente: Array.isArray(row.notas_cliente) ? row.notas_cliente : []
   };
 }
 function appToDbProject(p){
@@ -40,7 +41,8 @@ function appToDbProject(p){
     status: p.status || 'active',
     alcances: p.alcances || [],
     links: p.links || [],
-    scorecards: p.scorecards || []
+    scorecards: p.scorecards || [],
+    notas_cliente: p.notasCliente || []
   };
 }
 
@@ -80,7 +82,11 @@ async function dbLoadProyectos(){
 /* ---------- GUARDAR ---------- */
 async function dbSaveProject(p){
   try{
-    const { error } = await sb.from('proyectos').upsert(appToDbProject(p));
+    const row = appToDbProject(p);
+    let { error } = await sb.from('proyectos').upsert(row);
+    if (error && /notas_cliente/i.test(error.message||'')){   // la columna aún no existe: guardar sin ella
+      delete row.notas_cliente; ({ error } = await sb.from('proyectos').upsert(row));
+    }
     if (error){ console.error('Error guardando proyecto:', error.message); alert('Ojo: no se pudo guardar el proyecto.\n\n'+error.message); }
     else console.log('💾 Proyecto guardado en Supabase:', p.name);
   }catch(e){ console.error('Red al guardar proyecto:', e); alert('Sin conexión para guardar el proyecto.'); }

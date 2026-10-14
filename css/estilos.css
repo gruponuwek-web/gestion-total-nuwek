@@ -948,3 +948,20 @@
   .client-tab-body .sec-title{margin-top:0}
   .score-soon{display:flex;gap:12px;align-items:center;background:#fff7e0;border:1.5px dashed #e6b800;border-radius:14px;padding:12px 16px}
   .score-soon>span{font-size:1.6rem}
+
+  /* ---- Portal del cliente ---- */
+  .login-client-link{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:99px;padding:8px 18px;font-weight:600;cursor:pointer;font-family:inherit;backdrop-filter:blur(3px)}
+  .login-client-link:hover{background:rgba(255,255,255,.28)}
+  .cl-card{width:min(380px,92vw);margin:auto;background:#fff;border-radius:20px;padding:26px 26px 22px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .cl-card h2{text-align:center;margin:10px 0 2px}
+  .cl-link{color:var(--green);cursor:pointer;font-size:.84rem;font-weight:600;text-decoration:underline}
+  .cp-wrap{max-width:1100px;margin:0 auto;padding:18px 20px 60px}
+  .cp-head{display:flex;align-items:center;gap:14px;margin:6px 0 4px}
+  .cp-head h1{margin:2px 0 0;font-size:1.6rem}.cp-eye{font-size:.76rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .cp-logo{width:56px;height:56px;border-radius:14px;background:#fff center/contain no-repeat;border:1px solid var(--line);flex-shrink:0}
+  .cp-logo.none{display:flex;align-items:center;justify-content:center;background:var(--green);color:#fff;font-weight:800;font-size:1.4rem}
+  .cp-nav{margin-top:12px}
+  .cp-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:8px}
+  .g-av{display:inline-flex;margin-left:6px;vertical-align:middle}.g-av .avatar{width:18px;height:18px;margin-left:-5px;border:1.5px solid #fff}
+  .tm-row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:.84rem}.tm-l{width:120px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:capitalize}
+  .tm-bar{flex:1;height:10px;background:#eef0ec;border-radius:99px;overflow:hidden}.tm-bar i{display:block;height:100%;background:var(--green);border-radius:99px}
