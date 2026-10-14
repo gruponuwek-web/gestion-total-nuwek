@@ -561,6 +561,7 @@ function render(){
   }
   // modal
   document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
 function openMiEspacio(){ view='op_pendientes'; opSelTask=null; modalTask=null; render(); }
@@ -1390,8 +1391,8 @@ function viewProyecto(){
   const c=store.client(p.clientId); const sv=store.service(p.serviceId);
   const colab=isColab();
   let tabs;
-  if(isGerencia()) tabs=['gestor','gantt','tareas','kpis','biblioteca','datos','scorecard'];
-  else if(isPM()||isGerente()) tabs=['gestor','gantt','tareas','biblioteca','scorecard'];
+  if(isGerencia()) tabs=['gestor','gantt','tareas','kpis','biblioteca'];
+  else if(isPM()||isGerente()) tabs=['gestor','gantt','tareas','biblioteca'];
   else tabs=['gestor','gantt','tareas','biblioteca'];
   const tlabel={gestor:'Gestor',gantt:'Gantt',tareas:'Tareas',kpis:'KPIs',biblioteca:'📚 Biblioteca',datos:'Datos y alcances',scorecard:'📊 Scorecard'};
   if(!tabs.includes(selTab)) selTab='gestor';
@@ -1496,33 +1497,45 @@ function tabGantt(p,cp){
   if(today>=rangeStart&&today<=rangeEnd){ todayMark=`<div class="g-today" style="left:${diffDays(rangeStart,today)*PX}px"></div>`; }
 
   // filas
-  let labels='<div class="g-lh">Tarea</div>', lanes=`<div class="g-axis">${axis}</div>`;
+  let labels='<div class="g-lh">Tarea</div>', lanes=`<div class="g-axis">${axis}</div>`; let yy=42; const rects={}, deps=[];
   frentes.forEach(f=>{
     labels+=`<div class="g-fr" style="border-left:4px solid ${f.color}">${f.name}</div>`;
     lanes+=`<div class="g-frrow"></div>`;
+    yy+=30;
     tasks.filter(t=>t.frenteId===f.id).forEach(t=>{
-      const sp=taskSpan(t);
-      labels+=`<div class="g-ll" title="${esc(t.name)}">${t.name}</div>`;
-      if(!sp){ lanes+=`<div class="g-lane"></div>`; return; }
+      const sp=taskSpan(t); const subsAll=cp?[]:workSubs(t); const open=!cp&&subsAll.length&&ganttOpen[t.id];
+      const arrow=(!cp&&subsAll.length)?`<span class="g-tg" onclick="ganttToggle('${t.id}')" title="${open?'Contraer':'Ver subtareas y sub-subtareas'}">${open?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
+      labels+=`<div class="g-ll" title="${esc(t.name)}">${arrow}<span class="g-nm">${t.name}</span></div>`; yy+=34;
+      if(!sp){ lanes+=`<div class="g-lane"></div>`; }
+      else {
       const left=Math.max(0,diffDays(rangeStart,sp.start))*PX;
       const wdt=Math.max(PX*0.7,(diffDays(sp.start,sp.end)+1)*PX);
       const done=workSubs(t).filter(s=>s.done).length, tot=workSubs(t).length;
       const pct=tot?Math.round(done/tot*100):(t.status==='done'?100:0);
-      lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" title="${esc(t.name)} · ${dLabel(sp.start)}–${dLabel(sp.end)}" onclick="${cp?`openCpTask('${t.id}')`:`openTask('${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`;
+      lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" onclick="${cp?`openCpTask('${t.id}')`:`ganttPop(event,'${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`; }
+      if(open){ const okIds=new Set(subsAll.map(x=>x.id));
+        subOrder(t,true).filter(o=>okIds.has(o.s.id)).forEach(o=>{ const x=o.s; const d1=x.depth||o.depth;
+          labels+=`<div class="g-ll g-sl" style="padding-left:${22+o.depth*16}px" title="${esc(x.name)}"><span class="g-nm">${o.depth?'↳ ':''}${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
+          if(!x.date){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
+          const l=Math.max(0,diffDays(rangeStart,x.date))*PX, w=Math.max(PX*0.7,PX); const cy=yy+17;
+          rects[x.id]={l,r:l+w,cy};
+          lanes+=`<div class="g-lane"><div class="g-bar g-sb ${x.done?'done':''}" style="left:${l}px;width:${w}px;background:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${x.time?esc(x.time)+' ':''}${esc(x.name)}</span></div></div>`; yy+=34; });
+        subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
     });
   });
+  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ const x1=a.r,y1=a.cy,x2=b.l,y2=b.cy; const path=x2>=x1+14?`M${x1},${y1} H${x1+7} V${y2} H${x2}`:`M${x1},${y1} H${x1+7} V${(y1+y2)/2} H${x2-7} V${y2} H${x2}`; return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/>`; }).join('')}</svg>`:'';
 
   const zoomBtns=[['day','Día'],['week','Semana'],['month','Mes']].map(([k,l])=>`<button class="${ganttZoom===k?'on':''}" onclick="setGanttZoom('${k}')">${l}</button>`).join('');
   return `<div class="tareas-ctl"><div class="group-ctl"><span class="glabel">Zoom</span><div class="subtoggle sm">${zoomBtns}</div></div>
       <span class="muted" style="font-size:.82rem">${dLabel(rangeStart)} – ${dLabel(rangeEnd)}</span></div>
     <div class="gc">
       <div class="g-labels">${labels}</div>
-      <div class="g-scroll"><div class="g-inner" style="width:${W}px">
+      <div class="g-scroll"><div class="g-inner" style="width:${W}px" data-key="${p.id}|${ganttZoom}" data-today="${today>=rangeStart&&today<=rangeEnd?diffDays(rangeStart,today)*PX:''}">
         <div class="g-grid">${grid}${todayMark}</div>
-        ${lanes}
+        ${lanes}${svg}
       </div></div>
     </div>
-    <div class="hint" style="margin-top:10px">Cada barra va del inicio al fin de las subtareas de la tarea. El relleno muestra el avance. La línea amarilla es hoy. Las fotos son quienes participan. Clic en una barra para ver la tarea.</div>`;
+    <div class="hint" style="margin-top:10px">Cada barra va del inicio al fin de las subtareas de la tarea. El relleno muestra el avance. La línea amarilla es hoy. Las fotos son quienes participan. Clic en una barra para ver sus datos. Con la flechita ▸ ves las subtareas y sub-subtareas; las flechas rojas muestran dependencias.</div>`;
 }
 function monthLabel(ym){ if(!ym) return 'Sin fecha'; const [y,m]=ym.split('-'); return new Date(+y,+m-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'}); }
 function primaryEtapaId(t){ const e=store.etapaOfDate(t.projectId,t.dueDate); if(e) return e.id; const ss=(t.subtasks||[]).map(s=>store.etapaOfDate(t.projectId,s.date)).filter(Boolean); return ss.length?ss[0].id:''; }
@@ -2655,6 +2668,25 @@ function openClient(id){selClient=id;view='cliente';citaSel=null;finSel=null;cli
 function openProject(id){selProject=id;selTab='gestor';view='proyecto';render();}
 function setTab(t){selTab=t;render();}
 function setGanttZoom(z){ganttZoom=z;render();}
+let ganttOpen={}, ganttLastKey='';
+function ganttToggle(tid){ ganttOpen[tid]=!ganttOpen[tid]; ganttClosePop(); renderKeepScroll(); }
+function ganttAfter(){ const el=document.querySelector('.g-inner'); if(!el) return; const key=el.dataset.key; if(key===ganttLastKey) return; ganttLastKey=key;
+  const sc=el.parentElement; if(el.dataset.today!=='') sc.scrollLeft=Math.max(0,(+el.dataset.today)-Math.min(160,sc.clientWidth/3)); }
+function ganttClosePop(){ const e=document.getElementById('g-pop'); if(e) e.remove(); }
+function ganttStatus(x,due){ if(x.done) return {t:'✔ Hecha',c:'#1d6b3a'}; const d=x.date||due; if(!d) return {t:'Sin fecha',c:'#8a9a93'}; const n=daysBetween(todayISO(),d); return n<0?{t:'🔴 Atrasada '+(-n)+' día(s)',c:'#c0392b'}:n===0?{t:'🟡 Es hoy',c:'#a37b00'}:{t:'🟢 En tiempo · faltan '+n+' día(s)',c:'#1d6b3a'}; }
+function ganttPop(ev,tid,sid){ ev.stopPropagation(); ganttClosePop(); const t=store.task(tid); if(!t) return; const x=sid?(t.subtasks||[]).find(z=>z.id===sid):null; const sp=taskSpan(t);
+  let rows;
+  if(x){ const per=store.person(x.personId); const st=ganttStatus(x); const est=x.durMin?fmtDurShort(x.durMin):'—';
+    rows=[['Nivel',x.parentId?'Sub-subtarea':'Subtarea'],['Día',x.date?dLabel(x.date)+(x.time?' · '+x.time:''):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Tiempo',(x.timeSpent?fmtTime(x.timeSpent):'0')+' de '+est+' estimados'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']];
+    if(x.dependsOn){ const pr=t.subtasks.find(z=>z.id===x.dependsOn); if(pr) rows.push(['Empieza tras','⛓ '+esc(pr.name)]); } }
+  else { const per=store.person(t.responsibleId); const ws=workSubs(t); const dn=ws.filter(z=>z.done).length; const st=t.status==='done'?{t:'✔ Hecha',c:'#1d6b3a'}:ganttStatus({},t.dueDate); const spent=ws.reduce((a,z)=>a+(z.timeSpent||0),0);
+    rows=[['Nivel','Tarea'],['Días',sp?dLabel(sp.start)+' – '+dLabel(sp.end):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Avance',dn+' de '+ws.length+' subtareas'],['Tiempo',spent?fmtTime(spent):'0'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']]; }
+  const open=x?`openSubEdit('${tid}','${sid}')`:`openTask('${tid}')`;
+  const box=document.createElement('div'); box.id='g-pop'; box.className='g-pop'; box.onclick=e=>e.stopPropagation();
+  box.innerHTML=`<div class="g-pop-t">${esc(x?x.name:t.name)}</div>${rows.map(r=>`<div class="g-pop-r"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<button class="btn sm" style="margin-top:8px;width:100%" onclick="ganttClosePop();${open}">Abrir</button>`;
+  document.body.appendChild(box); const r=box.getBoundingClientRect(); box.style.left=Math.max(8,Math.min(ev.clientX+10,innerWidth-r.width-8))+'px'; box.style.top=Math.max(8,Math.min(ev.clientY+10,innerHeight-r.height-8))+'px'; }
+document.addEventListener('click',()=>ganttClosePop());
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') ganttClosePop(); });
 function setTareasMode(m){tareasMode=m;render();}
 function setGroupBy(d){groupBy=d;render();}
 function setFilterPersona(v){filterPersona=v;render();}
@@ -2736,7 +2768,7 @@ function syncIsBusy(){
   return false;
 }
 function renderKeepScroll(){
-  const sel='.op-left,.op-right,.ag-left,.ag-right,.lib-det,.lib-side,.modal,.modal-card,.m-body,.gantt-wrap,.ga-scroll,.task-panel,.kb-board,.ag-cal,.gc-grid';
+  const sel='.op-left,.op-right,.ag-left,.ag-right,.lib-det,.lib-side,.modal,.modal-card,.m-body,.gantt-wrap,.ga-scroll,.task-panel,.kb-board,.ag-cal,.gc-grid,.g-scroll';
   const y=window.scrollY; const saved=[...document.querySelectorAll(sel)].map(e=>({cls:e.className,top:e.scrollTop,left:e.scrollLeft}));
   render();
   [...document.querySelectorAll(sel)].forEach((e,i)=>{ const o=saved[i]; if(o&&o.cls===e.className){ e.scrollTop=o.top; e.scrollLeft=o.left; } });
