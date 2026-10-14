@@ -796,7 +796,7 @@ function viewCliente(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
         <div><div class="pill green">Cliente</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}<h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
-        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button><button class="btn ghost" title="${c.activo===false?'Reactivar cliente':'Desactivar cliente (se conserva todo, pero se oculta y sus usuarios no entran)'}" onclick="toggleClientActive('${c.id}')">${c.activo===false?'↩ Reactivar':'⏸ Desactivar'}</button><button class="btn ghost" title="Eliminar cliente" style="color:#c0392b" onclick="deleteClient('${c.id}')">🗑️</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
+        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
       </div>
       <dl class="kv" style="margin-top:16px">
         <dt>RFC</dt><dd>${c.rfc||'—'}</dd>
@@ -1900,6 +1900,7 @@ function quickModal(){
         <div><label>TikTok</label><input id="qm-tt" value="${esc(c.tiktok||'')}"></div></div>
       <div class="field row"><div><label>LinkedIn</label><input id="qm-in" value="${esc(c.linkedin||'')}"></div>
         <div><label>Otro</label><input id="qm-otro" value="${esc(c.otro||'')}"></div></div>
+      ${qm.kind==='clienteEdit'&&isGerencia()?`<div class="danger-zone"><div class="muted" style="font-size:.78rem;margin-bottom:6px">Zona delicada</div><button type="button" class="btn ghost sm" title="Se conserva todo, pero el cliente se oculta y sus usuarios no entran" onclick="toggleClientActive('${c.id}')">${c.activo===false?'↩ Reactivar cliente':'⏸ Desactivar cliente'}</button> <button type="button" class="btn ghost sm" style="color:#c0392b" onclick="deleteClient('${c.id}')">🗑️ Eliminar cliente</button></div>`:''}
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='clienteEdit'?'saveClientEdit()':'saveClient()'}">Guardar</button></div>`;
   } else if(qm.kind==='contacto' || qm.kind==='contactoEdit'){
     const p=qm.kind==='contactoEdit'?(store.client(qm.cid).people.find(x=>x.id===qm.pid)||{}):{};
@@ -2114,11 +2115,11 @@ function openClientForm(){qm={kind:'cliente'};render();}
 function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
 function toggleClientActive(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const off=c.activo!==false;
   if(off&&!confirm('¿Desactivar a «'+c.name+'»?\n\nSe conservan sus proyectos y tareas, pero el cliente se oculta de la lista y sus usuarios del portal ya no podrán entrar. Puedes reactivarlo cuando quieras.')) return;
-  c.activo=off?false:true; store.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); if(off){ shareToast('⏸ Cliente desactivado'); go('clientes'); } else { shareToast('↩ Cliente reactivado'); render(); } }
+  qm=null; c.activo=off?false:true; store.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); if(off){ shareToast('⏸ Cliente desactivado'); go('clientes'); } else { shareToast('↩ Cliente reactivado'); render(); } }
 function deleteClient(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const n=store.projectsOf(cid).length;
   if(n){ alert('«'+c.name+'» tiene '+n+' proyecto(s).\n\nPara no perder información, primero elimina sus proyectos o, mejor, usa «Desactivar», que lo oculta y bloquea a sus usuarios sin borrar nada.'); return; }
   if(!confirm('¿Eliminar definitivamente a «'+c.name+'»? Se borran también sus contactos y accesos. No se puede deshacer.')) return;
-  store.removeClient(cid); shareToast('🗑 Cliente eliminado'); go('clientes'); }
+  qm=null; store.removeClient(cid); shareToast('🗑 Cliente eliminado'); go('clientes'); }
 function openClientEdit(cid){qm={kind:'clienteEdit',cid};render();}
 function saveClientEdit(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}store.updateClient(qm.cid,{name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;render();}
 function openContactForm(cid){qm={kind:'contacto',cid};render();}

@@ -1001,3 +1001,6 @@
   .acc-cred{font-size:.78rem;color:var(--muted)}.acc-cred b{color:var(--ink)}.acc-code{font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em}.acc-eye{cursor:pointer;margin-left:4px}
 
   .cl-off{opacity:.55}
+
+  .info-i{width:32px;height:32px;font-size:1.15rem}
+  .danger-zone{border:1.5px dashed #e3b9b3;border-radius:12px;padding:10px 12px;margin-top:6px}
