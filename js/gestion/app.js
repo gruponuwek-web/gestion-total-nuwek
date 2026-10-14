@@ -2640,17 +2640,17 @@ function viewCatalogos(){
     </div>`;
   }).join('') || '<div class="muted">Sin personal.</div>';
   const tags=store.d.tags.map(t=>`<span class="chip tag-chip"><span class="tag-sw" style="background:${t.color}"></span>${t.name} <button class="chip-e" title="Editar" onclick="openTagEdit('${esc(t.name)}')">✏️</button><button class="chip-x" title="Eliminar" onclick="delTag('${esc(t.name)}')">×</button></span>`).join('') || '<span class="muted">Sin etiquetas</span>';
-  return `<div class="crumb">Catálogos</div><div class="sec-title"><h2>Catálogos</h2></div>
-    <p class="muted">La base reutilizable. Los <b>Servicios</b> son plantillas: al crear un proyecto precargan sus frentes y tareas.</p>
-    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
-    <p class="muted" style="margin-top:-4px">Pasa un listado de tareas, subtareas y sub-subtareas desde Excel o CSV. También lo encuentras dentro de cada proyecto.</p>
-    <div class="sec-title"><h2 style="font-size:1.1rem">Servicios</h2><button class="btn sm" onclick="openSvcForm()">+ Nuevo servicio</button></div>
+  const CT=[['servicios','🧩 Servicios'],['personal','👥 Personal Nuwek'],['etiquetas','🏷️ Etiquetas'],['importar','⬆ Importar tareas'],['login','🎨 Apariencia del login']];
+  const bars=CT.map(([k,l])=>`<button class="${catTab===k?'active':''}" onclick="setCatTab('${k}')">${l}</button>`).join('');
+  const panes={servicios:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Servicios</h2><button class="btn sm" onclick="openSvcForm()">+ Nuevo servicio</button></div>
     <div class="svc-list">${svc||'<div class="muted">Sin servicios.</div>'}</div>
-    <div class="sec-title"><h2 style="font-size:1.1rem">Personal Nuwek</h2><button class="btn sm" onclick="openStaffForm()">+ Nueva persona</button></div>
+`,personal:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Personal Nuwek</h2><button class="btn sm" onclick="openStaffForm()">+ Nueva persona</button></div>
     <div class="team-list">${staff}</div>
-    <div class="sec-title"><h2 style="font-size:1.1rem">Etiquetas</h2><button class="btn sm" onclick="openTagForm()">+ Nueva etiqueta</button></div>
+`,etiquetas:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Etiquetas</h2><button class="btn sm" onclick="openTagForm()">+ Nueva etiqueta</button></div>
     <div class="chiplist">${tags}</div>
-    <div class="sec-title"><h2 style="font-size:1.1rem">Apariencia del login</h2></div>
+`,importar:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
+    <p class="muted" style="margin-top:-4px">Pasa un listado de tareas, subtareas y sub-subtareas desde Excel o CSV. También lo encuentras dentro de cada proyecto.</p>
+`,login:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Apariencia del login</h2></div>
     <div class="card">
       <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
         <div class="bg-prev" style="background-image:url('${getLoginBg()}')"></div>
@@ -2666,8 +2666,18 @@ function viewCatalogos(){
           <button class="btn ghost sm" onclick="resetLoginBg()">Restaurar por defecto</button>
         </div>
       </div>
-    </div>`;
+    </div>`};
+  const EMPTY=[['🧩','Aquí nacen las plantillas','Elige una pestaña y ponte a crear: servicios con sus frentes y tareas base, gente nueva en Nuwek, etiquetas de colores, importaciones masivas desde Excel o el fondo del login.'],
+    ['🪄','¡Nada seleccionado, todo por inventar!','Toca una pestaña de arriba: ahí puedes dar de alta servicios, personal, etiquetas, importar tareas o cambiarle la cara al login.'],
+    ['🛠️','Taller de catálogos abierto','Escoge una pestaña para crear o ajustar lo que usa todo el portal. Lo que hagas aquí lo heredan los proyectos nuevos.']];
+  const em=EMPTY[catEmptyN%EMPTY.length];
+  const body=catTab&&panes[catTab]?panes[catTab]():`<div class="cat-empty"><div class="cat-empty-i">${em[0]}</div><b>${em[1]}</b><p>${em[2]}</p></div>`;
+  return `<div class="crumb">Catálogos</div><div class="sec-title"><h2>Catálogos</h2></div>
+    <p class="muted">La base reutilizable. Los <b>Servicios</b> son plantillas: al crear un proyecto precargan sus frentes y tareas.</p>
+    <div class="ptabs">${bars}</div>${body}`;
 }
+let catTab='', catEmptyN=0;
+function setCatTab(k){ if(catTab===k){ catTab=''; catEmptyN++; } else catTab=k; render(); }
 
 /* ================== NAV ================== */
 function go(v){view=v;modalTask=null;render();}
