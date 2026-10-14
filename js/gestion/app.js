@@ -560,7 +560,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
 function openMiEspacio(){ view='op_pendientes'; opSelTask=null; modalTask=null; render(); }
@@ -621,6 +621,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(copyS){ closeCopy(); return; }
   if(verbInfo){ closeVerbInfo(); return; }
   if(subEd){ closeSubEdit(); return; }
   if(clientPop){ closeClientPop(); return; }
@@ -1407,7 +1408,7 @@ function viewProyecto(){
     ? `<div class="crumb"><a onclick="go('op_tableros')">Tableros</a> › ${p.name}</div>`
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
-  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
+  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
   return `${crumb}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
@@ -2729,7 +2730,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -2940,6 +2941,86 @@ function depPrevModal(){ const d=depPrev; const t=store.task(d.tid); const s=t&&
     ${plan.changes.length?`<div class="field"><label>Se moverán ${plan.changes.length} subtarea(s)</label><div class="dep-list">${plan.changes.map(c=>`<div class="dep-row"><b>${esc(c.name)}</b><span>${esc(c.from)} → <b>${esc(c.to)}</b></span></div>`).join('')}</div></div>`:(opts.length?'<div class="muted">Con esta opción ninguna otra subtarea cambia.</div>':'')}
     ${plan.conflicts.length?`<div class="field"><label style="color:#c0392b">⚠️ No se mueven</label><div class="dep-list">${plan.conflicts.map(c=>`<div class="dep-row"><b>${esc(c.name)}</b><span>${esc(c.why)}</span></div>`).join('')}</div></div>`:''}
     <div class="wiz-actions"><button class="btn ghost" onclick="depCancel()">Cancelar</button><button class="btn" onclick="depConfirm()">Aplicar</button></div></div></div></div>`; }
+
+
+/* ================== COPIAR TAREAS (solo Dirección y Gerencia) ==================
+   Se elige tarea por tarea (y qué subtareas / sub-subtareas van). No se copian: frentes ni etapas (solo se elige dónde caen),
+   responsables, equipo, horas del día, avance, tiempos ni comentarios. Sí se copian: sesiones (sin respuestas), reglas de repetición y dependencias. */
+let copyS=null;
+const COPY_KEY='nuwek_copy_batches';
+function canCopy(){ return role==='gerencia'||role==='gerente'; }
+function copyBatches(){ try{ return JSON.parse(localStorage.getItem(COPY_KEY)||'[]'); }catch(_){ return []; } }
+function copySaveBatches(b){ try{ localStorage.setItem(COPY_KEY,JSON.stringify(b.slice(-15))); }catch(_){} }
+function copySubsOf(t){ return (t.subtasks||[]).filter(x=>!x.seriesId); }
+function openCopy(pid){ if(!canCopy()) return; const p=store.project(pid); if(!p) return; copyS={pid,sel:{},destClient:p.clientId,destPid:pid,frenteId:'',etapaId:'',mode:'same',start:'',result:null}; render(); }
+function closeCopy(){ copyS=null; render(); }
+function copyTaskToggle(tid,on){ const t=store.task(tid); if(!t) return; if(on){ const o={}; copySubsOf(t).forEach(x=>o[x.id]=true); copyS.sel[tid]=o; } else delete copyS.sel[tid]; render(); }
+function copySubToggle(tid,sid,on){ const t=store.task(tid); const o=copyS.sel[tid]; if(!t||!o) return; const subs=copySubsOf(t);
+  const kids=id=>subs.filter(x=>x.parentId===id).flatMap(k=>[k.id,...kids(k.id)]);
+  if(on){ o[sid]=true; let cur=subs.find(x=>x.id===sid); while(cur&&cur.parentId){ o[cur.parentId]=true; cur=subs.find(x=>x.id===cur.parentId); } }
+  else { delete o[sid]; kids(sid).forEach(k=>delete o[k]); }
+  render(); }
+function copyAll(on){ const p=store.project(copyS.pid); copyS.sel={}; if(on) store.tasksOf(p.id).forEach(t=>{ const o={}; copySubsOf(t).forEach(x=>o[x.id]=true); copyS.sel[t.id]=o; }); render(); }
+function copySet(k,v){ copyS[k]=v; if(k==='destClient'){ const ps=store.d.projects.filter(x=>x.clientId===v); copyS.destPid=ps[0]?ps[0].id:''; copyS.frenteId=''; copyS.etapaId=''; }
+  if(k==='destPid'){ copyS.frenteId=''; copyS.etapaId=''; }
+  if(k==='etapaId'||k==='mode'){ const e=store.etapasOf(copyS.destPid).find(x=>x.id===copyS.etapaId); if(e&&copyS.mode==='start') copyS.start=e.start; }
+  render(); }
+function copyWdn(d){ return Math.round(wTotal({d,m:WK.s})/(WK.e-WK.s)); }
+function copyDateMapper(tasks,mode,start){
+  if(mode==='same') return d=>d;
+  if(mode==='none') return ()=>'';
+  const all=[]; tasks.forEach(({t,subs})=>{ const sd=subs.map(x=>x.date).filter(Boolean); if(sd.length) all.push(...sd); else if(t.dueDate) all.push(t.dueDate); });
+  if(!all.length) return d=>d; const ref=all.sort()[0]; const base=copyWdn(nextWork(start))-copyWdn(ref);
+  return d=>d?wFrom((copyWdn(d)+base)*(WK.e-WK.s)).d:''; }
+function copyBlocker(){ const pid=copyS.destPid; if(!pid) return 'Elige el proyecto al que se copiará.';
+  const fr=store.frentesOf(pid), et=store.etapasOf(pid), p=store.project(pid);
+  if(!fr.length||!et.length) return 'El proyecto «'+p.name+'» todavía no tiene '+(!fr.length&&!et.length?'frentes ni etapas':!fr.length?'frentes':'etapas')+'. Los frentes y las etapas no se copian: créalos primero en ese proyecto (botones «+ Frente» y «+ Etapa») y vuelve a intentar.'; return ''; }
+function copyDo(){ const S=copyS; if(!S||!canCopy()) return; const blk=copyBlocker(); if(blk){ alert(blk); return; }
+  const ids=Object.keys(S.sel); if(!ids.length){ alert('Marca al menos una tarea.'); return; }
+  if(!S.frenteId){ alert('Elige el frente donde caerán.'); return; }
+  if(S.mode!=='same'&&!S.etapaId){ alert('Elige la etapa donde caerán.'); return; }
+  if(S.mode==='start'&&!S.start){ alert('Escribe la fecha de inicio.'); return; }
+  const dp=store.project(S.destPid), dc=store.client(dp.clientId), srcP=store.project(S.pid), sameClient=srcP.clientId===dp.clientId;
+  const et=store.etapasOf(S.destPid).find(e=>e.id===S.etapaId);
+  const picked=ids.map(id=>{ const t=store.task(id); return {t,subs:copySubsOf(t).filter(x=>S.sel[id][x.id])}; }).filter(x=>x.t);
+  const mapD=copyDateMapper(picked,S.mode,S.start); const now=new Date().toISOString(); const created=[]; const tok=()=>Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8);
+  picked.forEach(({t,subs})=>{
+    const nt=JSON.parse(JSON.stringify(t)); const idMap={}; subs.forEach(x=>idMap[x.id]=uid('s_'));
+    Object.assign(nt,{id:uid('t_'),projectId:S.destPid,frenteId:S.frenteId,subtitle:dc.name,status:'to-do',responsibleId:'',nextId:null,repeatOf:undefined,
+      dueDate:S.mode==='none'?(et?et.end:''):mapD(t.dueDate)});
+    delete nt.ord;
+    nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x));
+      Object.assign(o,{id:idMap[x.id],parentId:x.parentId&&idMap[x.parentId]?idMap[x.parentId]:undefined,dependsOn:x.dependsOn&&idMap[x.dependsOn]?idMap[x.dependsOn]:undefined,
+        done:false,doneAt:null,timeSpent:0,personId:'',team:[],teamInfo:{},teamAck:{},time:'',nextId:null,dateConflict:false,repeatOf:undefined,seriesId:undefined,occDate:undefined,
+        invitados:sameClient?(x.invitados||[]):[],date:mapD(x.date)});
+      if(x.sesion){ const q=x.sesion; o.sesion={objetivo:q.objetivo||'',lugar:q.lugar,temario:q.temario||[]}; o.shareToken=tok(); } else delete o.shareToken;
+      if(o.isSeries&&o.series){ o.series=Object.assign({},o.series,{startDate:mapD(o.series.startDate),skip:[]}); delete o.series.time; if(o.series.tpl){ o.series.tpl=Object.assign({},o.series.tpl,{personId:'',team:[],teamInfo:{},teamAck:{},time:'',invitados:sameClient?(o.series.tpl.invitados||[]):[]}); } }
+      return o; });
+    store.d.tasks.push(nt); created.push(nt); });
+  store.save(); created.forEach(nt=>{ if(typeof dbSaveTask==='function') dbSaveTask(nt); });
+  const batch={id:uid('cb_'),ts:now,by:currentUser,src:srcP.name,dest:dp.name,tids:created.map(x=>x.id),names:created.map(x=>x.name)};
+  const b=copyBatches(); b.push(batch); copySaveBatches(b);
+  created.forEach((nt,i)=>logEvent(nt.id,'Copiada desde «'+picked[i].t.name+'» del proyecto «'+srcP.name+'» a «'+dp.name+'» ('+nt.subtasks.length+' subtareas)'));
+  S.result=batch; S.sel={}; render(); }
+function copyUndo(bid){ const b=copyBatches(); const x=b.find(y=>y.id===bid); if(!x) return; if(!confirm('¿Deshacer esta copia? Se eliminarán las '+x.tids.length+' tarea(s) copiadas, con todo lo que se les haya agregado.')) return;
+  x.tids.forEach(id=>{ if(store.task(id)) store.removeTask(id); }); copySaveBatches(b.filter(y=>y.id!==bid)); if(copyS&&copyS.result&&copyS.result.id===bid) copyS.result=null; render(); }
+function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS=null; return ''; }
+  const tasks=store.tasksOf(p.id).slice().sort((a,b)=>(a.ord||0)-(b.ord||0)); const fr=store.frentesOf(p.id);
+  const subRows=(t,o,parent,depth)=>copySubsOf(t).filter(x=>(x.parentId||'')===parent).map(x=>`<div class="cp-sub" style="margin-left:${depth*18}px"><label class="gf-opt"><input type="checkbox" ${o[x.id]?'checked':''} onchange="copySubToggle('${t.id}','${x.id}',this.checked)"> ${depth?'↳ ':''}${esc(x.name)}${x.sesion?' <span class="muted">· sesión</span>':''}${x.isSeries?' <span class="muted">↻</span>':''}</label></div>${subRows(t,o,x.id,depth+1)}`).join('');
+  const list=tasks.map(t=>{ const o=S.sel[t.id]; const f=fr.find(z=>z.id===t.frenteId);
+    return `<div class="cp-task"><label class="gf-opt"><input type="checkbox" ${o?'checked':''} onchange="copyTaskToggle('${t.id}',this.checked)"> <b>${esc(t.name)}</b> <span class="muted">${f?'· '+esc(f.name):''} · ${copySubsOf(t).length} subtareas</span></label>${o?subRows(t,o,'',1):''}</div>`; }).join('')||'<div class="muted">Este proyecto aún no tiene tareas.</div>';
+  const dClients=store.d.clients.slice().sort((a,b)=>a.name.localeCompare(b.name)); const dProjs=store.d.projects.filter(x=>x.clientId===S.destClient);
+  const dFr=store.frentesOf(S.destPid), dEt=store.etapasOf(S.destPid); const blk=copyBlocker();
+  const recents=copyBatches().slice().reverse().slice(0,5);
+  const n=Object.keys(S.sel).length; const ns=Object.values(S.sel).reduce((a,o)=>a+Object.keys(o).length,0);
+  const body=S.result?`<div class="ses-resp" style="background:#e6f6ec;color:#1d6b3a">✅ Se copiaron <b>${S.result.tids.length}</b> tarea(s) de «${esc(S.result.src)}» a «${esc(S.result.dest)}». Quedaron sin responsables y sin horas: asígnalos en cada agenda.</div><div class="wiz-actions"><button class="btn ghost" onclick="copyUndo('${S.result.id}')">↩ Deshacer esta copia</button><button class="btn" onclick="closeCopy()">Listo</button></div>`
+  :`<div class="field"><label>1. ¿Qué copiamos de «${esc(p.name)}»? <a class="muted" style="cursor:pointer;font-size:.78rem" onclick="copyAll(true)">todo</a> · <a class="muted" style="cursor:pointer;font-size:.78rem" onclick="copyAll(false)">nada</a></label><div class="cp-list">${list}</div></div>
+    <div class="field"><label>2. ¿A dónde?</label><div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><select onchange="copySet('destClient',this.value)">${dClients.map(c=>`<option value="${c.id}" ${c.id===S.destClient?'selected':''}>${esc(c.name)}</option>`).join('')}</select><select onchange="copySet('destPid',this.value)">${dProjs.map(x=>`<option value="${x.id}" ${x.id===S.destPid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+      ${blk?`<div class="ses-resp" style="background:#fdecea;color:#a3271a;margin-top:8px">⚠️ ${esc(blk)}</div>`:`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><select onchange="copySet('frenteId',this.value)"><option value="">Frente…</option>${dFr.map(f=>`<option value="${f.id}" ${f.id===S.frenteId?'selected':''}>${esc(f.name)}</option>`).join('')}</select>${S.mode!=='same'?`<select onchange="copySet('etapaId',this.value)"><option value="">Etapa…</option>${dEt.map(e=>`<option value="${e.id}" ${e.id===S.etapaId?'selected':''}>${esc(e.name)}</option>`).join('')}</select>`:''}</div>`}</div>
+    <div class="field"><label>3. Fechas</label>${[['same','Dejar las mismas fechas'],['start','Fecha nueva de inicio (respeta los días hábiles entre ellas)'],['none','Sin fechas (las pongo después)']].map(([k,l])=>`<label class="gf-opt" style="margin:3px 0"><input type="radio" name="cp-mode" ${S.mode===k?'checked':''} onchange="copySet('mode','${k}')"> ${l}</label>`).join('')}${S.mode==='start'?`<input type="date" value="${S.start}" onchange="copyS.start=this.value" style="margin-top:6px">`:''}<div class="hint">Las horas del día nunca se copian: dependen de cada agenda. Tampoco responsables, equipo, avance ni comentarios.</div></div>
+    ${recents.length?`<div class="field"><label>Copias recientes</label>${recents.map(b=>`<div class="dep-row"><b>${b.tids.length} tarea(s)</b><span>${esc(b.src)} → ${esc(b.dest)} · ${new Date(b.ts).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} <a style="cursor:pointer;color:#c0392b" onclick="copyUndo('${b.id}')">deshacer</a></span></div>`).join('')}</div>`:''}
+    <div class="wiz-actions"><span class="muted" style="margin-right:auto;font-size:.8rem">${n} tarea(s) · ${ns} subtarea(s)</span><button class="btn ghost" onclick="closeCopy()">Cancelar</button><button class="btn" onclick="copyDo()" ${blk||!n?'disabled':''}>Copiar</button></div>`;
+  return `<div class="modal active" style="z-index:145" onclick="if(event.target===this)closeCopy()"><div class="modal-card" style="max-width:640px"><div class="m-head"><div class="m-top"><h3 style="margin:0">⧉ Copiar tareas</h3><button class="x" onclick="closeCopy()">×</button></div></div><div class="m-body">${body}</div></div></div>`; }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
