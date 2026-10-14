@@ -1241,7 +1241,9 @@ function gestAsignaciones(R){
   const head=`<th class="ga-proj-h">PROYECTO</th>`+staff.map(u=>`<th class="ga-ph"><div class="ga-phin">${avatar(u,true)}<span>${u.name}</span></div></th>`).join('');
   const rows=projects.map(p=>{ const c=store.client(p.clientId); const fc=(store.frentesOf(p.id)[0]||{}).color||'#8a9a93'; const sv=store.service(p.serviceId);
     const cells=staff.map(u=>{ const items=all.filter(x=>x.p.id===p.id && x.s.personId===u.id);
-      const chips=items.map(it=>`<div class="ga-chip" title="${esc(it.s.name)} · ${it.s.date}${it.s.time?' '+it.s.time:''}" onclick="openTask('${it.t.id}')">${esc(it.s.name)}</div>`).join('')||'<div class="ga-none">—</div>';
+      const byT=[]; items.forEach(it=>{ let g=byT.find(x=>x.t.id===it.t.id); if(!g){ g={t:it.t,list:[]}; byT.push(g); } g.list.push(it); });
+      const chips=byT.map(g=>{ const pend=g.list.filter(x=>!x.s.done); const tip=g.list.map(x=>(x.s.done?'✓ ':'• ')+x.s.name+(x.s.date?' ('+dLabel(x.s.date)+')':'')).slice(0,12).join('\n');
+        return `<div class="ga-chip ga-task" title="${esc(tip)}" onclick="openTask('${g.t.id}')"><span class="ga-tn">${esc(g.t.name)}</span><span class="ga-n ${pend.length?'':'ok'}">${pend.length?pend.length:'✓'}</span></div>`; }).join('')||'<div class="ga-none">—</div>';
       return `<td class="ga-cell">${chips}</td>`; }).join('');
     return `<tr><td class="ga-proj"><span class="ga-dot" style="background:${fc}"></span><div class="ga-pinfo"><div class="ga-pn">${c.name}</div><div class="ga-ps">${sv?sv.name:''}</div></div></td>${cells}</tr>`;
   }).join('');
