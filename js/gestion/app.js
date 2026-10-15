@@ -1535,7 +1535,7 @@ function tabGantt(p,cp){
         subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
     });
   });
-  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ const x1=a.r,y1=a.cy,x2=b.l,y2=b.cy; const path=x2>=x1+14?`M${x1},${y1} H${x1+7} V${y2} H${x2}`:`M${x1},${y1} H${x1+7} V${(y1+y2)/2} H${x2-7} V${y2} H${x2}`; return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/>`; }).join('')}</svg>`:'';
+  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ const xc=Math.round((a.l+a.r)/2), down=b.cy>=a.cy, y1=a.cy+(down?11:-11), x2=b.l, y2=b.cy; const path=x2>=xc+10?`M${xc},${y1} V${y2} H${x2}`:`M${xc},${y1} V${y2+(down?-17:17)} H${x2-9} V${y2} H${x2}`; return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/><circle cx="${xc}" cy="${y1}" r="2.6" fill="#d62828"/>`; }).join('')}</svg>`:'';
 
   const zoomBtns=[['day','Día'],['week','Semana'],['month','Mes']].map(([k,l])=>`<button class="${ganttZoom===k?'on':''}" onclick="setGanttZoom('${k}')">${l}</button>`).join('');
   return `<div class="tareas-ctl"><div class="group-ctl"><span class="glabel">Zoom</span><div class="subtoggle sm">${zoomBtns}</div></div>
@@ -2705,7 +2705,7 @@ function ganttOrdered(p,fid){ const ets=store.etapasOf(p.id); const eo={}; ets.f
   const key=t=>{ const ids=[...taskEtapaIds(t)]; return ids.length?Math.min(...ids.map(i=>eo[i]==null?999:eo[i])):999; };
   return store.tasksOf(p.id).filter(t=>t.frenteId===fid).map((t,i)=>({t,i,k:key(t)})).sort((a,b)=>a.k-b.k||((a.t.ord||0)-(b.t.ord||0))||a.i-b.i).map(x=>x.t); }
 function ganttToggle(tid){ ganttOpen[tid]=!ganttOpen[tid]; ganttClosePop(); renderKeepScroll(); }
-function ganttAfter(){ const el=document.querySelector('.g-inner'); if(!el) return; const key=el.dataset.key; if(key===ganttLastKey) return; ganttLastKey=key;
+function ganttAfter(){ const el=document.querySelector('.g-inner'); if(!el){ ganttLastKey=''; return; } const key=el.dataset.key; if(key===ganttLastKey) return; ganttLastKey=key;
   const sc=el.parentElement; if(el.dataset.today!=='') sc.scrollLeft=Math.max(0,(+el.dataset.today)-Math.min(160,sc.clientWidth/3)); }
 function ganttClosePop(){ const e=document.getElementById('g-pop'); if(e) e.remove(); }
 function ganttStatus(x,due){ if(x.done) return {t:'✔ Hecha',c:'#1d6b3a'}; const d=x.date||due; if(!d) return {t:'Sin fecha',c:'#8a9a93'}; const n=daysBetween(todayISO(),d); return n<0?{t:'🔴 Atrasada '+(-n)+' día(s)',c:'#c0392b'}:n===0?{t:'🟡 Es hoy',c:'#a37b00'}:{t:'🟢 En tiempo · faltan '+n+' día(s)',c:'#1d6b3a'}; }
