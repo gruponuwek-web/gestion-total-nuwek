@@ -530,6 +530,7 @@ function render(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
   setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
+  if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
     if(clientSess){ renderClientPortal(); return; }
@@ -598,7 +599,7 @@ function loginScreen(){
   const pills=store.activeStaff().map((u,i)=>({u,i})).sort((a,b)=>rank(a.u)-rank(b.u)||a.i-b.i).map(x=>x.u).map(u=>`<button class="login-pill" onclick="openPin('${u.id}')" title="${u.name}"><span class="login-av">${u.photo?`<img src="${u.photo}" alt="">`:esc((u.name||'?')[0])}</span></button>`).join('');
   return `<div class="login-wrap" style="background-image:linear-gradient(rgba(10,20,15,.35),rgba(10,20,15,.55)),url('${getLoginBg()}')">
     <div class="login-grid">${pills}</div>
-    <button class="login-client-link" onclick="openClientLogin()">Acceso para clientes →</button>
+    <button class="login-client-link" onclick="location.href='clientes/'">Acceso para clientes →</button>
   </div>`;
 }
 function pinModal(){
@@ -2786,7 +2787,7 @@ async function boot(){
     if(app) app.innerHTML='<div style="padding:48px;max-width:520px;margin:40px auto;font-family:Inter,sans-serif;color:#223c36;text-align:center"><h2>No se pudo conectar con la base de datos</h2><p style="color:#6b7d76">Revisa tu conexión a internet y recarga la página. Si el problema sigue, avísame. (Detalle técnico en la consola del navegador.)</p></div>';
     return;
   }
-  restoreSession(); if(!session) restoreClientSession();
+  if(!window.CLIENT_ONLY) restoreSession(); if(!session) restoreClientSession();
   if(session){ runAllCycles(); runAllSeries(); }
   if(shareSesionAtLoad){ publicSes=shareSesionAtLoad; shareSesionAtLoad=null; }
   if(shareTaskIdAtLoad){ const sid=shareTaskIdAtLoad; shareTaskIdAtLoad=null; if(session){ openSharedTask(sid); } else { publicTaskId=sid; afterLoginTask=sid; } }
@@ -3794,7 +3795,7 @@ function clientLoginScreen(){
     <div class="field"><label>Código de 6 cifras</label><input id="cl-code" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')clientLogin()"></div>
     ${cpLoginErr?`<div class="pin-err" style="color:#c0392b;margin-bottom:8px">${esc(cpLoginErr)}</div>`:''}
     <button class="btn" style="width:100%" onclick="clientLogin()">Entrar</button>
-    <div style="text-align:center;margin-top:12px"><a class="cl-link" onclick="closeClientLogin()">← Soy del equipo Nuwek</a></div></div></div>`; }
+    ${window.CLIENT_ONLY?'':'<div style="text-align:center;margin-top:12px"><a class="cl-link" onclick="closeClientLogin()">← Soy del equipo Nuwek</a></div>'}</div></div>`; }
 function clientLogin(){
   const u=normU(val('cl-user')), code=(val('cl-code')||'').trim(); const lock=cpFails[u]; if(lock&&lock.until&&Date.now()<lock.until){ cpLoginErr='Demasiados intentos. Espera unos minutos.'; render(); return; }
   const f=findPortalUser(u);
