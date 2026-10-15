@@ -1530,12 +1530,15 @@ function tabGantt(p,cp){
           const ds=[x.date,...kidsAll.map(k=>k.date)].filter(Boolean).sort();
           if(!ds.length){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
           const l=Math.max(0,diffDays(rangeStart,ds[0]))*PX; let w=Math.max((diffDays(ds[0],ds[ds.length-1])+1)*PX,o.depth?56:76); kidsAll.forEach(k=>{ if(k.date){ const kr=Math.max(0,diffDays(rangeStart,k.date))*PX+Math.max(PX,56); if(kr-l>w) w=kr-l; } }); const cy=yy+17;
-          rects[x.id]={l,r:l+w,cy};
+          rects[x.id]={l,r:l+w,cy,d:o.depth};
           lanes+=`<div class="g-lane"><div class="g-bar ${o.depth?'g-ssb':'g-sb'} ${x.done?'done':''}" style="left:${l}px;width:${w}px;--fc:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${esc(x.name)}</span></div></div>`; yy+=34; });
         subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
     });
   });
-  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ const xc=Math.round((a.l+a.r)/2), down=b.cy>=a.cy, y1=a.cy+(down?11:-11), x2=b.l, y2=b.cy; const path=x2>=xc+10?`M${xc},${y1} V${y2} H${x2}`:`M${xc},${y1} V${y2+(down?-17:17)} H${x2-9} V${y2} H${x2}`; return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/><circle cx="${xc}" cy="${y1}" r="2.6" fill="#d62828"/>`; }).join('')}</svg>`:'';
+  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ let path,y1,xc; const down=b.cy>=a.cy;
+      if(a.d===0&&b.d===0){ const xt=Math.round((b.l+b.r)/2), ye=b.cy+(down?-11:11); y1=a.cy; xc=a.r; path=xt>=a.r+10?`M${a.r},${a.cy} H${xt} V${ye}`:`M${a.r},${a.cy} H${a.r+9} V${b.cy+(down?-17:17)} H${xt} V${ye}`; }
+      else { xc=Math.round((a.l+a.r)/2); y1=a.cy+(down?11:-11); const x2=b.l, y2=b.cy; path=x2>=xc+10?`M${xc},${y1} V${y2} H${x2}`:`M${xc},${y1} V${y2+(down?-17:17)} H${x2-9} V${y2} H${x2}`; }
+      return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/><circle cx="${xc}" cy="${y1}" r="2.6" fill="#d62828"/>`; }).join('')}</svg>`:'';
 
   const zoomBtns=[['day','Día'],['week','Semana'],['month','Mes']].map(([k,l])=>`<button class="${ganttZoom===k?'on':''}" onclick="setGanttZoom('${k}')">${l}</button>`).join('');
   return `<div class="tareas-ctl"><div class="group-ctl"><span class="glabel">Zoom</span><div class="subtoggle sm">${zoomBtns}</div></div>
