@@ -1514,8 +1514,8 @@ function tabGantt(p,cp){
     lanes+=`<div class="g-frrow"></div>`;
     yy+=30;
     ganttOrdered(p,f.id).forEach(t=>{
-      const sp=taskSpan(t); const subsAll=cp?[]:workSubs(t); const open=!cp&&subsAll.length&&ganttOpen[t.id];
-      const arrow=(!cp&&subsAll.length)?`<span class="g-tg" onclick="ganttToggle('${t.id}')" title="${open?'Contraer':'Ver subtareas y sub-subtareas'}">${open?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
+      const sp=taskSpan(t); const canExp=!cp||cp.admin; const subsAll=canExp?workSubs(t):[]; const open=canExp&&subsAll.length&&ganttOpen[t.id];
+      const arrow=(canExp&&subsAll.length)?`<span class="g-tg" onclick="ganttToggle('${t.id}')" title="${open?'Contraer':'Ver subtareas y sub-subtareas'}">${open?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
       labels+=`<div class="g-ll" title="${esc(t.name)}">${arrow}<span class="g-nm">${t.name}</span></div>`; yy+=34;
       if(!sp){ lanes+=`<div class="g-lane"></div>`; }
       else {
@@ -1524,7 +1524,7 @@ function tabGantt(p,cp){
       const done=workSubs(t).filter(s=>s.done).length, tot=workSubs(t).length;
       const pct=tot?Math.round(done/tot*100):(t.status==='done'?100:0);
       lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" onclick="${cp?`openCpTask('${t.id}')`:`ganttPop(event,'${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`; }
-      if(open){ const okIds=new Set(subsAll.map(x=>x.id)); const bad=new Set(subsAll.filter(x=>depBroken(t,x)).map(x=>x.id));
+      if(open){ const okIds=new Set(subsAll.map(x=>x.id)); const bad=new Set(cp?[]:subsAll.filter(x=>depBroken(t,x)).map(x=>x.id));
         const parents=subOrder(t,true).filter(o=>o.depth===0&&okIds.has(o.s.id)); const vis=[]; parents.forEach(o=>{ vis.push(o); if(ganttOpen[o.s.id]) o.kids.filter(k=>okIds.has(k.id)).forEach(k=>vis.push({s:k,depth:1,kids:[]})); });
         vis.forEach(o=>{ const x=o.s; const kidsAll=o.depth?[]:(o.kids||[]).filter(k=>okIds.has(k.id)); const nk=kidsAll.length;
           const tg=nk?`<span class="g-tg g-tg1" style="color:${f.color}" onclick="ganttToggle('${x.id}')" title="${ganttOpen[x.id]?'Contraer':'Ver sub-subtareas'}">${ganttOpen[x.id]?'▾':'▸'}</span>`:(o.depth?'<span class="g-tg g-tg2">└</span>':`<span class="g-tg g-tg1 g-dot" style="color:${f.color}">•</span>`);
@@ -2718,10 +2718,10 @@ function ganttPop(ev,tid,sid){ ev.stopPropagation(); ganttClosePop(); const t=st
   let rows;
   if(x){ const per=store.person(x.personId); const st=ganttStatus(x); const est=x.durMin?fmtDurShort(x.durMin):'—';
     rows=[['Nivel',x.parentId?'Sub-subtarea':'Subtarea'],['Día',x.date?dLabel(x.date)+(x.time?' · '+x.time:''):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Tiempo',(x.timeSpent?fmtTime(x.timeSpent):'0')+' de '+est+' estimados'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']];
-    if(x.dependsOn){ const pr=t.subtasks.find(z=>z.id===x.dependsOn); if(pr) rows.push(['Empieza tras','⛓ '+esc(pr.name)]); if(pr&&depBroken(t,x)) rows.push(['Aviso','<b style="color:#c0392b">⚠️ Empieza antes de que termine «'+esc(pr.name)+'»</b>']); } }
+    if(x.dependsOn){ const pr=t.subtasks.find(z=>z.id===x.dependsOn); if(pr) rows.push(['Empieza tras','⛓ '+esc(pr.name)]); if(pr&&!(typeof clientSess!=='undefined'&&clientSess&&!session)&&depBroken(t,x)) rows.push(['Aviso','<b style="color:#c0392b">⚠️ Empieza antes de que termine «'+esc(pr.name)+'»</b>']); } }
   else { const per=store.person(t.responsibleId); const ws=workSubs(t); const dn=ws.filter(z=>z.done).length; const st=t.status==='done'?{t:'✔ Hecha',c:'#1d6b3a'}:ganttStatus({},t.dueDate); const spent=ws.reduce((a,z)=>a+(z.timeSpent||0),0);
     rows=[['Nivel','Tarea'],['Días',sp?dLabel(sp.start)+' – '+dLabel(sp.end):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Avance',dn+' de '+ws.length+' subtareas'],['Tiempo',spent?fmtTime(spent):'0'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']]; }
-  const open=x?`openSubEdit('${tid}','${sid}')`:`openTask('${tid}')`;
+  const inCl=(typeof clientSess!=='undefined'&&clientSess&&!session); const open=inCl?`openCpTask('${tid}')`:(x?`openSubEdit('${tid}','${sid}')`:`openTask('${tid}')`);
   const box=document.createElement('div'); box.id='g-pop'; box.className='g-pop'; box.onclick=e=>e.stopPropagation();
   box.innerHTML=`<div class="g-pop-t">${esc(x?x.name:t.name)}</div>${rows.map(r=>`<div class="g-pop-r"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<button class="btn sm" style="margin-top:8px;width:100%" onclick="ganttClosePop();${open}">Abrir</button>`;
   document.body.appendChild(box); const r=box.getBoundingClientRect(); box.style.left=Math.max(8,Math.min(ev.clientX+10,innerWidth-r.width-8))+'px'; box.style.top=Math.max(8,Math.min(ev.clientY+10,innerHeight-r.height-8))+'px'; }
@@ -3941,7 +3941,7 @@ function cpCitas(ctx){ return citasHistorialHtml(ctx.c,{filter:x=>ctx.isAdmin||(
 /* ---- Gantt ---- */
 function cpGantt(ctx){ const projs=cpProjects(ctx).filter(p=>store.tasksOf(p.id).length); if(!projs.length) return '<div class="muted">Aún no hay tareas para mostrar.</div>'; if(!projs.some(p=>p.id===cpProj)) cpProj=projs[0].id; const p=store.project(cpProj);
   const sel=projs.length>1?`<label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="cpProj=this.value;render()">${projs.map(x=>`<option value="${x.id}" ${x.id===cpProj?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`:`<h3 style="margin:0">${esc(p.name)}</h3>`;
-  return `<div style="margin-bottom:10px">${sel}</div>${tabGantt(p,{cp:true})}`; }
+  return `<div style="margin-bottom:10px">${sel}</div>${tabGantt(p,{cp:true,admin:!!ctx.isAdmin})}`; }
 /* ---- Finanzas ---- */
 function cpFinanzas(ctx){ return finanzasHtml(ctx.c,{cp:true}); }
 /* ---- Tiempos ---- */
