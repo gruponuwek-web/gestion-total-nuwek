@@ -3259,6 +3259,10 @@ function impAcomodar(){ const by=impByCode(); let moved=0; for(let pass=0;pass<3
       const pe=wEnd({d:d.fecha,m:toMin(d.hora)==null?WK.s:toMin(d.hora)},+d.duracion_min||0); const si=wStart({d:r.fecha||pe.d,m:r.fecha?(toMin(r.hora)==null?WK.s:toMin(r.hora)):pe.m});
       if(!r.fecha||instCmp(si,pe)<0){ const st=wStart(pe); r.fecha=st.d; r.hora=fromMin(st.m); ch=true; moved++; } }); if(!ch) break; }
   impRender(); shareToast(moved?'⛓ Se acomodaron '+moved+' fila(s) según sus dependencias.':'No había nada que acomodar.'); }
+function impExport(){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión a internet.'); return; } impValidate();
+  const rows=impS.rows.map(r=>IMP_COLS.map(k=>{ let v=r[k]; if(!v&&(k==='fecha'||k==='hora')&&impS.calc[r.n]) v=impS.calc[r.n][k]; if((k==='fecha_fija'||k==='urgente')&&v==='NO') v=''; return v==null?'':v; }));
+  const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([IMP_COLS,...rows]); ws['!cols']=IMP_COLS.map(k=>({wch:({nombre:44,descripcion:30,cita_objetivo:30,cita_link:32,cita_temario:30,cita_direccion:24}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar');
+  const base=(impS.file||'importacion').replace(/\.[^.]+$/,''); XLSX.writeFile(wb,base+'-corregido.xlsx'); }
 function impReset(){ if(impS.rows&&!confirm('Se descarta lo que llevas en pantalla. ¿Seguir?')) return; impS.rows=null; impS.step=1; impS.result=null; render(); }
 function impBatches(){ try{ return JSON.parse(localStorage.getItem('nuwek_imp_batches')||'[]'); }catch(_){ return []; } }
 function impSaveBatches(b){ try{ localStorage.setItem('nuwek_imp_batches',JSON.stringify(b.slice(-15))); }catch(_){} }
@@ -3323,7 +3327,7 @@ function impPreview(){ impValidate(); const c=impCounts(); const p=store.project
       <div class="imp-sum"><span><b>${c.t}</b> tareas</span><span><b>${c.s}</b> subtareas</span><span><b>${c.ss}</b> sub-subtareas</span>${c.newF.size?`<span>✚ <b>${c.newF.size}</b> frente(s) nuevo(s)</span>`:''}<span class="${c.e?'imp-bad':'imp-good'}">⛔ <b>${c.e}</b> errores</span><span>⚠️ <b>${c.w}</b> avisos</span></div></div>
     <div class="imp-bar"><div class="subtoggle sm"><button class="${impS.view==='tabla'?'on':''}" onclick="impSetView('tabla')">Tabla</button><button class="${impS.view==='arbol'?'on':''}" onclick="impSetView('arbol')">Árbol</button></div>
       <label class="gf-opt"><input type="checkbox" ${impS.onlyBad?'checked':''} onchange="impOnlyBad(this.checked)"> Solo filas con problemas</label>
-      <button class="btn ghost sm" onclick="impAcomodar()" title="Acomoda las fechas de las filas que empiezan antes de que termine su dependencia (calendario laboral)">⛓ Acomodar según dependencias</button><button class="btn ghost sm" onclick="impAddRow()">+ Fila</button></div>
+      <button class="btn ghost sm" onclick="impAcomodar()" title="Acomoda las fechas de las filas que empiezan antes de que termine su dependencia (calendario laboral)">⛓ Acomodar según dependencias</button><button class="btn ghost sm" onclick="impAddRow()">+ Fila</button><button class="btn ghost sm" title="Descarga un Excel con todo lo que llevas corregido en pantalla" onclick="impExport()">⬇ Descargar Excel corregido</button></div>
     ${impS.view==='arbol'?impTree():impTable()}
     <div class="hint" style="margin-top:8px">Cambia cualquier celda: se vuelve a revisar al instante. Pulsa ▸ en una fila para editar descripción, etiquetas y sesión con cliente. Los frentes nuevos se crean al importar.</div>
     <div class="wiz-actions"><button class="btn ghost" onclick="impReset()">← Elegir otro archivo</button><button class="btn" onclick="impDo()" ${ok&&impS.pid?'':'disabled'}>${ok?(impS.pid?'Importar '+c.t+' tarea(s)':'Elige proyecto'):'Corrige los errores para importar'}</button></div></div>`; }
