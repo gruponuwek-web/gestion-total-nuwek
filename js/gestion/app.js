@@ -1522,23 +1522,23 @@ function tabGantt(p,cp){
       const done=workSubs(t).filter(s=>s.done).length, tot=workSubs(t).length;
       const pct=tot?Math.round(done/tot*100):(t.status==='done'?100:0);
       lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" onclick="${cp?`openCpTask('${t.id}')`:`ganttPop(event,'${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`; }
-      if(open){ const okIds=new Set(subsAll.map(x=>x.id));
+      if(open){ const okIds=new Set(subsAll.map(x=>x.id)); const bad=new Set(subsAll.filter(x=>depBroken(t,x)).map(x=>x.id));
         const parents=subOrder(t,true).filter(o=>o.depth===0&&okIds.has(o.s.id)); const vis=[]; parents.forEach(o=>{ vis.push(o); if(ganttOpen[o.s.id]) o.kids.filter(k=>okIds.has(k.id)).forEach(k=>vis.push({s:k,depth:1,kids:[]})); });
         vis.forEach(o=>{ const x=o.s; const kidsAll=o.depth?[]:(o.kids||[]).filter(k=>okIds.has(k.id)); const nk=kidsAll.length;
           const tg=nk?`<span class="g-tg g-tg1" style="color:${f.color}" onclick="ganttToggle('${x.id}')" title="${ganttOpen[x.id]?'Contraer':'Ver sub-subtareas'}">${ganttOpen[x.id]?'▾':'▸'}</span>`:(o.depth?'<span class="g-tg g-tg2">└</span>':`<span class="g-tg g-tg1 g-dot" style="color:${f.color}">•</span>`);
-          labels+=`<div class="g-ll ${o.depth?'g-sl2':'g-sl1'}" style="padding-left:${o.depth?44:22}px" title="${esc(x.name)}">${tg}<span class="g-nm">${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
+          labels+=`<div class="g-ll ${o.depth?'g-sl2':'g-sl1'}" style="padding-left:${o.depth?44:22}px" title="${esc(x.name)}">${tg}<span class="g-nm">${x.done?'✓ ':''}${bad.has(x.id)?'⚠️ ':''}${esc(x.name)}</span></div>`;
           const ds=[x.date,...kidsAll.map(k=>k.date)].filter(Boolean).sort();
           if(!ds.length){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
           const l=Math.max(0,diffDays(rangeStart,ds[0]))*PX; let w=Math.max((diffDays(ds[0],ds[ds.length-1])+1)*PX,o.depth?56:76); kidsAll.forEach(k=>{ if(k.date){ const kr=Math.max(0,diffDays(rangeStart,k.date))*PX+Math.max(PX,56); if(kr-l>w) w=kr-l; } }); const cy=yy+17;
           rects[x.id]={l,r:l+w,cy,d:o.depth};
-          lanes+=`<div class="g-lane"><div class="g-bar ${o.depth?'g-ssb':'g-sb'} ${x.done?'done':''}" style="left:${l}px;width:${w}px;--fc:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${esc(x.name)}</span></div></div>`; yy+=34; });
-        subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
+          lanes+=`<div class="g-lane"><div class="g-bar ${o.depth?'g-ssb':'g-sb'} ${x.done?'done':''}" style="left:${l}px;width:${w}px;--fc:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${bad.has(x.id)?'⚠️ ':''}${esc(x.name)}</span></div></div>`; yy+=34; });
+        subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id],bad.has(x.id)]); }); }
     });
   });
-  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b])=>{ let path,y1,xc; const down=b.cy>=a.cy;
+  const svg=deps.length?`<svg class="g-deps" width="${W}" height="${yy}"><defs><marker id="gdA" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="#d62828"/></marker></defs>${deps.map(([a,b,br])=>{ let path,y1,xc; const down=b.cy>=a.cy;
       if(a.d===0&&b.d===0){ const xt=Math.round((b.l+b.r)/2), ye=b.cy+(down?-11:11); y1=a.cy; xc=a.r; path=xt>=a.r+10?`M${a.r},${a.cy} H${xt} V${ye}`:`M${a.r},${a.cy} H${a.r+9} V${b.cy+(down?-17:17)} H${xt} V${ye}`; }
       else { xc=Math.round((a.l+a.r)/2); y1=a.cy+(down?11:-11); const x2=b.l, y2=b.cy; path=x2>=xc+10?`M${xc},${y1} V${y2} H${x2}`:`M${xc},${y1} V${y2+(down?-17:17)} H${x2-9} V${y2} H${x2}`; }
-      return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="1.6" marker-end="url(#gdA)"/><circle cx="${xc}" cy="${y1}" r="2.6" fill="#d62828"/>`; }).join('')}</svg>`:'';
+      return `<path d="${path}" fill="none" stroke="#d62828" stroke-width="${br?2.2:1.6}" ${br?'stroke-dasharray="5 3"':''} marker-end="url(#gdA)"/><circle cx="${xc}" cy="${y1}" r="2.6" fill="#d62828"/>`; }).join('')}</svg>`:'';
 
   const zoomBtns=[['day','Día'],['week','Semana'],['month','Mes']].map(([k,l])=>`<button class="${ganttZoom===k?'on':''}" onclick="setGanttZoom('${k}')">${l}</button>`).join('');
   return `<div class="tareas-ctl"><div class="group-ctl"><span class="glabel">Zoom</span><div class="subtoggle sm">${zoomBtns}</div></div>
@@ -2707,6 +2707,7 @@ let ganttOpen={}, ganttLastKey='';
 function ganttOrdered(p,fid){ const ets=store.etapasOf(p.id); const eo={}; ets.forEach(e=>eo[e.id]=e.order==null?0:e.order);
   const key=t=>{ const ids=[...taskEtapaIds(t)]; return ids.length?Math.min(...ids.map(i=>eo[i]==null?999:eo[i])):999; };
   return store.tasksOf(p.id).filter(t=>t.frenteId===fid).map((t,i)=>({t,i,k:key(t)})).sort((a,b)=>a.k-b.k||((a.t.ord||0)-(b.t.ord||0))||a.i-b.i).map(x=>x.t); }
+function depBroken(t,x){ if(!x.dependsOn||!x.date) return false; const pr=(t.subtasks||[]).find(z=>z.id===x.dependsOn); if(!pr||!pr.date) return false; return instCmp(wStart(instStart(x)),instEnd(pr))<0; }
 function ganttToggle(tid){ ganttOpen[tid]=!ganttOpen[tid]; ganttClosePop(); renderKeepScroll(); }
 function ganttAfter(){ const el=document.querySelector('.g-inner'); if(!el){ ganttLastKey=''; return; } const key=el.dataset.key; if(key===ganttLastKey) return; ganttLastKey=key;
   const sc=el.parentElement; if(el.dataset.today!=='') sc.scrollLeft=Math.max(0,(+el.dataset.today)-Math.min(160,sc.clientWidth/3)); }
@@ -2716,7 +2717,7 @@ function ganttPop(ev,tid,sid){ ev.stopPropagation(); ganttClosePop(); const t=st
   let rows;
   if(x){ const per=store.person(x.personId); const st=ganttStatus(x); const est=x.durMin?fmtDurShort(x.durMin):'—';
     rows=[['Nivel',x.parentId?'Sub-subtarea':'Subtarea'],['Día',x.date?dLabel(x.date)+(x.time?' · '+x.time:''):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Tiempo',(x.timeSpent?fmtTime(x.timeSpent):'0')+' de '+est+' estimados'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']];
-    if(x.dependsOn){ const pr=t.subtasks.find(z=>z.id===x.dependsOn); if(pr) rows.push(['Empieza tras','⛓ '+esc(pr.name)]); } }
+    if(x.dependsOn){ const pr=t.subtasks.find(z=>z.id===x.dependsOn); if(pr) rows.push(['Empieza tras','⛓ '+esc(pr.name)]); if(pr&&depBroken(t,x)) rows.push(['Aviso','<b style="color:#c0392b">⚠️ Empieza antes de que termine «'+esc(pr.name)+'»</b>']); } }
   else { const per=store.person(t.responsibleId); const ws=workSubs(t); const dn=ws.filter(z=>z.done).length; const st=t.status==='done'?{t:'✔ Hecha',c:'#1d6b3a'}:ganttStatus({},t.dueDate); const spent=ws.reduce((a,z)=>a+(z.timeSpent||0),0);
     rows=[['Nivel','Tarea'],['Días',sp?dLabel(sp.start)+' – '+dLabel(sp.end):'Sin fecha'],['Estatus','<b style="color:'+st.c+'">'+st.t+'</b>'],['Avance',dn+' de '+ws.length+' subtareas'],['Tiempo',spent?fmtTime(spent):'0'],['Responsable',per&&per.id&&per.name&&per.name!=='—'?avatar(per,true)+' '+esc(per.name):'Sin asignar']]; }
   const open=x?`openSubEdit('${tid}','${sid}')`:`openTask('${tid}')`;
