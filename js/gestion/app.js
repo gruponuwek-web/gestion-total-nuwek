@@ -2356,8 +2356,7 @@ function taskBody(t,panel){
         <div class="field"><label>Descripción general</label><textarea id="et-desc" style="width:100%;min-height:70px;padding:9px;border:2px solid var(--line);border-radius:7px" placeholder="Objetivo, contexto, lineamientos…">${esc(t.description||'')}</textarea></div>
         <div class="field row"><div><label>Frente</label><select id="et-frente">${store.frentesOf(p.id).map(f=>`<option value="${f.id}" ${f.id===t.frenteId?'selected':''}>${f.name}</option>`).join('')}</select></div>
           <div><label>Responsable</label><select id="et-resp">${staffOptEls(t.responsibleId)}</select></div></div>
-        <div class="field row"><div><label>Fecha límite</label><input id="et-date" type="date" value="${t.dueDate}" ${canSubDate()?'':'disabled title="Solo PM, Gerencia o Dirección pueden cambiar fechas."'}></div>
-          <div><label>Viáticos</label><input id="et-viat" type="number" value="${t.viaticos||0}"></div></div>
+        <div class="field"><label>Fecha límite</label><input id="et-date" type="date" value="${t.dueDate}" ${canSubDate()?'':'disabled title="Solo PM, Gerencia o Dirección pueden cambiar fechas."'}></div>
         <div class="field"><label>↻ Repetir la tarea después de cerrarla</label><div class="rep-row"><input id="et-rep" type="number" min="1" placeholder="Días" value="${t.repeatAfter||''}"><span class="muted">días después de marcarla Hecha</span>${[7,15,30,45,60].map(n=>`<button type="button" class="rep-chip" onclick="document.getElementById('et-rep').value=${n}">${n}</button>`).join('')}<button type="button" class="rep-chip" onclick="document.getElementById('et-rep').value=''">Quitar</button></div><div class="hint">Al pasarla a Hecha se crea una tarea nueva igual, con todas sus subtareas y fechas movidas a (hoy + N días).</div></div>
         ${(()=>{ const rc=t.repeatCal||{}; const live=!(t.nextId&&store.task(t.nextId)); return `<div class="field sm-series"><label>↻ Repetir la tarea por calendario (cada periodo nace una nueva)</label>
           <select id="et-cal" onchange="etCalChange()" ${(live&&canSubDate())?'':'disabled'}><option value="">No se repite por calendario</option><option value="weekly" ${rc.freq==='weekly'?'selected':''}>Cada semana</option><option value="monthly" ${rc.freq==='monthly'?'selected':''}>Cada mes</option><option value="days" ${rc.freq==='days'?'selected':''}>Cada cierto número de días</option></select>
@@ -2375,7 +2374,7 @@ function taskBody(t,panel){
             ${['to-do','in-progress','done','ajuste','on-hold'].map(s=>`<option value="${s}" ${t.status===s?'selected':''}>${statusLabel[s]}</option>`).join('')}
           </select></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px">
-          <div class="muted" style="font-size:.85rem">📅 Fecha límite: ${dLabel(t.dueDate)} ${t.viaticos?`· 🧾 viáticos ${money(t.viaticos)}`:''}</div>
+          <div class="muted" style="font-size:.85rem">📅 Fecha límite: ${dLabel(t.dueDate)}</div>
           <button class="lib-btn" title="Biblioteca del proyecto (${store.linksOf(p.id).length})" onclick="openLibModal('${p.id}')">📚</button>
         </div>
         ${etNote}
@@ -2417,7 +2416,7 @@ function etCalChange(){ const f=val('et-cal'); const b=document.getElementById('
 function saveTaskEdit(id){
   const name=(val('et-name')||'').trim(); if(!name){alert('La tarea necesita nombre.');return;}
   const tags=readTags('et-tags-box');
-  store.updateTask(id,{name,description:val('et-desc'),frenteId:val('et-frente'),responsibleId:val('et-resp'),dueDate:val('et-date'),viaticos:+val('et-viat')||0,tags,repeatAfter:Math.max(0,parseInt(val('et-rep'),10)||0)||null,..._calPatch(id)});
+  store.updateTask(id,{name,description:val('et-desc'),frenteId:val('et-frente'),responsibleId:val('et-resp'),dueDate:val('et-date'),tags,repeatAfter:Math.max(0,parseInt(val('et-rep'),10)||0)||null,..._calPatch(id)});
   logEvent(id,'Editó la tarea');
   editingTask=null;render();
 }
