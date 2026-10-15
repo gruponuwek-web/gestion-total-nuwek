@@ -757,8 +757,8 @@ function viewClientes(){
 /* ===== Pestañas de la ficha del cliente: Citas · Finanzas · Próximas subtareas · Scorecard ===== */
 let clientTab='citas';
 function setClientTab(k){ clientTab=k; render(); }
-function clientNextSubs(c){ const now=todayISO(); const out=[];
-  store.projectsOf(c.id).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.done||s.isSeries||!s.date||s.date<now) return; out.push({s,t,p}); })));
+function clientNextSubs(c,onlyPid){ const now=todayISO(); const out=[];
+  store.projectsOf(c.id).filter(p=>!onlyPid||p.id===onlyPid).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.done||s.isSeries||!s.date||s.date<now) return; out.push({s,t,p}); })));
   return out.sort((a,b)=>((a.s.date+(a.s.time||'99:99'))<(b.s.date+(b.s.time||'99:99'))?-1:1)).slice(0,8); }
 function clientNextHtml(c){ const items=clientNextSubs(c); const today=todayISO(), tm=addDaysISO(today,1);
   const rows=items.map(({s,t,p})=>{ const per=store.person(s.personId); const w=s.date===today?'hoy':s.date===tm?'mañana':dLabel(s.date); const f=kbFrente(t);
@@ -3811,7 +3811,7 @@ function sesProvider(url){ try{ const h=new URL(/^https?:\/\//i.test(url)?url:'h
 function sesAv(person,size){ person=person||{}; const st=`width:${size}px;height:${size}px`; return person.photo?`<span class="ps-av" style="${st};background-image:url('${person.photo}')"></span>`:`<span class="ps-av" style="${st};background:${person.color||'#3f7d6e'}">${mdEsc((person.name||'?')[0])}</span>`; }
 function sesClientLogo(c,size){ const st=`width:${size}px;height:${size}px`; return c.logo?`<span class="ps-av ps-logo" style="${st};background-image:url('${c.logo}')"></span>`:`<span class="ps-av" style="${st};background:#8a9a93">${mdEsc((c.name||'?')[0])}</span>`; }
 function viewPublicSession(){
-  const f=sesFind(); const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${(session||clientSess)?`<button class="btn ghost sm" style="margin-left:auto;color:#fff;border-color:rgba(255,255,255,.4)" onclick="closePublicSes()">← Volver al portal</button>`:''}</div>`;
+  const f=sesFind(); const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${(session||clientSess)?`<button class="pub-back" onclick="closePublicSes()">← Volver al portal</button>`:''}</div>`;
   if(!f||!f.ok) return `<div class="pub-wrap">${top}<div class="pub-card"><h2>Este link no es válido</h2><p class="muted">Pudo haber cambiado o estar incompleto. Pídele a tu contacto en Nuwek que te lo vuelva a enviar.</p></div></div>`;
   const {t,s,c}=f; const ses=sesOf(s); const last=sesLast(s); const staffIds=[...new Set([s.personId,...(s.team||[])].filter(Boolean))].filter(id=>store.d.staff.some(u=>u.id===id));
   const nuwek=staffIds.map(id=>{ const u=store.person(id); return `<button class="ps-p" onclick="openSesContact('${id}')" title="${esc(u.name)} · clic para contactar">${sesAv(u,64)}<span class="ps-pn">${mdEsc((u.name||'').split(' ')[0])}</span></button>`; }).join('')||'<span class="muted">Por definir</span>';
@@ -3900,7 +3900,7 @@ function renderClientPortal(){
     <div class="cp-wrap"><div class="cp-head">${logo}<div><div class="cp-eye">Portal del cliente</div><h1>${esc(c.name)}</h1></div></div>
       <div class="cp-nav2">${cpGroups(ctx).map(g=>`<div class="cp-grp">${g.t?`<div class="cp-gt">${g.t}</div>`:''}<div class="cp-gb">${g.items.map(([k,l])=>`<button class="${cpView===k?'active':''}" onclick="setCpView('${k}')">${l}</button>`).join('')}</div></div>`).join('')}</div>
       <div class="cp-body">${body}</div></div>`;
-  document.getElementById('modal-root').innerHTML=(cpTaskId?cpTaskModal(ctx):'')+(cpUserEd?cpUserModal(ctx):'');
+  document.getElementById('modal-root').innerHTML=(cpTaskId?cpTaskModal(ctx):'')+(cpUserEd?cpUserModal(ctx):'')+(cpKpiInfo?cpKpiModal():'');
 }
 /* ---- datos del cliente ---- */
 function cpProjects(ctx){ return store.projectsOf(ctx.c.id); }
@@ -3923,18 +3923,30 @@ function cpTaskModal(ctx){ const t=store.task(cpTaskId); if(!t||!cpProjects(ctx)
   return `<div class="modal active" onclick="if(event.target===this)closeCpTask()"><div class="modal-card" style="max-width:640px"><div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(p.name)}</div><h3 style="margin:8px 0 0">${esc(t.name)}</h3><div class="muted" style="font-size:.8rem"><span style="color:${f.color};font-weight:600">${esc(f.name)}</span>${t.dueDate?' · 🏁 '+dLabel(t.dueDate):''}</div></div><button class="x" onclick="closeCpTask()">×</button></div></div>
     <div class="m-body"><div class="pub-meta"><span class="badge s-${t.status}">${statusLabel[t.status]||t.status}</span><span>Avance: <b>${done}/${tot}</b></span></div>${t.description?`<div class="md pub-desc">${mdRender(t.description)}</div>`:''}<h4 style="margin:14px 0 6px">${ctx.isAdmin?'Subtareas':'Tus subtareas'}</h4>${rows||'<div class="muted">Sin subtareas.</div>'}</div></div></div>`; }
 /* ---- Inicio ---- */
-function cpInicio(ctx){ const {c}=ctx; const projs=cpProjects(ctx); const all=cpAllSubs(ctx); const work=all.filter(x=>!x.s.parentId||true); const d=work.filter(x=>x.s.done).length; const pct=work.length?Math.round(d/work.length*100):0;
-  const citas=citasAll().filter(x=>x.c.id===c.id); const sinResp=citas.filter(x=>x.est.k==='pendiente'&&x.s.date&&x.s.date>=todayISO()); const proxCita=citas.filter(x=>x.s.date&&x.s.date>=todayISO()).sort((a,b)=>((a.s.date+(a.s.time||''))<(b.s.date+(b.s.time||''))?-1:1))[0];
-  const pays=[]; projs.forEach(p=>store.paymentsOf(p.id).forEach(x=>pays.push(x))); const venc=pays.filter(payVencido).reduce((n,x)=>n+paySaldo(x),0); const saldo=pays.reduce((n,x)=>n+paySaldo(x),0);
-  const pcards=projs.map(p=>{ const g=cpProgress(p); const sv=store.service(p.serviceId); return `<div class="card"><div class="pill yellow">${esc(sv?sv.name:'Proyecto')}</div><h3 style="margin:8px 0 6px">${esc(p.name)}</h3><div class="muted" style="font-size:.8rem">${dLabel(p.startDate)} – ${dLabel(p.endDate)}</div><div class="bar sm" style="margin:10px 0 4px"><i style="width:${g.pct}%"></i></div><div class="muted" style="font-size:.78rem">${g.pct}% · ${g.d}/${g.n} actividades hechas</div></div>`; }).join('');
-  return `<div class="cp-kpis"><div class="perf-card"><div class="perf-big">${projs.length}</div><div class="perf-lbl">Proyectos activos</div></div><div class="perf-card"><div class="perf-big">${pct}%</div><div class="perf-lbl">Avance general</div><div class="bar sm"><i style="width:${pct}%"></i></div></div>
-    <div class="perf-card"><div class="perf-big" style="font-size:1.1rem">${proxCita?dLabel(proxCita.s.date)+(proxCita.s.time?' · '+proxCita.s.time:''):'—'}</div><div class="perf-lbl">Próxima cita</div></div>
-    <div class="perf-card"><div class="perf-big" style="color:${sinResp.length?'#9a7a00':'#1f7a44'}">${sinResp.length}</div><div class="perf-lbl">Citas por confirmar</div></div>
-    <div class="perf-card"><div class="perf-big" style="font-size:1.1rem;color:${venc?'#c0392b':'#1f7a44'}">${pays.length?(venc?'⚠️ Saldo vencido':'✅ Al corriente'):'—'}</div><div class="perf-lbl">Estado de pagos · pendiente ${money(saldo)}</div></div></div>
-    <div class="sec-title"><h2>Tus proyectos</h2></div><div class="grid cols-2">${pcards||'<div class="muted">Aún no hay proyectos.</div>'}</div>
-    <div class="sec-title"><h2>🧭 Lo que sigue</h2></div>${cpNextHtml(ctx)}`; }
-function cpNextHtml(ctx){ const items=clientNextSubs(ctx.c); const today=todayISO(), tm=addDaysISO(today,1);
-  const rows=items.map(({s,t,p})=>cpSubRow({s,t,p},ctx)).join(''); return `<div class="cita-list">${rows||'<div class="muted">No hay actividades próximas programadas.</div>'}</div>`; }
+let cpHome='', cpKpiInfo=null;
+function cpPickHome(pid){ cpHome=(cpHome===pid)?'':pid; render(); }
+function cpOpenKpi(k){ cpKpiInfo=k; render(); }
+function cpCloseKpi(){ cpKpiInfo=null; render(); }
+function cpKpiModal(){ const T={proyectos:['Proyectos activos','Cuenta los proyectos que tienes con Grupo Nuwek. Si eliges un proyecto en la lista de arriba, el número se refiere solo a ese proyecto.'],
+  avance:['Avance general','Se calcula dividiendo las actividades <b>ya realizadas</b> entre el <b>total de actividades</b> (subtareas y sub-subtareas) de los proyectos mostrados. Ejemplo: 26 hechas de 579 son 4%.'],
+  cita:['Próxima cita','Es la sesión más cercana a partir de hoy en la que estás invitado, con su fecha y hora. Si no hay ninguna programada, aparece una raya.'],
+  confirmar:['Citas por confirmar','Cuenta las sesiones futuras a las que <b>aún no has respondido</b> (confirmar, reprogramar o cancelar). Entra a «Citas» para responderlas.'],
+  pagos:['Estado de pagos','Si algún pago programado ya pasó su fecha y no se ha cobrado completo, aparece <b>Saldo vencido</b>; si no, <b>Al corriente</b>. El monto pendiente suma lo que falta por cobrar de los pagos de los proyectos mostrados.']}[cpKpiInfo]; if(!T) return '';
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)cpCloseKpi()"><div class="modal-card" style="max-width:420px"><div class="m-head"><div class="m-top"><h3 style="margin:0">ⓘ ${T[0]}</h3><button class="x" onclick="cpCloseKpi()">×</button></div></div><div class="m-body"><p style="margin:0;line-height:1.5">${T[1]}</p><div class="wiz-actions"><span></span><button class="btn" onclick="cpCloseKpi()">Entendido</button></div></div></div></div>`; }
+function cpInicio(ctx){ const {c}=ctx; const projs=cpProjects(ctx); if(cpHome&&!projs.some(p=>p.id===cpHome)) cpHome=''; const sel=cpHome?projs.filter(p=>p.id===cpHome):projs; const ids=new Set(sel.map(p=>p.id));
+  const work=cpAllSubs(ctx).filter(x=>ids.has(x.p.id)); const d=work.filter(x=>x.s.done).length; const pct=work.length?Math.round(d/work.length*100):0;
+  const today=todayISO(); const citas=citasAll().filter(x=>x.c.id===c.id&&ids.has(x.p.id)); const sinResp=citas.filter(x=>x.est.k==='pendiente'&&x.s.date&&x.s.date>=today);
+  const proxCita=citas.filter(x=>x.s.date&&x.s.date>=today).sort((a,b)=>((a.s.date+(a.s.time||''))<(b.s.date+(b.s.time||''))?-1:1))[0];
+  const pays=[]; sel.forEach(p=>store.paymentsOf(p.id).forEach(x=>pays.push(x))); const venc=pays.filter(payVencido).reduce((n,x)=>n+paySaldo(x),0); const saldo=pays.reduce((n,x)=>n+paySaldo(x),0);
+  const pcards=projs.map(p=>{ const g=cpProgress(p); const sv=store.service(p.serviceId); const on=cpHome===p.id;
+    return `<div class="card click cp-pc${on?' sel':''}" onclick="cpPickHome('${p.id}')" title="${on?'Toca otra vez para ver todos':'Toca para ver solo este proyecto'}"><div class="pill yellow">${esc(sv?sv.name:'Proyecto')}</div>${on?'<span class="cp-pc-on">✔ Viendo este proyecto</span>':''}<h3 style="margin:8px 0 6px">${esc(p.name)}</h3><div class="muted" style="font-size:.8rem">${dLabel(p.startDate)} – ${dLabel(p.endDate)}</div><div class="bar sm" style="margin:10px 0 4px"><i style="width:${g.pct}%"></i></div><div class="muted" style="font-size:.78rem">${g.pct}% · ${g.d}/${g.n} actividades hechas</div></div>`; }).join('');
+  const st=(k,big,lbl,style)=>`<div class="cp-stat"><button type="button" class="cp-stat-i" title="¿Cómo se calcula?" onclick="cpOpenKpi('${k}')">i</button><div class="cp-stat-big" ${style?`style="${style}"`:''}>${big}</div><div class="cp-stat-lbl">${lbl}</div></div>`;
+  const next=clientNextSubs(c,cpHome||null).map(it=>cpSubRow(it,ctx)).join('');
+  return `<div class="sec-title"><h2>Tus proyectos</h2>${cpHome?'<button class="btn ghost sm" onclick="cpPickHome(\''+cpHome+'\')">Ver todos los proyectos</button>':'<span class="muted" style="font-size:.8rem">Toca un proyecto para ver solo sus indicadores y actividades</span>'}</div><div class="grid cols-2">${pcards||'<div class="muted">Aún no hay proyectos.</div>'}</div>
+    <div class="sec-title" style="margin-top:22px"><h2>Indicadores${cpHome?' · '+esc((store.project(cpHome)||{}).name||''):''}</h2></div>
+    <div class="cp-kpis">${st('proyectos',sel.length,'Proyectos activos')}${st('avance',pct+'%','Avance general')}${st('cita',proxCita?dLabel(proxCita.s.date)+(proxCita.s.time?' · '+proxCita.s.time:''):'—','Próxima cita','font-size:1.1rem')}${st('confirmar',sinResp.length,'Citas por confirmar','color:'+(sinResp.length?'#9a7a00':'#1f7a44'))}${st('pagos',pays.length?(venc?'⚠️ Saldo vencido':'✅ Al corriente'):'—','Estado de pagos · pendiente '+money(saldo),'font-size:1.1rem;color:'+(venc?'#c0392b':'#1f7a44'))}</div>
+    <div class="sec-title" style="margin-top:22px"><h2>🧭 Lo que sigue</h2></div><div class="cita-list">${next||'<div class="muted">No hay actividades próximas programadas.</div>'}</div>`; }
+function cpNextHtml(ctx){ const items=clientNextSubs(ctx.c); const rows=items.map(({s,t,p})=>cpSubRow({s,t,p},ctx)).join(''); return `<div class="cita-list">${rows||'<div class="muted">No hay actividades próximas programadas.</div>'}</div>`; }
 /* ---- Mis tareas ---- */
 function cpTareas(ctx){ const mine=cpMySubs(ctx); const today=todayISO(); const pend=mine.filter(x=>!x.s.done).sort((a,b)=>((a.s.date||'9')+(a.s.time||''))<((b.s.date||'9')+(b.s.time||''))?-1:1); const hechas=mine.filter(x=>x.s.done).slice(-8).reverse();
   const g=(t,arr)=>arr.length?`<div class="sec-title"><h2 style="font-size:1.05rem">${t} <span class="muted" style="font-size:.8rem">${arr.length}</span></h2></div><div class="cita-list">${arr.map(x=>cpSubRow(x,ctx)).join('')}</div>`:'';

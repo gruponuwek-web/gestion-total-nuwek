@@ -1039,3 +1039,9 @@
     .sess-info{min-width:0;max-width:150px}.sess-nm,.sess-rl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .cp-out{padding:7px 14px;flex:0 0 auto}
   }
+
+  .pub-back{margin-left:auto;background:rgba(255,255,255,.14);color:#fff;-webkit-text-fill-color:#fff;border:1px solid rgba(255,255,255,.55);border-radius:10px;padding:8px 14px;font-weight:600;font-size:.84rem;cursor:pointer;font-family:inherit;-webkit-appearance:none;appearance:none}.pub-back:hover{background:rgba(255,255,255,.26)}
+  .cp-stat{position:relative;background:#f4f3ec;border:1px dashed #d8d6c9;border-radius:12px;padding:14px 16px;box-shadow:none;cursor:default}
+  .cp-stat-big{font-family:'Syne';font-weight:800;font-size:1.7rem;color:var(--green);line-height:1.1}.cp-stat-lbl{font-size:.78rem;color:var(--muted);margin-top:4px}
+  .cp-stat-i{position:absolute;top:8px;right:8px;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--green);background:#fff;color:var(--green);font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:.78rem;line-height:1;cursor:pointer;padding:0}.cp-stat-i:hover{background:var(--green);color:#fff}
+  .cp-pc{cursor:pointer;transition:.12s;border:2px solid transparent}.cp-pc:hover{border-color:#cfe3d8}.cp-pc.sel{border-color:var(--green);background:#f6faf7}.cp-pc-on{float:right;font-size:.7rem;font-weight:700;color:var(--green)}
