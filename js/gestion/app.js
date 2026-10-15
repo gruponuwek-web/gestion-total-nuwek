@@ -563,7 +563,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (pdfS ? pdfModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -625,6 +625,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(pdfS){ pdfClose(); return; }
   if(movS){ closeMov(); return; }
   if(dupS){ closeDup(); return; }
   if(accEd){ closeAcc(); return; }
@@ -1543,7 +1544,7 @@ function tabGantt(p,cp){
 
   const zoomBtns=[['day','Día'],['week','Semana'],['month','Mes']].map(([k,l])=>`<button class="${ganttZoom===k?'on':''}" onclick="setGanttZoom('${k}')">${l}</button>`).join('');
   return `<div class="tareas-ctl"><div class="group-ctl"><span class="glabel">Zoom</span><div class="subtoggle sm">${zoomBtns}</div></div>
-      <span class="muted" style="font-size:.82rem">${dLabel(rangeStart)} – ${dLabel(rangeEnd)}</span></div>
+      <span class="muted" style="font-size:.82rem">${dLabel(rangeStart)} – ${dLabel(rangeEnd)}</span>${cp?'':`<button class="btn ghost sm" style="margin-left:auto" onclick="pdfOpen('${p.id}')">📄 Exportar PDF</button>`}</div>
     <div class="gc">
       <div class="g-labels">${labels}</div>
       <div class="g-scroll"><div class="g-inner" style="width:${W}px" data-key="${p.id}|${ganttZoom}" data-today="${today>=rangeStart&&today<=rangeEnd?diffDays(rangeStart,today)*PX:''}">
@@ -2801,7 +2802,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||pdfS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3463,6 +3464,85 @@ function movDo(){ const M=movS; if(!M||!canCopy()||!M.to) return; const t=store.
   store.save(); if(typeof dbSaveTask==='function'){ dbSaveTask(t); dbSaveTask(dt); }
   logEvent(t.id,'Movió la subtarea «'+s0.name+'» a la tarea «'+dt.name+'»'); logEvent(dt.id,'Recibió la subtarea «'+s0.name+'» desde la tarea «'+t.name+'»');
   movS=null; subEd=null; render(); shareToast('↦ «'+s0.name+'» ahora está en «'+dt.name+'»'); }
+
+/* ================== EXPORTAR GANTT A PDF (diagrama + detalle semana por semana) ================== */
+let pdfS=null;
+const hx=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function isoWeekOf(iso){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); const day=(dt.getUTCDay()+6)%7; dt.setUTCDate(dt.getUTCDate()-day+3); const wy=dt.getUTCFullYear(); const first=new Date(Date.UTC(wy,0,4)); const w=1+Math.round(((dt-first)/86400000-3+((first.getUTCDay()+6)%7))/7); return {y:wy,w}; }
+function pdfOpen(pid){ pdfS={pid,from:'',to:'',flags:true}; render(); }
+function pdfClose(){ pdfS=null; render(); }
+function pdfModal(){ const p=store.project(pdfS.pid); if(!p){ pdfS=null; return ''; }
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)pdfClose()"><div class="modal-card" style="max-width:480px"><div class="m-head"><div class="m-top"><h3 style="margin:0">📄 Exportar a PDF</h3><button class="x" onclick="pdfClose()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">Genera el diagrama de Gantt de «${hx(p.name)}» y, debajo, el detalle <b>semana por semana</b> (numeradas como en el calendario del año) con camino, tarea, subtarea, sub-subtarea, responsable, día, hora y estatus.</p>
+    <div class="field row"><div><label>Desde (opcional)</label><input type="date" value="${pdfS.from}" onchange="pdfS.from=this.value"></div><div><label>Hasta (opcional)</label><input type="date" value="${pdfS.to}" onchange="pdfS.to=this.value"></div></div>
+    <div class="hint" style="margin-top:-6px">Vacío = todo el proyecto.</div>
+    <label class="gf-opt" style="margin-top:8px"><input type="checkbox" ${pdfS.flags?'checked':''} onchange="pdfS.flags=this.checked"> Marcar los días con <b>empalmes</b> (misma persona en dos caminos distintos el mismo día, o con horas encimadas). <span class="muted">Quítalo si el PDF se lo vas a mandar al cliente.</span></label>
+    <div class="hint">Se abre una vista de impresión: elige «Guardar como PDF». Si no se abre, permite las ventanas emergentes de este sitio.</div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="pdfClose()">Cancelar</button><button class="btn" onclick="pdfGo()">Generar PDF</button></div></div></div></div>`; }
+function pdfActivities(p,from,to){ const out=[]; const frs=store.frentesOf(p.id); const fr=id=>frs.find(f=>f.id===id)||{name:'(sin camino)',color:'#8a9a93'};
+  store.tasksOf(p.id).forEach(t=>{ const f=fr(t.frenteId); const subs=(t.subtasks||[]).filter(x=>!x.isSeries); const byId={}; subs.forEach(x=>byId[x.id]=x);
+    const kidsOf=id=>subs.filter(x=>x.parentId===id);
+    if(!subs.length){ if(t.dueDate) out.push({date:t.dueDate,time:'',dur:0,f,t,sub:null,ss:null,person:store.person(t.responsibleId),done:t.status==='done',doneAt:'',spent:0,sesion:false,lim:true}); return; }
+    subs.forEach(x=>{ const hasKids=!x.parentId&&kidsOf(x.id).length>0; if(hasKids) return;
+      const par=x.parentId?byId[x.parentId]:null; const pr=x.personId?store.person(x.personId):null;
+      out.push({date:x.date||'',time:x.time||'',dur:+x.durMin||0,f,t,sub:par||x,ss:par?x:null,person:pr,done:!!x.done,doneAt:x.doneAt||'',spent:+x.timeSpent||0,sesion:!!(x.sesion&&(x.sesion.objetivo||x.sesion.temario&&x.sesion.temario.length||x.sesion.lugar&&(x.sesion.lugar.link||x.sesion.lugar.direccion))),lim:false}); }); });
+  return out; }
+function pdfFlagItems(list){ const byDay={}; list.forEach(a=>{ if(!a.date||!a.person||!a.person.id) return; ((byDay[a.date]=byDay[a.date]||{})[a.person.id]=byDay[a.date][a.person.id]||[]).push(a); });
+  const notes=[]; Object.entries(byDay).forEach(([day,ppl])=>Object.values(ppl).forEach(arr=>{ const frs=new Set(arr.map(a=>a.f.name));
+    if(frs.size>1){ arr.forEach(a=>a.flagC=true); notes.push({day,who:arr[0].person.name,txt:'dos caminos: '+[...frs].join(' + ')+' ('+arr.length+' actividades)'}); }
+    const timed=arr.filter(a=>a.time).map(a=>({a,s:toMin(a.time),e:toMin(a.time)+(a.dur||0)})).sort((x,y)=>x.s-y.s);
+    for(let i=1;i<timed.length;i++){ if(timed[i].s<timed[i-1].e){ timed[i].a.flagH=true; timed[i-1].a.flagH=true; notes.push({day,who:arr[0].person.name,txt:'horas encimadas ('+timed[i-1].a.time+' y '+timed[i].a.time+')'}); } } }));
+  return notes; }
+function pdfStatus(a,today){ const parts=[]; if(a.done){ const dn=a.doneAt&&a.doneAt.slice(0,4)!=='2020'?a.doneAt.slice(0,10):''; if(dn&&a.date){ const late=daysBetween(a.date,dn); parts.push(late>0?`✓ Hecha con ${late} día(s) de atraso`:'✓ Hecha a tiempo'); } else parts.push('✓ Hecha'); }
+  else if(a.date&&a.date<today){ parts.push(`⏰ Atrasada ${daysBetween(a.date,today)} día(s)`); } else parts.push('Programada');
+  return parts.join(' · '); }
+function pdfHtml(p,from,to,flags){ const c=store.client(p.clientId)||{name:''}; const today=todayISO(); const fmt=iso=>iso?dLabel(iso)+' '+iso.slice(0,4):'';
+  let acts=pdfActivities(p,from,to); const undated=acts.filter(a=>!a.date); acts=acts.filter(a=>a.date); if(from) acts=acts.filter(a=>a.date>=from); if(to) acts=acts.filter(a=>a.date<=to);
+  const frs=store.frentesOf(p.id);
+  // rango del diagrama
+  const all=acts.map(a=>a.date).sort(); let rs=from||all[0]||p.startDate, re=to||all[all.length-1]||p.endDate; rs=mondayOf(rs); re=addDaysISO(mondayOf(re),6);
+  const nW=Math.round((daysBetween(rs,re)+1)/7), D=daysBetween(rs,re)+1; const pct=n=>(n/D*100).toFixed(3);
+  const clip=(a,b)=>{ const s0=a<rs?rs:a, e0=b>re?re:b; return s0>e0?null:[s0,e0]; };
+  const step=Math.max(1,Math.ceil(nW/28)); const axis=Array.from({length:nW},(_,i)=>{ const mo=addDaysISO(rs,i*7); const w=isoWeekOf(mo).w; return `<div class="ax" style="width:${100/nW}%">${i%step===0?'S'+w:''}</div>`; }).join('');
+  const todayPct=(today>=rs&&today<=re)?pct(daysBetween(rs,today)):null; const bg=`background-size:${100/nW}% 100%`;
+  const blocks=frs.map(f=>{ const tasks=ganttOrdered(p,f.id); if(!tasks.length) return ''; let rows='';
+    tasks.forEach(t=>{ const subs=(t.subtasks||[]).filter(x=>!x.isSeries); const sp=taskSpan(t); const clp=sp&&clip(sp.start,sp.end);
+      const tdone=t.status==='done'||(subs.length&&subs.every(x=>x.done));
+      rows+=`<div class="gr gt"><div class="gl">${tdone?'✓ ':''}${hx(t.name)}</div><div class="gcell" style="${bg}">${clp?`<div class="bar" style="left:${pct(daysBetween(rs,clp[0]))}%;width:${Math.max(0.6,(daysBetween(clp[0],clp[1])+1)/D*100).toFixed(3)}%;background:${f.color}"></div>`:''}</div></div>`;
+      subs.filter(x=>!x.parentId).forEach(x=>{ const kids=subs.filter(k=>k.parentId===x.id); const ds=[x.date,...kids.map(k=>k.date)].filter(Boolean).sort(); const cl=ds.length&&clip(ds[0],ds[ds.length-1]); const done=kids.length?kids.every(k=>k.done)&&x.done!==false:x.done;
+        rows+=`<div class="gr gs"><div class="gl">${done?'✓ ':''}${hx(x.name)}</div><div class="gcell" style="${bg}">${cl?`<div class="bar sb" style="left:${pct(daysBetween(rs,cl[0]))}%;width:${Math.max(0.5,(daysBetween(cl[0],cl[1])+1)/D*100).toFixed(3)}%;background:${f.color}"></div>`:''}</div></div>`; }); });
+    return `<div class="fb"><div class="fh" style="border-left:5px solid ${f.color}"><div class="gl">${hx(f.name)}</div><div class="gcell axis">${axis}</div></div>${rows}${todayPct!=null?`<div class="tl" style="left:calc(26% + ${todayPct}% * .74)"></div>`:''}</div>`; }).join('');
+  // detalle por semana
+  const weeks={}; acts.forEach(a=>{ const w=isoWeekOf(a.date); const k=w.y*100+w.w; (weeks[k]=weeks[k]||{y:w.y,w:w.w,mon:mondayOf(a.date),items:[]}).items.push(a); });
+  const keys=Object.keys(weeks).map(Number).sort((a,b)=>a-b); const DN=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const wkHtml=keys.map(k=>{ const W=weeks[k]; const list=W.items.sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'99').localeCompare(b.time||'99')); const notes=flags?pdfFlagItems(list):[];
+    const days={}; list.forEach(a=>(days[a.date]=days[a.date]||[]).push(a));
+    const body=Object.keys(days).sort().map(day=>{ const arr=days[day]; const nPers=new Set(arr.map(a=>a.person&&a.person.id||'-')).size;
+      return `<tr class="dh"><td colspan="6">${DN[isoWeekday(day)]} ${dLabel(day)} <span class="mut">· ${arr.length} actividad(es) · ${nPers} persona(s)</span></td></tr>`+arr.map(a=>{ const path=[a.t.name,a.sub?a.sub.name:null,a.ss?a.ss.name:null].filter(Boolean).map(hx);
+        const tp=(a.dur?fmtDurShort(a.dur):'—')+' / '+(a.spent?fmtTime(a.spent):'—');
+        return `<tr class="${flags&&(a.flagC||a.flagH)?'fl':''}"><td class="tm">${a.time||'—'}</td><td><span class="dot" style="background:${a.f.color}"></span>${hx(a.f.name)}</td><td>${path.join(' <span class="mut">›</span> ')}${a.lim?' <span class="mut">(fecha límite)</span>':''}${a.sesion?' <span class="se">sesión con cliente</span>':''}${flags&&a.flagC?' <span class="wn">⚠ dos caminos</span>':''}${flags&&a.flagH?' <span class="wn">⚠ horas encimadas</span>':''}</td><td>${a.person&&a.person.id?hx(a.person.name):'<span class="mut">Sin asignar</span>'}</td><td class="tm">${tp}</td><td>${hx(pdfStatus(a,today))}</td></tr>`; }).join(''); }).join('');
+    return `<section class="wk"><h2>Semana ${W.w} <span class="mut">· ${dLabel(W.mon)} – ${dLabel(addDaysISO(W.mon,6))} ${W.y} · ${list.length} actividad(es)</span></h2>${notes.length?`<div class="nt">${notes.map(n=>`<div>⚠ <b>${hx(n.who)}</b> · ${DN[isoWeekday(n.day)]} ${dLabel(n.day)}: ${hx(n.txt)}</div>`).join('')}</div>`:''}
+      <table><thead><tr><th>Hora</th><th>Camino</th><th>Tarea › Subtarea › Sub-subtarea</th><th>Responsable</th><th>Programado / Real</th><th>Estatus</th></tr></thead><tbody>${body}</tbody></table></section>`; }).join('');
+  const css=`@page{size:A4 landscape;margin:10mm 10mm 12mm}*{box-sizing:border-box}body{font-family:Inter,Arial,sans-serif;font-size:9px;color:#223c36;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .top{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #223c36;padding-bottom:6px;margin-bottom:8px}.top h1{margin:0;font-size:18px}.top .sub{color:#6b7d76;font-size:10px}.logo{max-height:34px;max-width:120px}
+  .leg{color:#6b7d76;font-size:8px;margin:2px 0 8px}.fb{position:relative;margin-bottom:8px;border:1px solid #e4e2d8;break-inside:auto}.fh,.gr{display:flex;height:14px;align-items:stretch;break-inside:avoid}.fh{height:16px;background:#f2f1ea}
+  .gl{width:26%;padding:0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center}.fh .gl{font-weight:700;font-size:10px}.gt .gl{font-weight:700}.gs .gl{padding-left:16px;color:#4b5b54}
+  .gcell{width:74%;position:relative;background-image:linear-gradient(to right,#e4e2d8 1px,transparent 1px)}.axis{display:flex;background-image:none}.ax{font-size:6px;color:#6b7d76;border-left:1px solid #d9d7cb;padding-left:1px;overflow:hidden;white-space:nowrap}
+  .bar{position:absolute;top:3px;height:8px;border-radius:2px}.bar.sb{opacity:.55;top:4px;height:6px}.tl{position:absolute;top:0;bottom:0;border-left:1.5px solid #e7b800;pointer-events:none}
+  h2{font-size:12px;margin:12px 0 4px;border-bottom:1px solid #223c36;padding-bottom:2px;break-after:avoid}.mut{color:#6b7d76;font-weight:400}.wk{break-inside:auto}
+  table{width:100%;border-collapse:collapse}th{text-align:left;font-size:8px;text-transform:uppercase;color:#6b7d76;border-bottom:1px solid #cfcdc2;padding:2px 4px}td{padding:2px 4px;border-bottom:1px solid #eeede6;vertical-align:top}tr{break-inside:avoid}
+  tr.dh td{background:#f2f1ea;font-weight:700;padding:3px 4px}.tm{white-space:nowrap}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px}.se{background:#e8f0ff;color:#2a4fa3;border-radius:6px;padding:0 4px;font-size:8px}
+  tr.fl td{background:#fff3e0}.wn{color:#b34700;font-weight:700;font-size:8px}.nt{background:#fff3e0;border:1px solid #f0c27a;border-radius:4px;padding:3px 6px;margin:3px 0;font-size:8.5px;color:#7a3d00}
+  .sec{break-before:page}@media screen{body{padding:14px;max-width:1200px;margin:auto}}`;
+  const undH=undated.length?`<section class="wk"><h2>Sin fecha asignada <span class="mut">· ${undated.length} actividad(es)</span></h2><table><thead><tr><th></th><th>Camino</th><th>Tarea › Subtarea › Sub-subtarea</th><th>Responsable</th><th></th><th>Estatus</th></tr></thead><tbody>${undated.map(a=>`<tr><td></td><td><span class="dot" style="background:${a.f.color}"></span>${hx(a.f.name)}</td><td>${[a.t.name,a.sub&&a.sub.name,a.ss&&a.ss.name].filter(Boolean).map(hx).join(' › ')}</td><td>${a.person&&a.person.id?hx(a.person.name):'Sin asignar'}</td><td></td><td>${a.done?'✓ Hecha':'Pendiente'}</td></tr>`).join('')}</tbody></table></section>`:'';
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${hx(p.name)} · Gantt</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet"><style>${css}</style></head><body>
+    <div class="top"><div><h1>${hx(c.name)} · ${hx(p.name)}</h1><div class="sub">Diagrama de Gantt y calendario semanal · ${hx(fmt(rs))} a ${hx(fmt(re))} · generado el ${hx(fmt(today))}</div></div>${c.logo&&/^(https?:|data:image)/.test(c.logo)?`<img class="logo" src="${hx(c.logo)}">`:''}</div>
+    <div class="leg">Cada barra va del inicio al fin de la tarea o subtarea. Barras claras = subtareas. ✓ = realizada. La línea amarilla es hoy. Las columnas S42, S43… son los números de semana del año.</div>
+    ${blocks||'<p>No hay actividades en este rango.</p>'}
+    <div class="sec">${wkHtml}${undH}</div></body></html>`; }
+function pdfGo(){ const p=store.project(pdfS.pid); if(!p) return; if(pdfS.from&&pdfS.to&&pdfS.from>pdfS.to){ alert('La fecha «Desde» debe ser anterior a «Hasta».'); return; }
+  const html=pdfHtml(p,pdfS.from,pdfS.to,pdfS.flags); const w=window.open('','_blank'); if(!w){ alert('El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio e inténtalo de nuevo.'); return; }
+  w.document.open(); w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(_){} },900); pdfS=null; render(); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
