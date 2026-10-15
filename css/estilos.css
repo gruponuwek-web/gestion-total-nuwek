@@ -1013,3 +1013,13 @@
   .vb-compact .vb-item b{font-size:.92rem}.vb-compact .vb-item span{font-size:.74rem}
   .vb-compact .hint{font-size:.76rem !important}.vb-compact h4{font-size:.98rem}
   .vb-compact .vb-tips{font-size:.84rem;line-height:1.5}.vb-compact .wiz-actions .btn{padding:8px 18px;font-size:.9rem}
+
+  .g-sb{background:color-mix(in srgb,var(--fc) 62%,#fff);opacity:1;height:22px;top:6px}.g-sb .g-bl{font-size:.7rem}
+  .g-ssb{background:color-mix(in srgb,var(--fc) 24%,#fff);border:1.5px solid var(--fc);opacity:1;height:20px;top:7px;box-shadow:none}.g-ssb .g-bl{color:var(--fc);text-shadow:none;font-size:.68rem;font-weight:700}
+  .g-sb.done,.g-ssb.done{opacity:.45}
+  .g-sl1{font-size:.8rem;color:var(--ink)}.g-sl2{font-size:.74rem;color:#7b8a83}
+  .g-tg1{font-size:.8rem}.g-dot{cursor:default;font-size:1rem}.g-tg2{color:#b3bcb7;font-size:.85rem;cursor:default}
+  .g-ll:not(.g-sl1):not(.g-sl2) .g-nm{font-weight:700}
+  .g-sb .g-bl{color:color-mix(in srgb,var(--fc) 35%,#000);text-shadow:none;font-weight:700}
+  .g-ssb .g-bl{color:color-mix(in srgb,var(--fc) 55%,#000)}
+  .g-tg1{font-size:1rem}

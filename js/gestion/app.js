@@ -1511,7 +1511,7 @@ function tabGantt(p,cp){
     labels+=`<div class="g-fr" style="border-left:4px solid ${f.color}">${f.name}</div>`;
     lanes+=`<div class="g-frrow"></div>`;
     yy+=30;
-    tasks.filter(t=>t.frenteId===f.id).forEach(t=>{
+    ganttOrdered(p,f.id).forEach(t=>{
       const sp=taskSpan(t); const subsAll=cp?[]:workSubs(t); const open=!cp&&subsAll.length&&ganttOpen[t.id];
       const arrow=(!cp&&subsAll.length)?`<span class="g-tg" onclick="ganttToggle('${t.id}')" title="${open?'Contraer':'Ver subtareas y sub-subtareas'}">${open?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
       labels+=`<div class="g-ll" title="${esc(t.name)}">${arrow}<span class="g-nm">${t.name}</span></div>`; yy+=34;
@@ -1524,13 +1524,14 @@ function tabGantt(p,cp){
       lanes+=`<div class="g-lane"><div class="g-bar" style="left:${left}px;width:${wdt}px;background:${f.color}" onclick="${cp?`openCpTask('${t.id}')`:`ganttPop(event,'${t.id}')`}"><div class="g-fill" style="width:${pct}%"></div><span class="g-bl">${dk(t)}${t.name}</span><span class="g-av">${[...new Set(workSubs(t).map(x=>x.personId).filter(Boolean))].slice(0,4).map(id=>avatar(store.person(id),true)).join('')}</span></div></div>`; }
       if(open){ const okIds=new Set(subsAll.map(x=>x.id));
         const parents=subOrder(t,true).filter(o=>o.depth===0&&okIds.has(o.s.id)); const vis=[]; parents.forEach(o=>{ vis.push(o); if(ganttOpen[o.s.id]) o.kids.filter(k=>okIds.has(k.id)).forEach(k=>vis.push({s:k,depth:1,kids:[]})); });
-        vis.forEach(o=>{ const x=o.s; const nk=o.depth?0:o.kids.filter(k=>okIds.has(k.id)).length;
-          const tg=nk?`<span class="g-tg" onclick="ganttToggle('${x.id}')" title="${ganttOpen[x.id]?'Contraer':'Ver sub-subtareas'}">${ganttOpen[x.id]?'▾':'▸'}</span>`:'<span class="g-tg"></span>';
-          labels+=`<div class="g-ll g-sl" style="padding-left:${12+o.depth*18}px" title="${esc(x.name)}">${tg}<span class="g-nm">${o.depth?'↳ ':''}${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
-          if(!x.date){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
-          const l=Math.max(0,diffDays(rangeStart,x.date))*PX, w=Math.max(PX*0.7,PX); const cy=yy+17;
+        vis.forEach(o=>{ const x=o.s; const kidsAll=o.depth?[]:(o.kids||[]).filter(k=>okIds.has(k.id)); const nk=kidsAll.length;
+          const tg=nk?`<span class="g-tg g-tg1" style="color:${f.color}" onclick="ganttToggle('${x.id}')" title="${ganttOpen[x.id]?'Contraer':'Ver sub-subtareas'}">${ganttOpen[x.id]?'▾':'▸'}</span>`:(o.depth?'<span class="g-tg g-tg2">└</span>':`<span class="g-tg g-tg1 g-dot" style="color:${f.color}">•</span>`);
+          labels+=`<div class="g-ll ${o.depth?'g-sl2':'g-sl1'}" style="padding-left:${o.depth?44:22}px" title="${esc(x.name)}">${tg}<span class="g-nm">${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
+          const ds=[x.date,...kidsAll.map(k=>k.date)].filter(Boolean).sort();
+          if(!ds.length){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
+          const l=Math.max(0,diffDays(rangeStart,ds[0]))*PX, w=Math.max((diffDays(ds[0],ds[ds.length-1])+1)*PX,o.depth?56:76); const cy=yy+17;
           rects[x.id]={l,r:l+w,cy};
-          lanes+=`<div class="g-lane"><div class="g-bar g-sb ${x.done?'done':''}" style="left:${l}px;width:${w}px;background:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${x.time?esc(x.time)+' ':''}${esc(x.name)}</span></div></div>`; yy+=34; });
+          lanes+=`<div class="g-lane"><div class="g-bar ${o.depth?'g-ssb':'g-sb'} ${x.done?'done':''}" style="left:${l}px;width:${w}px;--fc:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${esc(x.name)}</span></div></div>`; yy+=34; });
         subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
     });
   });
@@ -2700,6 +2701,9 @@ function openProject(id){selProject=id;selTab='gestor';view='proyecto';render();
 function setTab(t){selTab=t;render();}
 function setGanttZoom(z){ganttZoom=z;render();}
 let ganttOpen={}, ganttLastKey='';
+function ganttOrdered(p,fid){ const ets=store.etapasOf(p.id); const eo={}; ets.forEach(e=>eo[e.id]=e.order==null?0:e.order);
+  const key=t=>{ const ids=[...taskEtapaIds(t)]; return ids.length?Math.min(...ids.map(i=>eo[i]==null?999:eo[i])):999; };
+  return store.tasksOf(p.id).filter(t=>t.frenteId===fid).map((t,i)=>({t,i,k:key(t)})).sort((a,b)=>a.k-b.k||((a.t.ord||0)-(b.t.ord||0))||a.i-b.i).map(x=>x.t); }
 function ganttToggle(tid){ ganttOpen[tid]=!ganttOpen[tid]; ganttClosePop(); renderKeepScroll(); }
 function ganttAfter(){ const el=document.querySelector('.g-inner'); if(!el) return; const key=el.dataset.key; if(key===ganttLastKey) return; ganttLastKey=key;
   const sc=el.parentElement; if(el.dataset.today!=='') sc.scrollLeft=Math.max(0,(+el.dataset.today)-Math.min(160,sc.clientWidth/3)); }
