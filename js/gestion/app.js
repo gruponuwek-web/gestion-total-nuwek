@@ -1529,7 +1529,7 @@ function tabGantt(p,cp){
           labels+=`<div class="g-ll ${o.depth?'g-sl2':'g-sl1'}" style="padding-left:${o.depth?44:22}px" title="${esc(x.name)}">${tg}<span class="g-nm">${x.done?'✓ ':''}${esc(x.name)}</span></div>`;
           const ds=[x.date,...kidsAll.map(k=>k.date)].filter(Boolean).sort();
           if(!ds.length){ lanes+=`<div class="g-lane"></div>`; yy+=34; return; }
-          const l=Math.max(0,diffDays(rangeStart,ds[0]))*PX, w=Math.max((diffDays(ds[0],ds[ds.length-1])+1)*PX,o.depth?56:76); const cy=yy+17;
+          const l=Math.max(0,diffDays(rangeStart,ds[0]))*PX; let w=Math.max((diffDays(ds[0],ds[ds.length-1])+1)*PX,o.depth?56:76); kidsAll.forEach(k=>{ if(k.date){ const kr=Math.max(0,diffDays(rangeStart,k.date))*PX+Math.max(PX,56); if(kr-l>w) w=kr-l; } }); const cy=yy+17;
           rects[x.id]={l,r:l+w,cy};
           lanes+=`<div class="g-lane"><div class="g-bar ${o.depth?'g-ssb':'g-sb'} ${x.done?'done':''}" style="left:${l}px;width:${w}px;--fc:${f.color}" onclick="ganttPop(event,'${t.id}','${x.id}')"><span class="g-bl">${esc(x.name)}</span></div></div>`; yy+=34; });
         subsAll.forEach(x=>{ if(x.dependsOn&&rects[x.id]&&rects[x.dependsOn]) deps.push([rects[x.dependsOn],rects[x.id]]); }); }
