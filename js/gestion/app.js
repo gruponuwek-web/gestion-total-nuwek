@@ -562,7 +562,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -624,6 +624,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(movS){ closeMov(); return; }
   if(dupS){ closeDup(); return; }
   if(accEd){ closeAcc(); return; }
   if(copyS){ closeCopy(); return; }
@@ -2792,7 +2793,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3424,6 +3425,33 @@ function dupDo(){ const D=dupS; if(!D||!canCopy()) return; const t=store.task(D.
   store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Duplicó la subtarea «'+s0.name+'» ('+copies.length+' elemento(s))');
   dupS=null; subEd=null; render(); shareToast('⧉ Se duplicó «'+s0.name+'» dentro de la tarea'); }
 
+/* ================== MOVER SUBTAREA A OTRA TAREA DEL MISMO PROYECTO (Dirección y Gerencia) ================== */
+let movS=null;
+function openMov(){ if(!canCopy()||!subEd) return; movS={tid:subEd.tid,sid:subEd.sid,to:'',parent:''}; render(); }
+function closeMov(){ movS=null; render(); }
+function movSet(k,v){ movS[k]=v; if(k==='to') movS.parent=''; render(); }
+function movModal(){ const t=store.task(movS.tid); const s0=t&&(t.subtasks||[]).find(x=>x.id===movS.sid); if(!s0){ movS=null; return ''; }
+  const kids=(t.subtasks||[]).filter(x=>x.parentId===s0.id); const others=store.tasksOf(t.projectId).filter(x=>x.id!==t.id);
+  const dest=movS.to?store.task(movS.to):null; const canNest=dest&&!kids.length;
+  const frName=x=>{ const f=store.frentesOf(t.projectId).find(z=>z.id===x.frenteId); return f?f.name:''; };
+  const deps=(t.subtasks||[]).filter(x=>x.dependsOn===s0.id).length+(s0.dependsOn?1:0);
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)closeMov()"><div class="modal-card" style="max-width:480px"><div class="m-head"><div class="m-top"><h3 style="margin:0">↦ Mover «${esc(s0.name)}»</h3><button class="x" onclick="closeMov()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">Se mueve a <b>otra tarea de este mismo proyecto</b>${kids.length?`, junto con sus <b>${kids.length}</b> sub-subtarea(s)`:''}. Conserva sus fechas, responsables, avance y tiempos.</p>
+    <div class="field"><label>Mover a la tarea *</label><select onchange="movSet('to',this.value)"><option value="">Elige…</option>${others.map(x=>`<option value="${x.id}" ${x.id===movS.to?'selected':''}>${esc(x.name)}${frName(x)?' · '+esc(frName(x)):''}</option>`).join('')}</select>${others.length?'':'<div class="hint">Este proyecto no tiene más tareas.</div>'}</div>
+    ${canNest?`<div class="field"><label>Colocar</label><select onchange="movSet('parent',this.value)"><option value="">Como subtarea de la tarea</option>${(dest.subtasks||[]).filter(x=>!x.parentId&&!x.isSeries&&!x.seriesId).map(x=>`<option value="${x.id}" ${x.id===movS.parent?'selected':''}>Dentro de la subtarea «${esc(x.name)}»</option>`).join('')}</select></div>`:''}
+    ${deps?`<div class="ses-resp" style="background:#fff7e0;color:#7a5f00">⛓ Las dependencias solo funcionan dentro de una misma tarea: ${deps} dependencia(s) ligadas a esta subtarea se quitarán.</div>`:''}
+    <div class="wiz-actions"><button class="btn ghost" onclick="closeMov()">Cancelar</button><button class="btn" onclick="movDo()" ${movS.to?'':'disabled'}>Mover</button></div></div></div></div>`; }
+function movDo(){ const M=movS; if(!M||!canCopy()||!M.to) return; const t=store.task(M.tid), dt=store.task(M.to); const s0=t&&(t.subtasks||[]).find(x=>x.id===M.sid); if(!s0||!dt||t.projectId!==dt.projectId) return;
+  const group=[s0,...(t.subtasks||[]).filter(x=>x.parentId===s0.id)]; const gi=new Set(group.map(x=>x.id));
+  (t.subtasks||[]).forEach(x=>{ if(!gi.has(x.id)&&x.dependsOn&&gi.has(x.dependsOn)) delete x.dependsOn; });
+  group.forEach(x=>{ if(x.dependsOn&&!gi.has(x.dependsOn)) delete x.dependsOn; });
+  t.subtasks=t.subtasks.filter(x=>!gi.has(x.id));
+  if(M.parent&&!(group.length>1)) s0.parentId=M.parent; else if(s0.parentId) delete s0.parentId;
+  dt.subtasks=dt.subtasks||[]; dt.subtasks.push(...group);
+  store.save(); if(typeof dbSaveTask==='function'){ dbSaveTask(t); dbSaveTask(dt); }
+  logEvent(t.id,'Movió la subtarea «'+s0.name+'» a la tarea «'+dt.name+'»'); logEvent(dt.id,'Recibió la subtarea «'+s0.name+'» desde la tarea «'+t.name+'»');
+  movS=null; subEd=null; render(); shareToast('↦ «'+s0.name+'» ahora está en «'+dt.name+'»'); }
+
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
@@ -3487,7 +3515,7 @@ function subEditModal(){
         <div class="sm-rpane" data-rpane="cal" style="${repMode==='cal'?'':'display:none'}">${serSec}</div>
         <div class="sm-rpane" data-rpane="after" style="${repMode==='after'?'':'display:none'}"><div class="field"><label>↻ Repetir después de terminarla</label><div class="rep-row"><input id="sm-rep" type="number" min="1" placeholder="Días" value="${s.repeatAfter||''}"><span class="muted">días después de terminar</span>${[7,15,30,45,60].map(n=>`<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=${n}">${n}</button>`).join('')}<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=''">Quitar</button></div><div class="hint">Al palomearla, se crea la siguiente con su fecha = el día que la termines + N días, sin importar el calendario.</div></div></div>
       </div>`:''}
-      <div class="wiz-actions">${canCopy()&&!s0.isSeries&&!s0.seriesId?'<button class="btn ghost" style="margin-right:auto" title="Crear una copia dentro de esta misma tarea" onclick="openDup()">⧉ Duplicar</button>':''}<button class="btn ghost" onclick="closeSubEdit()">Cancelar</button><button class="btn" onclick="saveSubModal()">Guardar</button></div>
+      <div class="wiz-actions">${canCopy()&&!s0.isSeries&&!s0.seriesId?'<button class="btn ghost" title="Crear una copia dentro de esta misma tarea" onclick="openDup()">⧉ Duplicar</button><button class="btn ghost" style="margin-right:auto" title="Mover a otra tarea de este proyecto" onclick="openMov()">↦ Mover</button>':''}<button class="btn ghost" onclick="closeSubEdit()">Cancelar</button><button class="btn" onclick="saveSubModal()">Guardar</button></div>
     </div></div></div>`;
 }
 function smTab(name){ if(subEd) subEd.tab=name;
