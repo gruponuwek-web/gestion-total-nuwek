@@ -3714,7 +3714,8 @@ function selectCitaGrp(k){ citaSel=(citaSel===k?null:k); render(); }
 function visitSession(tid,sid){ const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; let tok=s.shareToken; if(!tok){ tok=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8); store.updateSubtask(tid,sid,{shareToken:tok}); } window.open(sessionShareUrl(tid,sid,tok),'_blank','noopener'); }
 function editCita(tid,sid){ openSubEdit(tid,sid); setTimeout(()=>smTab('ses'),40); }
 function citasHistorialHtml(c,cp){
-  const all=citasAll().filter(x=>x.c.id===c.id&&(!cp||cp.filter(x))).sort((a,b)=>((b.s.date||'')+(b.s.time||''))<((a.s.date||'')+(a.s.time||''))?-1:1);
+  let all=citasAll().filter(x=>x.c.id===c.id&&(!cp||cp.filter(x))).sort((a,b)=>((b.s.date||'')+(b.s.time||''))<((a.s.date||'')+(a.s.time||''))?-1:1);
+  if(cp){ const td=todayISO(), k=x=>(x.s.date||'')+(x.s.time||''); const fut=all.filter(x=>(x.s.date||'')>=td).sort((a,b)=>k(a)<k(b)?-1:1); const past=all.filter(x=>(x.s.date||'')<td); all=[...fut,...past]; }
   const groups=[['todas','📅 Todas las citas','#2c6b4c',all],['pendiente','Sin respuesta','#6b7a73',all.filter(x=>x.est.k==='pendiente')],['reprogramar','Piden reprogramar','#9a7a00',all.filter(x=>x.est.k==='reprogramar')],['confirmado','Confirmadas','#1f7a44',all.filter(x=>x.est.k==='confirmado')],['cancelado','Canceladas','#c0392b',all.filter(x=>x.est.k==='cancelado')]];
   const cur=groups.find(g=>g[0]===citaSel);
   const fichas=groups.map(([k,l,col,arr])=>`<div class="lib-side-it${citaSel===k?' on':''}" onclick="selectCitaGrp('${k}')"><span class="lib-side-nm"><i class="cita-dot" style="background:${col}"></i>${l}</span><span class="lib-side-n">${arr.length}</span></div>`).join('');
@@ -3887,15 +3888,17 @@ function clientLogout(){ clientSess=null; cpTaskId=null; cpUserEd=null; try{ loc
 function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||c.activo===false||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
 function setCpView(v){ cpView=v; try{ sessionStorage.setItem('nuwekCpView',v); }catch(_){} render(); window.scrollTo(0,0); }
 function cpSecs(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas']]; }
+function cpGroups(ctx){ if(!ctx.isAdmin) return [{t:'',items:cpSecs(ctx)}]; const m={}; cpSecs(ctx).forEach(x=>m[x[0]]=x);
+  return [{t:'Seguimiento',items:['inicio','tareas','citas','gantt'].map(k=>m[k])},{t:'Resultados',items:['tiempos','score','notas'].map(k=>m[k])},{t:'Administración',items:['finanzas','usuarios'].map(k=>m[k])}]; }
 function renderClientPortal(){
   const app=document.getElementById('app'); const ctx=cpCtx(); if(!ctx){ clientSess=null; try{ localStorage.removeItem('nuwekClient'); }catch(_){} app.innerHTML=loginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
   saveClientSession(); const secs=cpSecs(ctx); if(!secs.some(x=>x[0]===cpView)) cpView=secs[0][0];
   const {c,me}=ctx; const logo=c.logo?`<span class="cp-logo" style="background-image:url('${esc(c.logo)}')"></span>`:`<span class="cp-logo none">${esc((c.name||'?')[0])}</span>`;
   const body=({inicio:cpInicio,tareas:cpTareas,citas:cpCitas,gantt:cpGantt,finanzas:cpFinanzas,tiempos:cpTiempos,notas:cpNotas,score:cpScore,usuarios:cpUsuarios})[cpView](ctx);
   app.innerHTML=`<div class="topbar"><div class="topbar-in"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
-      <div class="sessbar">${avatar(me,true)}<div class="sess-info"><div class="sess-nm">${esc(me.name)}</div><div class="sess-rl">${ctx.isAdmin?'Administrador':'Colaborador'} · ${esc(c.name)}</div></div><button class="sess-out" onclick="clientLogout()">Salir</button></div></div></div>
+      <div class="sessbar">${avatar(me,true)}<div class="sess-info"><div class="sess-nm">${esc(me.name)}</div><div class="sess-rl">${ctx.isAdmin?'Administrador':'Colaborador'} · ${esc(c.name)}</div></div><button class="sess-out cp-out" onclick="clientLogout()">Salir</button></div></div></div>
     <div class="cp-wrap"><div class="cp-head">${logo}<div><div class="cp-eye">Portal del cliente</div><h1>${esc(c.name)}</h1></div></div>
-      <div class="ptabs cp-nav">${secs.map(([k,l])=>`<button class="${cpView===k?'active':''}" onclick="setCpView('${k}')">${l}</button>`).join('')}</div>
+      <div class="cp-nav2">${cpGroups(ctx).map(g=>`<div class="cp-grp">${g.t?`<div class="cp-gt">${g.t}</div>`:''}<div class="cp-gb">${g.items.map(([k,l])=>`<button class="${cpView===k?'active':''}" onclick="setCpView('${k}')">${l}</button>`).join('')}</div></div>`).join('')}</div>
       <div class="cp-body">${body}</div></div>`;
   document.getElementById('modal-root').innerHTML=(cpTaskId?cpTaskModal(ctx):'')+(cpUserEd?cpUserModal(ctx):'');
 }
