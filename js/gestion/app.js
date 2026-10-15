@@ -562,7 +562,7 @@ function render(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -624,6 +624,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(dupS){ closeDup(); return; }
   if(accEd){ closeAcc(); return; }
   if(copyS){ closeCopy(); return; }
   if(verbInfo){ closeVerbInfo(); return; }
@@ -2791,7 +2792,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3393,6 +3394,36 @@ function saveAcc(){ const E=accEd; const c=store.client(E.cid); if(!c) return; c
 function accQuitar(){ const E=accEd; if(!E||!E.pid||!confirm('¿Quitarle el acceso al portal? Seguirá como contacto.')) return; store.updateClientPerson(E.cid,E.pid,{portal:null}); accEd=null; render(); }
 function accToggleActive(cid,pid){ const c=store.client(cid); const x=c&&(c.people||[]).find(y=>y.id===pid); if(!x||!x.portal) return; store.updateClientPerson(cid,pid,{portal:Object.assign({},x.portal,{activo:x.portal.activo===false})}); render(); }
 
+/* ================== DUPLICAR SUBTAREA DENTRO DE LA MISMA TAREA (Dirección y Gerencia) ================== */
+let dupS=null;
+function openDup(){ if(!canCopy()||!subEd) return; dupS={tid:subEd.tid,sid:subEd.sid,mode:'same',date:'',resp:false,kids:true}; render(); }
+function closeDup(){ dupS=null; render(); }
+function dupGroup(t,s0,withKids){ return [s0,...(withKids&&!s0.parentId?(t.subtasks||[]).filter(x=>x.parentId===s0.id):[])]; }
+function dupModal(){ const t=store.task(dupS.tid); const s0=t&&(t.subtasks||[]).find(x=>x.id===dupS.sid); if(!s0){ dupS=null; return ''; }
+  const nk=s0.parentId?0:(t.subtasks||[]).filter(x=>x.parentId===s0.id).length;
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)closeDup()"><div class="modal-card" style="max-width:480px"><div class="m-head"><div class="m-top"><h3 style="margin:0">⧉ Duplicar «${esc(s0.name)}»</h3><button class="x" onclick="closeDup()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">Se crea una copia dentro de <b>esta misma tarea</b>${nk?`, con sus <b>${nk}</b> sub-subtarea(s)`:''}. Llega con el nombre «${esc(s0.name)} (copia)».</p>
+    ${nk?`<label class="gf-opt"><input type="checkbox" ${dupS.kids?'checked':''} onchange="dupS.kids=this.checked;render()"> Incluir sus sub-subtareas</label>`:''}
+    <div class="field" style="margin-top:8px"><label>Fechas</label>${[['same','Dejar las mismas fechas'],['start','Fecha nueva (respeta los días hábiles entre ellas)'],['none','Sin fechas (las pongo después)']].map(([k,l])=>`<label class="gf-opt" style="margin:3px 0"><input type="radio" name="dup-mode" ${dupS.mode===k?'checked':''} onchange="dupS.mode='${k}';render()"> ${l}</label>`).join('')}${dupS.mode==='start'?`<input type="date" value="${dupS.date}" onchange="dupS.date=this.value" style="margin-top:6px">`:''}</div>
+    <label class="gf-opt"><input type="checkbox" ${dupS.resp?'checked':''} onchange="dupS.resp=this.checked"> Copiar también responsables y equipo</label>
+    <div class="hint">Las horas del día no se copian (dependen de cada agenda). Tampoco avance, tiempos ni comentarios.</div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="closeDup()">Cancelar</button><button class="btn" onclick="dupDo()">Duplicar</button></div></div></div></div>`; }
+function dupDo(){ const D=dupS; if(!D||!canCopy()) return; const t=store.task(D.tid); const s0=t&&(t.subtasks||[]).find(x=>x.id===D.sid); if(!s0) return;
+  if(D.mode==='start'&&!D.date){ alert('Escribe la nueva fecha.'); return; }
+  const group=dupGroup(t,s0,D.kids); const now=new Date().toISOString(); const idMap={}; group.forEach(x=>idMap[x.id]=uid('s_'));
+  const ds=group.map(x=>x.date).filter(Boolean).sort(); const ref=ds[0]; const base=(D.mode==='start'&&ref)?copyWdn(nextWork(D.date))-copyWdn(ref):0;
+  const mapD=d=>D.mode==='same'?d:D.mode==='none'?'':(d?wFrom((copyWdn(d)+base)*(WK.e-WK.s)).d:'');
+  const tok=()=>Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8);
+  const copies=group.map(x=>{ const o=JSON.parse(JSON.stringify(x)); Object.assign(o,{id:idMap[x.id],name:x.id===s0.id?x.name+' (copia)':x.name,parentId:x.parentId?(idMap[x.parentId]||x.parentId):undefined,dependsOn:x.dependsOn?(idMap[x.dependsOn]||x.dependsOn):undefined,
+      done:false,doneAt:null,timeSpent:0,time:'',nextId:null,dateConflict:false,repeatOf:undefined,impCode:undefined,date:mapD(x.date),
+      personId:D.resp?(x.personId||''):'',team:D.resp?(x.team||[]):[],teamInfo:{},teamAck:{}});
+    if(D.resp) (o.team||[]).forEach(id=>{ o.teamInfo[id]={by:currentUser,ts:now}; });
+    if(x.sesion){ o.sesion={objetivo:x.sesion.objetivo||'',lugar:x.sesion.lugar,temario:x.sesion.temario||[]}; o.shareToken=tok(); } else delete o.shareToken;
+    return o; });
+  const idx=Math.max(...group.map(x=>t.subtasks.indexOf(x))); t.subtasks.splice(idx+1,0,...copies);
+  store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Duplicó la subtarea «'+s0.name+'» ('+copies.length+' elemento(s))');
+  dupS=null; subEd=null; render(); shareToast('⧉ Se duplicó «'+s0.name+'» dentro de la tarea'); }
+
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
@@ -3456,7 +3487,7 @@ function subEditModal(){
         <div class="sm-rpane" data-rpane="cal" style="${repMode==='cal'?'':'display:none'}">${serSec}</div>
         <div class="sm-rpane" data-rpane="after" style="${repMode==='after'?'':'display:none'}"><div class="field"><label>↻ Repetir después de terminarla</label><div class="rep-row"><input id="sm-rep" type="number" min="1" placeholder="Días" value="${s.repeatAfter||''}"><span class="muted">días después de terminar</span>${[7,15,30,45,60].map(n=>`<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=${n}">${n}</button>`).join('')}<button type="button" class="rep-chip" onclick="document.getElementById('sm-rep').value=''">Quitar</button></div><div class="hint">Al palomearla, se crea la siguiente con su fecha = el día que la termines + N días, sin importar el calendario.</div></div></div>
       </div>`:''}
-      <div class="wiz-actions"><button class="btn ghost" onclick="closeSubEdit()">Cancelar</button><button class="btn" onclick="saveSubModal()">Guardar</button></div>
+      <div class="wiz-actions">${canCopy()&&!s0.isSeries&&!s0.seriesId?'<button class="btn ghost" style="margin-right:auto" title="Crear una copia dentro de esta misma tarea" onclick="openDup()">⧉ Duplicar</button>':''}<button class="btn ghost" onclick="closeSubEdit()">Cancelar</button><button class="btn" onclick="saveSubModal()">Guardar</button></div>
     </div></div></div>`;
 }
 function smTab(name){ if(subEd) subEd.tab=name;
