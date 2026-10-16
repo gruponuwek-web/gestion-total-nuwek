@@ -1517,7 +1517,7 @@ function tabGantt(p,cp){
   } else if(ganttZoom==='week'){
     for(let o=0;o<total;o+=7){ const dt=addDays(dISO(rangeStart),o); ticks.push({off:o,w:Math.min(7,total-o),label:dt.toLocaleDateString('es-MX',{day:'numeric',month:'short'}),strong:dt.getDate()<=7}); }
   } else {
-    for(let o=0;o<total;o++){ const dt=addDays(dISO(rangeStart),o); ticks.push({off:o,w:1,label:String(dt.getDate()),strong:dt.getDate()===1}); }
+    for(let o=0;o<total;o++){ const dt=addDays(dISO(rangeStart),o); const wd=dt.getDay(); ticks.push({off:o,w:1,label:`<span class="g-wd${wd===3?' x':''}${wd===0||wd===6?' fin':''}">${'DLMXJVS'[wd]}</span><span>${dt.getDate()}</span>`,strong:dt.getDate()===1}); }
   }
   const axis=ticks.map(tk=>`<div class="g-tick ${tk.strong?'strong':''}" style="left:${tk.off*PX}px;width:${tk.w*PX}px">${tk.label}</div>`).join('');
   const grid=ticks.map(tk=>`<div class="g-line ${tk.strong?'strong':''}" style="left:${tk.off*PX}px"></div>`).join('');

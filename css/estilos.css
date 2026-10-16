@@ -1049,3 +1049,6 @@
   .cp-hoy{display:flex;flex-direction:column;gap:10px}.cp-hoy-it{display:flex;gap:12px;align-items:flex-start}.cp-hoy-t{flex:0 0 58px;font-family:'Syne';font-weight:800;color:var(--green);font-size:1rem;padding-top:14px}
   .cp-hoy-b{flex:1;min-width:0}.cp-hoy-o{font-size:.8rem;color:var(--muted);margin:4px 4px 0 6px}
   .cp-stat-big{padding-right:26px}.cp-stat-lbl{padding-right:6px}
+
+  .g-tick .g-wd{display:block;font-size:.58rem;font-weight:700;color:var(--muted);line-height:1;margin-bottom:2px;letter-spacing:.02em}.g-tick .g-wd.x{color:#c0392b}.g-tick .g-wd.fin{opacity:.45}
+  .g-tick:has(.g-wd){flex-direction:column;justify-content:center;gap:0;line-height:1.1}
