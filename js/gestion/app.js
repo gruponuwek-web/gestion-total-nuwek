@@ -579,7 +579,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (pdfS ? pdfModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -641,6 +641,7 @@ document.addEventListener('keydown',ev=>{
   if(nextOpen){ nextOpen=false; nextRender(); return; }
   if(notifOpen){ notifOpen=false; notifUpdate(); return; }
   if(depPrev){ depCancel(); return; }
+  if(expS){ expClose(); return; }
   if(pdfS){ pdfClose(); return; }
   if(movS){ closeMov(); return; }
   if(dupS){ closeDup(); return; }
@@ -1436,7 +1437,7 @@ function viewProyecto(){
     ? `<div class="crumb"><a onclick="go('op_tableros')">Tableros</a> › ${p.name}</div>`
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
-  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button><button class="btn ghost sm" onclick="openImport('${p.id}')">⬆ Importar</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
+  const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button><button class="btn ghost sm" onclick="openImport('${p.id}')">⬆ Importar</button><button class="btn ghost sm" onclick="expOpen('${p.id}')">⬇ Exportar</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
   return `${crumb}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
@@ -2818,7 +2819,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||pdfS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||pdfS||expS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3565,6 +3566,38 @@ function pdfHtml(p,from,to,flags){ const c=store.client(p.clientId)||{name:''}; 
 function pdfGo(){ const p=store.project(pdfS.pid); if(!p) return; if(pdfS.from&&pdfS.to&&pdfS.from>pdfS.to){ alert('La fecha «Desde» debe ser anterior a «Hasta».'); return; }
   const html=pdfHtml(p,pdfS.from,pdfS.to,pdfS.flags); const w=window.open('','_blank'); if(!w){ alert('El navegador bloqueó la ventana. Permite las ventanas emergentes de este sitio e inténtalo de nuevo.'); return; }
   w.document.open(); w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(_){} },900); pdfS=null; render(); }
+
+/* ================== EXPORTAR TAREAS DEL PROYECTO (CSV / Excel, mismo formato que la importación) ================== */
+let expS=null;
+const EXP_EXTRA=['estado','fecha_hecha','tiempo_real_min','equipo','links'];
+function expOpen(pid){ if(!canCopy()) return; expS={pid}; render(); }
+function expClose(){ expS=null; render(); }
+function expModal(){ const p=store.project(expS.pid); if(!p){ expS=null; return ''; } const n=store.tasksOf(p.id).length;
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)expClose()"><div class="modal-card" style="max-width:460px"><div class="m-head"><div class="m-top"><h3 style="margin:0">⬇ Exportar tareas</h3><button class="x" onclick="expClose()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">Descarga las <b>${n} tarea(s)</b> de «${esc(p.name)}» con sus subtareas y sub-subtareas: nombre, fechas, horas, duración, responsables, dependencias, sesiones con cliente, estado, tiempo real y más. Usa las <b>mismas columnas que la importación</b>: editas el archivo y lo subes con <b>⬆ Importar</b>.</p>
+    <div class="hint">Las tareas con repetición automática (series) no se incluyen. Si lo importas en el <b>mismo proyecto</b> se duplicaría; el modo «Actualizar» todavía no existe. Para copiar a otro proyecto o cliente, sí funciona.</div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="expClose()">Cancelar</button><button class="btn ghost" onclick="expGo('xlsx')">Descargar Excel</button><button class="btn" onclick="expGo('csv')">Descargar CSV</button></div></div></div></div>`; }
+function expRows(p){ const c=store.client(p.clientId)||{people:[]}; const nm=id=>{ const x=id?store.person(id):null; return x&&x.id?x.name:''; };
+  const rows=[]; const used=new Set(); let ti=0;
+  const code=(cand,fallback)=>{ let k=cand&&!used.has(cand)?cand:fallback; let i=0; while(used.has(k)) k=fallback+'_'+(++i); used.add(k); return k; };
+  const cmap={}; const frs=store.frentesOf(p.id); const order=[]; frs.forEach(f=>ganttOrdered(p,f.id).forEach(t=>order.push(t))); store.tasksOf(p.id).forEach(t=>{ if(!order.includes(t)) order.push(t); });
+  order.forEach(t=>{ ti++; const tc=code(t.impCode,'T'+ti); cmap['t:'+t.id]=tc; const f=frs.find(z=>z.id===t.frenteId);
+    const subs=subOrder(t,true).map(o=>o.s).filter(x=>!x.isSeries&&!x.seriesId); let si=0; const kids={};
+    const top=subs.filter(x=>!x.parentId); top.forEach(x=>{ si++; cmap[x.id]=code(x.impCode,tc+'.'+si); let ki=0; subs.filter(k=>k.parentId===x.id).forEach(k=>{ ki++; cmap[k.id]=code(k.impCode,cmap[x.id]+'.'+ki); }); });
+    const ws=subs; const spent=ws.reduce((a,z)=>a+(+z.timeSpent||0),0); const dn=ws.length&&ws.every(z=>z.done);
+    rows.push({codigo:tc,nivel:'Tarea',padre:'',frente:f?f.name:'',nombre:t.name,descripcion:t.description||'',etiquetas:(t.tags||[]).join('; '),fecha:t.dueDate||'',hora:'',duracion_min:'',responsable:nm(t.responsibleId),depende_de:'',fecha_fija:'',urgente:t.urgente?'SI':'',estado:(t.status==='done'||dn)?'Hecha':'Pendiente',fecha_hecha:'',tiempo_real_min:spent||'',equipo:'',links:(t.links||[]).map(l=>(l.title?l.title+': ':'')+l.url).join(' | ')});
+    const emit=x=>{ const par=x.parentId?cmap[x.parentId]:tc; const ses=x.sesion||{}; const lug=ses.lugar||{}; const pres=lug.tipo==='presencial';
+      rows.push({codigo:cmap[x.id],nivel:x.parentId?'Subsubtarea':'Subtarea',padre:par,frente:'',nombre:x.name,descripcion:'',etiquetas:'',fecha:x.date||'',hora:x.time||'',duracion_min:x.durMin||'',responsable:nm(x.personId),depende_de:x.dependsOn&&cmap[x.dependsOn]?cmap[x.dependsOn]:'',fecha_fija:x.fija?'SI':'',urgente:x.urgent?'SI':'',
+        cita_objetivo:ses.objetivo||'',cita_lugar:(ses.objetivo||lug.link||lug.direccion||(ses.temario||[]).length)?(pres?'presencial':'videollamada'):'',cita_link:lug.link||'',cita_direccion:lug.direccion||'',cita_temario:(ses.temario||[]).map(z=>z.titulo).filter(Boolean).join('; '),
+        invitados:(x.invitados||[]).map(id=>{ const q=(c.people||[]).find(z=>z.id===id); return q?q.name:''; }).filter(Boolean).join('; '),
+        estado:x.done?'Hecha':'Pendiente',fecha_hecha:x.done&&x.doneAt&&x.doneAt.slice(0,4)!=='2020'?x.doneAt.slice(0,10):'',tiempo_real_min:x.timeSpent||'',equipo:(x.team||[]).map(nm).filter(Boolean).join('; '),links:(x.links||[]).map(l=>(l.title?l.title+': ':'')+l.url).join(' | ')}); };
+    top.forEach(x=>{ emit(x); subs.filter(k=>k.parentId===x.id).forEach(emit); }); });
+  return rows; }
+function expGo(fmt){ const p=store.project(expS.pid); if(!p) return; const cols=[...IMP_COLS,...EXP_EXTRA]; const rows=expRows(p).map(r=>cols.map(k=>r[k]==null?'':r[k]));
+  const c=store.client(p.clientId)||{name:''}; const base='Tareas-'+(c.name+'-'+p.name).replace(/[^\wÁÉÍÓÚáéíóúñÑ-]+/g,'-')+'-'+todayISO();
+  if(fmt==='xlsx'){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión.'); return; } const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([cols,...rows]); ws['!cols']=cols.map(k=>({wch:({nombre:46,descripcion:30,cita_objetivo:30,cita_link:30,cita_temario:30,links:30}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar'); XLSX.writeFile(wb,base+'.xlsx'); }
+  else { const q=v=>{ v=String(v); return /[",\n\r;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }; const csv='﻿'+[cols,...rows].map(r=>r.map(q).join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=base+'.csv'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
+  shareToast('⬇ Se exportaron '+rows.length+' fila(s)'); expS=null; render(); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
