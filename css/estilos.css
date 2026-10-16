@@ -1052,3 +1052,5 @@
 
   .g-tick .g-wd{display:block;font-size:.58rem;font-weight:700;color:var(--muted);line-height:1;margin-bottom:2px;letter-spacing:.02em}.g-tick .g-wd.x{color:#c0392b}.g-tick .g-wd.fin{opacity:.45}
   .g-tick:has(.g-wd){flex-direction:column;justify-content:center;gap:0;line-height:1.1}
+
+  .cp-key{margin-right:2px}.hide-sm{display:inline}@media(max-width:640px){.hide-sm{display:none}}

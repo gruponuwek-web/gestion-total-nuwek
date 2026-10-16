@@ -546,11 +546,11 @@ function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
   setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
-  if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
+  if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
     if(clientSess){ renderClientPortal(); return; }
-    if(showClientLogin){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
+    if(showClientLogin){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
     if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
     app.innerHTML = loginScreen();
     document.getElementById('modal-root').innerHTML = loginUser ? pinModal() : '';
@@ -2916,8 +2916,9 @@ function notifItems(){
   const m=pendingMentions().map(cm=>({id:'m:'+cm.id,type:'m',ts:cm.ts,cm,tid:cm.taskId}));
   const tm=pendingTeam().map(x=>({id:'t:'+x.s.id,type:'t',ts:x.ts,s:x.s,t:x.t,by:x.by,tid:x.t.id}));
   const tu=pendingTurno().map(x=>({id:'r:'+x.s.id+':'+x.tu.ts,type:'r',ts:x.tu.ts,s:x.s,t:x.t,tu:x.tu,tid:x.t.id}));
+  const rc=pendingRecovery().map(x=>({id:'q:'+x.p.id+':'+x.ts,type:'q',ts:x.ts,c:x.c,p:x.p,tid:''}));
   const cr=pendingClientResp().map(x=>({id:'c:'+x.s.id+':'+x.last.id,type:'c',ts:x.last.ts,s:x.s,t:x.t,last:x.last,tid:x.t.id}));
-  return m.concat(tm,cr,tu).sort((a,b)=>a.ts<b.ts?1:-1); }
+  return m.concat(tm,cr,tu,rc).sort((a,b)=>a.ts<b.ts?1:-1); }
 function notifUpdate(){
   const r=notifRoot(); if(!session){ r.innerHTML=''; notifSeen=null; return; }
   const list=notifItems(); const ids=list.map(x=>x.id); const me=store.person(currentUser);
@@ -2928,13 +2929,14 @@ function notifUpdate(){
       return `<div class="nf-it" onclick="goNotif('${cm.taskId}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te mencionó <span class="muted">· ${ago(cm.ts)}</span></div><div class="nf-t">${mdEsc(t.name)}</div><div class="nf-s">${mdEsc(txt)}</div></div><button class="nf-ok" title="Ya lo vi" onclick="event.stopPropagation();markRead('${cm.id}')">✓</button></div>`; }
     if(it.type==='c'){ const st=SES_ST[it.last.estado]; const cn=(store.client((store.project(it.t.projectId)||{}).clientId)||{}).name||'El cliente';
       return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:${st.c}">${it.last.estado==='confirmado'?'✓':it.last.estado==='cancelado'?'✕':'↻'}</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(cn)}</b> ${it.last.estado==='confirmado'?'confirmó':it.last.estado==='cancelado'?'canceló':'pidió reprogramar'} <span class="muted">· ${ago(it.last.ts)}</span></div><div class="nf-t">📅 ${mdEsc(it.s.name)}</div><div class="nf-s">${it.last.razon?'«'+mdEsc(it.last.razon)+'»':mdEsc(it.t.name)}</div>${(it.last.propuestas||[]).length?`<div class="nf-s" style="color:#9a7a00;font-weight:600">Propone: ${(it.last.propuestas||[]).map(x=>mdEsc(fmtPropuesta(x))).join(' · ')}</div>`:''}</div><button class="nf-ok" title="Ya la vi" onclick="event.stopPropagation();ackClientResp('${it.t.id}','${it.s.id}')">✓</button></div>`; }
+    if(it.type==='q'){ return `<div class="nf-it"><span class="nf-av" style="background:#6b4fc9">🔑</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(it.p.name)}</b> pidió recuperar su código <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">${mdEsc(it.c.name)} · usuario ${mdEsc(it.p.portal.user)}</div><div class="nf-s"><a style="cursor:pointer;color:#1f7a44;font-weight:700" onclick="event.stopPropagation();resetClientCode('${it.c.id}','${it.p.id}')">↺ Restablecer a ${RESET_CODE}</a></div></div><button class="nf-ok" title="Descartar" onclick="event.stopPropagation();dismissRecovery('${it.c.id}','${it.p.id}')">✓</button></div>`; }
     if(it.type==='r'){ const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
       return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:#e7b800">🔔</span><div class="nf-tx"><div class="nf-h"><b>Ya te toca</b> <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">${mdEsc(it.s.name)}</div><div class="nf-s">Terminó «${mdEsc(it.tu.predName||'la actividad anterior')}» · ${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Enterado" onclick="event.stopPropagation();ackTurno('${it.t.id}','${it.s.id}')">✓</button></div>`; }
     const a=store.person(it.by); const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
     return `<div class="nf-it" onclick="goNotif('${it.t.id}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te agregó como participante <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">🤝 ${mdEsc(it.s.name)}</div><div class="nf-s">${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Ya la vi y la atendí" onclick="event.stopPropagation();ackTeam('${it.t.id}','${it.s.id}')">✓</button></div>`; }).join('');
   r.innerHTML=`${notifOpen?`<div class="nf-pop"><div class="nf-pop-h">Pendientes por atender <span class="nf-cnt">${list.length}</span></div><div class="nf-list">${items||'<div class="nf-empty">🎉 Nada pendiente</div>'}</div></div>`:''}
     <button class="nf-fab${fresh.length?' pulse':''}" onclick="event.stopPropagation();toggleNotif()" title="${list.length?list.length+' pendiente(s) por atender':'Nada pendiente'}">${notifAvatar(me)}${list.length?`<span class="nf-badge">${list.length>99?'99+':list.length}</span>`:''}</button>`;
-  if(fresh.length){ const f=fresh[0]; if(f.type==='r'){ notifToast('🔔 Ya te toca «'+f.s.name+'» (terminó «'+(f.tu.predName||'la anterior')+'»)',f.tid); } else if(f.type==='c'){ notifToast('El cliente '+(f.last.estado==='confirmado'?'confirmó':f.last.estado==='cancelado'?'canceló':'pidió reprogramar')+' «'+f.s.name+'»',f.tid); } else { const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); } }
+  if(fresh.length){ const f=fresh[0]; if(f.type==='q'){ notifToast('🔑 '+f.p.name+' ('+f.c.name+') pidió recuperar su código',f.tid); } else if(f.type==='r'){ notifToast('🔔 Ya te toca «'+f.s.name+'» (terminó «'+(f.tu.predName||'la anterior')+'»)',f.tid); } else if(f.type==='c'){ notifToast('El cliente '+(f.last.estado==='confirmado'?'confirmó':f.last.estado==='cancelado'?'canceló':'pidió reprogramar')+' «'+f.s.name+'»',f.tid); } else { const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); } }
 }
 function notifToast(msg,tid){ const t=document.createElement('div'); t.className='nf-toast'; t.textContent='👋 '+msg; t.onclick=()=>{ t.remove(); goNotif(tid); }; notifRoot().appendChild(t); setTimeout(()=>t.remove(),6000); }
 function toggleNotif(){ notifOpen=!notifOpen; notifUpdate(); }
@@ -3399,7 +3401,7 @@ function accRow(c,p){ const po=p.portal; const off=po&&po.activo===false;
   return `<div class="cat-row ${off?'off':''}">${avatar(p,true)}<span class="cat-nm">${esc(p.name)}</span><span class="muted" style="font-size:.8rem">${esc(p.role||'Sin puesto')}${p.phone?' · '+esc(p.phone):''}</span>
     ${po?`<span class="acc-cred">usuario <b>${esc(po.user)}</b></span><span class="acc-cred">código <b class="acc-code">${accShow[p.id]?esc(po.code):'••••••'}</b> <a class="acc-eye" title="${accShow[p.id]?'Ocultar':'Mostrar'}" onclick="accReveal('${p.id}')">${accShow[p.id]?'🙈':'👁'}</a></span><span class="pill ${off?'gray':po.rol==='admin'?'yellow':'green'}">${off?'Inactivo':po.rol==='admin'?'Administrador':'Colaborador'}</span>`
     :'<span class="muted" style="font-size:.78rem">Sin acceso al portal</span>'}
-    <span class="cat-ops"><button class="btn ghost sm" title="${po?'Editar acceso':'Dar acceso'}" onclick="openAcc('${c.id}','${p.id}')">${po?'✏️':'🔑'}</button>${po?`<button class="btn ghost sm" title="${off?'Reactivar':'Desactivar'}" onclick="accToggleActive('${c.id}','${p.id}')">${off?'↩︎':'⏸'}</button>`:''}</span></div>`; }
+    <span class="cat-ops">${po&&po.recover?'<span class="pill yellow" title="Pidió recuperar su código">🔑 pidió restaurar</span>':''}${po?`<button class="btn ghost sm" title="Restablecer el código a ${RESET_CODE}; el cliente deberá cambiarlo al entrar" onclick="resetClientCode('${c.id}','${p.id}')">↺</button>`:''}<button class="btn ghost sm" title="${po?'Editar acceso':'Dar acceso'}" onclick="openAcc('${c.id}','${p.id}')">${po?'✏️':'🔑'}</button>${po?`<button class="btn ghost sm" title="${off?'Reactivar':'Desactivar'}" onclick="accToggleActive('${c.id}','${p.id}')">${off?'↩︎':'⏸'}</button>`:''}</span></div>`; }
 function accesosHtml(){ const q=impNz(accQ); let tot=0,act=0;
   const groups=store.d.clients.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const ppl=(c.people||[]); const withA=ppl.filter(x=>x.portal); tot+=withA.length; act+=withA.filter(x=>x.portal.activo!==false).length;
     const list=q?ppl.filter(x=>impNz(x.name+' '+(x.portal?x.portal.user:'')+' '+c.name).includes(q)):ppl; if(q&&!list.length) return '';
@@ -3631,6 +3633,40 @@ function movTDo(){ const M=movT; if(!M||!canCopy()) return; const t=store.task(M
   if(!sameClient) (t.subtasks||[]).forEach(x=>{ x.invitados=[]; if(x.isSeries&&x.series&&x.series.tpl) x.series=Object.assign({},x.series,{tpl:Object.assign({},x.series.tpl,{invitados:[]})}); });
   store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Movió la tarea de «'+sp.name+'» a «'+dp.name+'»');
   movT=null; render(); shareToast('↦ «'+t.name+'» ahora está en «'+dp.name+'»'); }
+
+/* ================== CÓDIGO DEL CLIENTE: CAMBIAR (lo sabe) y RESTAURAR (lo olvidó) ================== */
+const RESET_CODE='123456';
+let cpChg=null, cpChgShown=false, cpRecS=null;
+function cpChgOpen(forced){ cpChg={forced:!!forced}; render(); setTimeout(()=>{ const e=document.getElementById('ch-cur'); if(e) e.focus(); },60); }
+function cpChgClose(){ cpChg=null; render(); }
+function cpChgModal(){ const ctx=cpCtx(); const forced=cpChg.forced||(ctx&&ctx.me.portal&&ctx.me.portal.reset);
+  const inp=(id,l,ph)=>`<div class="field"><label>${l}</label><input id="${id}" type="password" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="${ph||'••••••'}" onkeydown="if(event.key==='Enter')cpChgSave()"></div>`;
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this&&!${forced?'true':'false'})cpChgClose()"><div class="modal-card" style="max-width:420px"><div class="m-head"><div class="m-top"><h3 style="margin:0">🔑 Cambiar mi código</h3><button class="x" onclick="cpChgClose()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">${forced?'El equipo de Nuwek restableció tu código a uno temporal. <b>Escríbelo abajo y elige uno nuevo</b> que solo tú conozcas.':'Escribe tu código actual y elige uno nuevo de 6 números. Tendrás que escribir el nuevo dos veces para confirmarlo.'}</p>
+    ${inp('ch-cur',forced?'Código temporal':'Código actual')}${inp('ch-new','Código nuevo (6 números)')}${inp('ch-new2','Repite el código nuevo')}
+    <div id="ch-err" class="pin-err" style="color:#c0392b;min-height:18px;margin-bottom:6px"></div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="cpChgClose()">${forced?'Después':'Cancelar'}</button><button class="btn" onclick="cpChgSave()">Guardar código</button></div></div></div></div>`; }
+function cpChgSave(){ const ctx=cpCtx(); if(!ctx) return; const po=ctx.me.portal; const cur=(val('ch-cur')||'').trim(), n1=(val('ch-new')||'').trim(), n2=(val('ch-new2')||'').trim(); const err=m=>{ const e=document.getElementById('ch-err'); if(e) e.textContent=m; };
+  if(String(po.code)!==cur){ err('El código actual no coincide.'); return; }
+  if(!/^\d{6}$/.test(n1)){ err('El código nuevo debe ser de exactamente 6 números.'); return; }
+  if(n1===cur||n1===RESET_CODE){ err('Elige un código distinto al actual y al temporal.'); return; }
+  if(n1!==n2){ err('Los dos códigos nuevos no son iguales.'); return; }
+  store.updateClientPerson(ctx.c.id,ctx.me.id,{portal:Object.assign({},po,{code:n1,reset:false,recover:null})}); cpChg=null; render(); shareToast('🔑 Tu código se cambió correctamente'); }
+/* restauración: el cliente avisa y el equipo (Dirección y Michelle) le pone el código temporal */
+function cpRecOpen(){ cpRecS={done:false,err:''}; render(); setTimeout(()=>{ const e=document.getElementById('rc-user'); if(e) e.focus(); },60); }
+function cpRecClose(){ cpRecS=null; render(); }
+function cpRecModal(){ return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)cpRecClose()"><div class="modal-card" style="max-width:420px"><div class="m-head"><div class="m-top"><h3 style="margin:0">¿Olvidaste tu código?</h3><button class="x" onclick="cpRecClose()">×</button></div></div><div class="m-body">
+  ${cpRecS.done?`<div class="ses-resp" style="background:#e6f6ec;color:#1d6b3a">✅ Listo. Avisamos al equipo de Nuwek. En cuanto lo restablezcan te darán un <b>código temporal</b> y, al entrar, podrás elegir el tuyo.</div><div class="wiz-actions"><span></span><button class="btn" onclick="cpRecClose()">Entendido</button></div>`
+  :`<p class="muted" style="margin-top:0">Escribe tu <b>usuario</b> y avisamos a Dirección y a Michelle para que restablezcan tu código. Cuando lo tengan te dirán cuál es el temporal.</p><div class="field"><label>Usuario</label><input id="rc-user" autocapitalize="off" onkeydown="if(event.key==='Enter')cpRecSend()"></div><div class="pin-err" style="color:#c0392b;min-height:18px">${esc(cpRecS.err||'')}</div><div class="wiz-actions"><button class="btn ghost" onclick="cpRecClose()">Cancelar</button><button class="btn" onclick="cpRecSend()">Avisar al equipo</button></div>`}</div></div></div>`; }
+function cpRecSend(){ const u=(val('rc-user')||'').trim(); if(!u){ cpRecS.err='Escribe tu usuario.'; render(); return; }
+  const f=findPortalUser(u); if(f&&f.p.portal.activo!==false){ const po=f.p.portal; const last=po.recover&&po.recover.ts; if(!last||Date.now()-new Date(last)>30*60000) store.updateClientPerson(f.c.id,f.p.id,{portal:Object.assign({},po,{recover:{ts:new Date().toISOString()}})}); }
+  cpRecS.done=true; render(); }
+/* lado Nuwek: Dirección y Michelle reciben el aviso y pueden restablecer */
+function canRecover(){ const me=store.person(currentUser)||{}; return role==='gerencia'||/^michell/.test(impNz(me.name||'')); }
+function pendingRecovery(){ if(!session||!canRecover()) return []; const out=[]; store.d.clients.forEach(c=>(c.people||[]).forEach(p=>{ const r=p.portal&&p.portal.recover; if(r&&p.portal.activo!==false) out.push({c,p,ts:r.ts}); })); return out; }
+function resetClientCode(cid,pid,fromNotif){ const c=store.client(cid); const p=c&&(c.people||[]).find(x=>x.id===pid); if(!p||!p.portal) return; if(!confirm('¿Restablecer el código de '+p.name+' ('+c.name+') a '+RESET_CODE+'? Al entrar, el sistema le pedirá elegir uno nuevo.')) return;
+  store.updateClientPerson(cid,pid,{portal:Object.assign({},p.portal,{code:RESET_CODE,reset:true,recover:null})}); shareToast('🔑 Código restablecido a '+RESET_CODE+'. Avísale a '+p.name+'.'); render(); }
+function dismissRecovery(cid,pid){ const c=store.client(cid); const p=c&&(c.people||[]).find(x=>x.id===pid); if(!p||!p.portal) return; store.updateClientPerson(cid,pid,{portal:Object.assign({},p.portal,{recover:null})}); render(); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
@@ -3964,6 +4000,7 @@ function clientLoginScreen(){
     <div class="field"><label>Código de 6 cifras</label><input id="cl-code" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')clientLogin()"></div>
     ${cpLoginErr?`<div class="pin-err" style="color:#c0392b;margin-bottom:8px">${esc(cpLoginErr)}</div>`:''}
     <button class="btn" style="width:100%" onclick="clientLogin()">Entrar</button>
+    <div style="text-align:center;margin-top:10px"><a class="cl-link" onclick="cpRecOpen()">¿Olvidaste tu código?</a></div>
     ${window.CLIENT_ONLY?'':'<div style="text-align:center;margin-top:12px"><a class="cl-link" onclick="closeClientLogin()">← Soy del equipo Nuwek</a></div>'}</div></div>`; }
 function clientLogin(){
   const u=normU(val('cl-user')), code=(val('cl-code')||'').trim(); const lock=cpFails[u]; if(lock&&lock.until&&Date.now()<lock.until){ cpLoginErr='Demasiados intentos. Espera unos minutos.'; render(); return; }
@@ -3972,7 +4009,7 @@ function clientLogin(){
   const a=cpFails[u]||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; cpLoginErr='Demasiados intentos. Espera 5 minutos.'; } else cpLoginErr='Usuario o código incorrecto.'; cpFails[u]=a; render(); }
 function saveClientSession(){ try{ if(clientSess) localStorage.setItem('nuwekClient',JSON.stringify(Object.assign({},clientSess,{exp:Date.now()+SESSION_TTL_MS}))); }catch(_){} }
 function restoreClientSession(){ try{ const o=JSON.parse(localStorage.getItem('nuwekClient')||'null'); if(!o||Date.now()>o.exp){ localStorage.removeItem('nuwekClient'); return; } clientSess={cid:o.cid,pid:o.pid}; if(!cpCtx()){ clientSess=null; localStorage.removeItem('nuwekClient'); return; } const s=sessionStorage.getItem('nuwekCpView'); if(s) cpView=s; else cpView=cpCtx().isAdmin?'inicio':'tareas'; }catch(_){} }
-function clientLogout(){ clientSess=null; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
+function clientLogout(){ clientSess=null; cpChg=null; cpChgShown=false; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
 function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||c.activo===false||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
 function setCpView(v){ cpView=v; try{ sessionStorage.setItem('nuwekCpView',v); }catch(_){} render(); window.scrollTo(0,0); }
 function cpSecs(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas']]; }
@@ -3980,15 +4017,16 @@ function cpGroups(ctx){ if(!ctx.isAdmin) return [{t:'',items:cpSecs(ctx)}]; cons
   return [{t:'Seguimiento',items:['inicio','tareas','citas','gantt'].map(k=>m[k])},{t:'Resultados',items:['tiempos','score','notas'].map(k=>m[k])},{t:'Administración',items:['finanzas','usuarios'].map(k=>m[k])}]; }
 function renderClientPortal(){
   const app=document.getElementById('app'); const ctx=cpCtx(); if(!ctx){ clientSess=null; try{ localStorage.removeItem('nuwekClient'); }catch(_){} app.innerHTML=loginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
+  if(ctx.me.portal&&ctx.me.portal.reset&&!cpChg&&!cpChgShown){ cpChgShown=true; cpChg={forced:true}; }
   saveClientSession(); const secs=cpSecs(ctx); if(!secs.some(x=>x[0]===cpView)) cpView=secs[0][0];
   const {c,me}=ctx; const logo=c.logo?`<span class="cp-logo" style="background-image:url('${esc(c.logo)}')"></span>`:`<span class="cp-logo none">${esc((c.name||'?')[0])}</span>`;
   const body=({inicio:cpInicio,tareas:cpTareas,citas:cpCitas,gantt:cpGantt,finanzas:cpFinanzas,tiempos:cpTiempos,notas:cpNotas,score:cpScore,usuarios:cpUsuarios})[cpView](ctx);
   app.innerHTML=`<div class="topbar"><div class="topbar-in"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
-      <div class="sessbar">${avatar(me,true)}<div class="sess-info"><div class="sess-nm">${esc(me.name)}</div><div class="sess-rl">${ctx.isAdmin?'Administrador':'Colaborador'} · ${esc(c.name)}</div></div><button class="sess-out cp-out" onclick="clientLogout()">Salir</button></div></div></div>
+      <div class="sessbar">${avatar(me,true)}<div class="sess-info"><div class="sess-nm">${esc(me.name)}</div><div class="sess-rl">${ctx.isAdmin?'Administrador':'Colaborador'} · ${esc(c.name)}</div></div><button class="sess-out cp-key" title="Cambiar mi código" onclick="cpChgOpen()">🔑<span class="hide-sm"> Cambiar código</span></button><button class="sess-out cp-out" onclick="clientLogout()">Salir</button></div></div></div>
     <div class="cp-wrap"><div class="cp-head">${logo}<div><div class="cp-eye">Portal del cliente</div><h1>${esc(c.name)}</h1></div></div>
       <div class="cp-nav2">${cpGroups(ctx).map(g=>`<div class="cp-grp">${g.t?`<div class="cp-gt">${g.t}</div>`:''}<div class="cp-gb">${g.items.map(([k,l])=>`<button class="${cpView===k?'active':''}" onclick="setCpView('${k}')">${l}</button>`).join('')}</div></div>`).join('')}</div>
       <div class="cp-body">${body}</div></div>`;
-  document.getElementById('modal-root').innerHTML=(cpTaskId?cpTaskModal(ctx):'')+(cpUserEd?cpUserModal(ctx):'')+(cpKpiInfo?cpKpiModal():'');
+  document.getElementById('modal-root').innerHTML=(cpTaskId?cpTaskModal(ctx):'')+(cpUserEd?cpUserModal(ctx):'')+(cpKpiInfo?cpKpiModal():'')+(cpChg?cpChgModal():'');
 }
 /* ---- datos del cliente ---- */
 function cpProjects(ctx){ return store.projectsOf(ctx.c.id); }
