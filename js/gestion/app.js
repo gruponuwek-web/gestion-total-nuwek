@@ -3052,8 +3052,9 @@ function copySubToggle(tid,sid,on){ const t=store.task(tid); const o=copyS.sel[t
   else { delete o[sid]; kids(sid).forEach(k=>delete o[k]); }
   render(); }
 function copyAll(on){ const p=store.project(copyS.pid); copyS.sel={}; if(on) store.tasksOf(p.id).forEach(t=>{ const o={}; copySubsOf(t).forEach(x=>o[x.id]=true); copyS.sel[t.id]=o; }); render(); }
-function copySet(k,v){ copyS[k]=v; if(k==='destClient'){ const ps=store.d.projects.filter(x=>x.clientId===v); copyS.destPid=ps[0]?ps[0].id:''; copyS.frenteId=''; copyS.etapaId=''; }
-  if(k==='destPid'){ copyS.frenteId=''; copyS.etapaId=''; }
+function copyEffFr(){ return !!copyS.copyFr&&!!copyS.destPid&&copyS.destPid!==copyS.pid; }
+function copySet(k,v){ copyS[k]=v; if(k==='destClient'){ const ps=store.d.projects.filter(x=>x.clientId===v); copyS.destPid=ps[0]?ps[0].id:''; copyS.frenteId=''; copyS.etapaId=''; copyS.copyFr=!!copyS.destPid&&copyS.destPid!==copyS.pid&&store.frentesOf(copyS.destPid).length===0; }
+  if(k==='destPid'){ copyS.frenteId=''; copyS.etapaId=''; copyS.copyFr=!!v&&v!==copyS.pid&&store.frentesOf(v).length===0; }
   if(k==='etapaId'||k==='mode'){ const e=store.etapasOf(copyS.destPid).find(x=>x.id===copyS.etapaId); if(e&&copyS.mode==='start') copyS.start=e.start; }
   render(); }
 function copyWdn(d){ return Math.round(wTotal({d,m:WK.s})/(WK.e-WK.s)); }
@@ -3065,19 +3066,21 @@ function copyDateMapper(tasks,mode,start){
   return d=>d?wFrom((copyWdn(d)+base)*(WK.e-WK.s)).d:''; }
 function copyBlocker(){ const pid=copyS.destPid; if(!pid) return 'Elige el proyecto al que se copiará.';
   const fr=store.frentesOf(pid), et=store.etapasOf(pid), p=store.project(pid);
-  if(!fr.length||!et.length) return 'El proyecto «'+p.name+'» todavía no tiene '+(!fr.length&&!et.length?'frentes ni etapas':!fr.length?'frentes':'etapas')+'. Los frentes y las etapas no se copian: créalos primero en ese proyecto (botones «+ Frente» y «+ Etapa») y vuelve a intentar.'; return ''; }
+  const needFr=!fr.length&&!copyEffFr();
+  if(needFr||!et.length) return 'El proyecto «'+p.name+'» todavía no tiene '+(needFr&&!et.length?'frentes ni etapas':needFr?'frentes':'etapas')+'. Las etapas no se copian: créalas primero en ese proyecto (botón «+ Etapa»)'+(needFr?'; los frentes puedes crearlos con «+ Frente» o marcar «Copiar también los frentes»':'')+' y vuelve a intentar.'; return ''; }
 function copyDo(){ const S=copyS; if(!S||!canCopy()) return; const blk=copyBlocker(); if(blk){ alert(blk); return; }
   const ids=Object.keys(S.sel); if(!ids.length){ alert('Marca al menos una tarea.'); return; }
-  if(!S.frenteId){ alert('Elige el frente donde caerán.'); return; }
+  const effFr=copyEffFr(); if(!effFr&&!S.frenteId){ alert('Elige el frente donde caerán.'); return; }
   if(S.mode!=='same'&&!S.etapaId){ alert('Elige la etapa donde caerán.'); return; }
   if(S.mode==='start'&&!S.start){ alert('Escribe la fecha de inicio.'); return; }
   const dp=store.project(S.destPid), dc=store.client(dp.clientId), srcP=store.project(S.pid), sameClient=srcP.clientId===dp.clientId;
   const et=store.etapasOf(S.destPid).find(e=>e.id===S.etapaId);
+  const createdFr=[]; const frFor=t=>{ if(!effFr) return S.frenteId; const src=store.frentesOf(S.pid).find(f=>f.id===t.frenteId); const nm=(src&&src.name)||'General'; const key=impNz(nm); let f=store.frentesOf(S.destPid).find(x=>impNz(x.name)===key); if(!f){ f=store.addFrente(S.destPid,nm,src&&src.color); createdFr.push(f.id); } return f.id; };
   const picked=ids.map(id=>{ const t=store.task(id); return {t,subs:copySubsOf(t).filter(x=>S.sel[id][x.id])}; }).filter(x=>x.t);
   const mapD=copyDateMapper(picked,S.mode,S.start); const now=new Date().toISOString(); const created=[]; const tok=()=>Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8);
   picked.forEach(({t,subs})=>{
     const nt=JSON.parse(JSON.stringify(t)); const idMap={}; subs.forEach(x=>idMap[x.id]=uid('s_'));
-    Object.assign(nt,{id:uid('t_'),projectId:S.destPid,frenteId:S.frenteId,subtitle:dc.name,status:'to-do',responsibleId:S.resp?(t.responsibleId||''):'',nextId:null,repeatOf:undefined,
+    Object.assign(nt,{id:uid('t_'),projectId:S.destPid,frenteId:frFor(t),subtitle:dc.name,status:'to-do',responsibleId:S.resp?(t.responsibleId||''):'',nextId:null,repeatOf:undefined,
       dueDate:S.mode==='none'?(et?et.end:''):mapD(t.dueDate)});
     delete nt.ord; delete nt.impCode;
     nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x)); delete o.impCode;
@@ -3090,12 +3093,12 @@ function copyDo(){ const S=copyS; if(!S||!canCopy()) return; const blk=copyBlock
       return o; });
     store.d.tasks.push(nt); created.push(nt); });
   store.save(); created.forEach(nt=>{ if(typeof dbSaveTask==='function') dbSaveTask(nt); });
-  const batch={id:uid('cb_'),ts:now,by:currentUser,src:srcP.name,dest:dp.name,tids:created.map(x=>x.id),names:created.map(x=>x.name),resp:!!S.resp};
+  const batch={id:uid('cb_'),ts:now,by:currentUser,src:srcP.name,dest:dp.name,tids:created.map(x=>x.id),names:created.map(x=>x.name),resp:!!S.resp,frentes:createdFr};
   const b=copyBatches(); b.push(batch); copySaveBatches(b);
   created.forEach((nt,i)=>logEvent(nt.id,'Copiada desde «'+picked[i].t.name+'» del proyecto «'+srcP.name+'» a «'+dp.name+'» ('+nt.subtasks.length+' subtareas)'));
   S.result=batch; S.sel={}; render(); }
 function copyUndo(bid){ const b=copyBatches(); const x=b.find(y=>y.id===bid); if(!x) return; if(!confirm('¿Deshacer esta copia? Se eliminarán las '+x.tids.length+' tarea(s) copiadas, con todo lo que se les haya agregado.')) return;
-  x.tids.forEach(id=>{ if(store.task(id)) store.removeTask(id); }); copySaveBatches(b.filter(y=>y.id!==bid)); if(copyS&&copyS.result&&copyS.result.id===bid) copyS.result=null; render(); }
+  x.tids.forEach(id=>{ if(store.task(id)) store.removeTask(id); }); (x.frentes||[]).forEach(fid=>{ if(!store.d.tasks.some(t=>t.frenteId===fid)) store.removeFrente(fid); }); copySaveBatches(b.filter(y=>y.id!==bid)); if(copyS&&copyS.result&&copyS.result.id===bid) copyS.result=null; render(); }
 function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS=null; return ''; }
   const tasks=store.tasksOf(p.id).slice().sort((a,b)=>(a.ord||0)-(b.ord||0)); const fr=store.frentesOf(p.id);
   const subRows=(t,o,parent,depth)=>copySubsOf(t).filter(x=>(x.parentId||'')===parent).map(x=>`<div class="cp-sub" style="margin-left:${depth*18}px"><label class="gf-opt"><input type="checkbox" ${o[x.id]?'checked':''} onchange="copySubToggle('${t.id}','${x.id}',this.checked)"> ${depth?'↳ ':''}${esc(x.name)}${x.sesion?' <span class="muted">· sesión</span>':''}${x.isSeries?' <span class="muted">↻</span>':''}</label></div>${subRows(t,o,x.id,depth+1)}`).join('');
@@ -3105,10 +3108,10 @@ function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS
   const dFr=store.frentesOf(S.destPid), dEt=store.etapasOf(S.destPid); const blk=copyBlocker();
   const recents=copyBatches().slice().reverse().slice(0,5);
   const n=Object.keys(S.sel).length; const ns=Object.values(S.sel).reduce((a,o)=>a+Object.keys(o).length,0);
-  const body=S.result?`<div class="ses-resp" style="background:#e6f6ec;color:#1d6b3a">✅ Se copiaron <b>${S.result.tids.length}</b> tarea(s) de «${esc(S.result.src)}» a «${esc(S.result.dest)}». ${S.result.resp?'Se copiaron también los responsables; las horas del día se asignan en cada agenda.':'Quedaron sin responsables y sin horas: asígnalos en cada agenda.'}</div><div class="wiz-actions"><button class="btn ghost" onclick="copyUndo('${S.result.id}')">↩ Deshacer esta copia</button><button class="btn" onclick="closeCopy()">Listo</button></div>`
+  const body=S.result?`<div class="ses-resp" style="background:#e6f6ec;color:#1d6b3a">✅ Se copiaron <b>${S.result.tids.length}</b> tarea(s) de «${esc(S.result.src)}» a «${esc(S.result.dest)}»${(S.result.frentes||[]).length?` y se crearon <b>${S.result.frentes.length}</b> frente(s)`:''}. ${S.result.resp?'Se copiaron también los responsables; las horas del día se asignan en cada agenda.':'Quedaron sin responsables y sin horas: asígnalos en cada agenda.'}</div><div class="wiz-actions"><button class="btn ghost" onclick="copyUndo('${S.result.id}')">↩ Deshacer esta copia</button><button class="btn" onclick="closeCopy()">Listo</button></div>`
   :`<div class="field"><label>1. ¿Qué copiamos de «${esc(p.name)}»? <a class="muted" style="cursor:pointer;font-size:.78rem" onclick="copyAll(true)">todo</a> · <a class="muted" style="cursor:pointer;font-size:.78rem" onclick="copyAll(false)">nada</a></label><div class="cp-list">${list}</div></div>
     <div class="field"><label>2. ¿A dónde?</label><div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><select onchange="copySet('destClient',this.value)">${dClients.map(c=>`<option value="${c.id}" ${c.id===S.destClient?'selected':''}>${esc(c.name)}</option>`).join('')}</select><select onchange="copySet('destPid',this.value)">${dProjs.map(x=>`<option value="${x.id}" ${x.id===S.destPid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
-      ${blk?`<div class="ses-resp" style="background:#fdecea;color:#a3271a;margin-top:8px">⚠️ ${esc(blk)}</div>`:`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><select onchange="copySet('frenteId',this.value)"><option value="">Frente…</option>${dFr.map(f=>`<option value="${f.id}" ${f.id===S.frenteId?'selected':''}>${esc(f.name)}</option>`).join('')}</select>${S.mode!=='same'?`<select onchange="copySet('etapaId',this.value)"><option value="">Etapa…</option>${dEt.map(e=>`<option value="${e.id}" ${e.id===S.etapaId?'selected':''}>${esc(e.name)}</option>`).join('')}</select>`:''}</div>`}</div>
+      ${blk?`<div class="ses-resp" style="background:#fdecea;color:#a3271a;margin-top:8px">⚠️ ${esc(blk)}</div>`:`${(S.destPid&&S.destPid!==S.pid)?`<div class="field" style="margin:8px 0 0"><label>¿Qué hacemos con los frentes?</label><label class="gf-opt" style="margin:3px 0"><input type="radio" name="cp-fr" ${copyEffFr()?'checked':''} onchange="copyS.copyFr=true;render()"> Copiar también los frentes de las tareas <span class="muted">(se crean los que no existan, con su nombre y color)</span></label><label class="gf-opt" style="margin:3px 0"><input type="radio" name="cp-fr" ${!copyEffFr()?'checked':''} onchange="copyS.copyFr=false;render()"> Elegir un frente que ya tenga el proyecto destino</label></div>`:''}<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${copyEffFr()?'':`<select onchange="copySet('frenteId',this.value)"><option value="">Frente…</option>${dFr.map(f=>`<option value="${f.id}" ${f.id===S.frenteId?'selected':''}>${esc(f.name)}</option>`).join('')}</select>`}${S.mode!=='same'?`<select onchange="copySet('etapaId',this.value)"><option value="">Etapa…</option>${dEt.map(e=>`<option value="${e.id}" ${e.id===S.etapaId?'selected':''}>${esc(e.name)}</option>`).join('')}</select>`:''}</div>`}</div>
     <div class="field"><label>3. Fechas</label>${[['same','Dejar las mismas fechas'],['start','Fecha nueva de inicio (respeta los días hábiles entre ellas)'],['none','Sin fechas (las pongo después)']].map(([k,l])=>`<label class="gf-opt" style="margin:3px 0"><input type="radio" name="cp-mode" ${S.mode===k?'checked':''} onchange="copySet('mode','${k}')"> ${l}</label>`).join('')}${S.mode==='start'?`<input type="date" value="${S.start}" onchange="copyS.start=this.value" style="margin-top:6px">`:''}<label class="gf-opt" style="margin-top:8px"><input type="checkbox" ${S.resp?'checked':''} onchange="copyS.resp=this.checked;render()"> Copiar también los <b>responsables</b> (y el equipo de cada subtarea)</label><div class="hint">${S.resp?'Se copia quién es responsable de cada tarea, subtarea y sub-subtarea, y el equipo que participa; a esas personas les llegará el aviso de participación.':'Sin marcar, las tareas quedan sin responsable para asignarlos en el proyecto nuevo.'} Las horas del día nunca se copian: dependen de cada agenda. Tampoco avance, tiempos ni comentarios.</div></div>
     ${recents.length?`<div class="field"><label>Copias recientes</label>${recents.map(b=>`<div class="dep-row"><b>${b.tids.length} tarea(s)</b><span>${esc(b.src)} → ${esc(b.dest)} · ${new Date(b.ts).toLocaleDateString('es-MX',{day:'numeric',month:'short'})} <a style="cursor:pointer;color:#c0392b" onclick="copyUndo('${b.id}')">deshacer</a></span></div>`).join('')}</div>`:''}
     <div class="wiz-actions"><span class="muted" style="margin-right:auto;font-size:.8rem">${n} tarea(s) · ${ns} subtarea(s)</span><button class="btn ghost" onclick="closeCopy()">Cancelar</button><button class="btn" onclick="copyDo()" ${blk||!n?'disabled':''}>Copiar</button></div>`;
