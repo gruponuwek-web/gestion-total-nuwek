@@ -236,7 +236,8 @@ class Store{
   subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  releaseNext(t,s){ const now=new Date().toISOString(); (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id&&!d.done){ d.turno={pred:s.id,predName:s.name,ts:now,by:currentUser}; d.turnoAck={}; } }); }
+  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   /* Ciclo "N días después de terminar": al terminar la subtarea se crea la siguiente (con sus sub-subtareas) en hoy + N */
   spawnNextSubtask(t,s){ const n=+s.repeatAfter; if(!n||(s.nextId&&t.subtasks.some(x=>x.id===s.nextId))) return null;
     const nd=addDaysISO(todayISO(),n); const shift=daysBetween(s.date||todayISO(),nd); const now=new Date().toISOString(); const sid=s.seriesId||s.id;
@@ -413,6 +414,11 @@ function addChildSub(){ if(!addingChild) return; const {tid,sid}=addingChild; co
   // la madre ya no puede estar hecha: tiene una hija pendiente
   if(m.done) store.updateSubtask(tid,sid,{done:false,timeSpent:0,doneAt:null});
   logEvent(tid,'Agregó la sub-subtarea «'+n+'» dentro de «'+m.name+'»'); addingChild=null; render(); }
+/* ===== «Ya te toca»: aviso cuando termina la actividad de la que depende la tuya ===== */
+function pendingTurno(){ const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{
+    if(s.done||!s.turno||s.seriesId) return; const who=[s.personId,...(s.team||[])].filter(Boolean); if(!who.includes(currentUser)) return; if(s.turno.by===currentUser) return; if((s.turnoAck||{})[currentUser]) return; out.push({s,t,tu:s.turno}); }); });
+  return out; }
+function ackTurno(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const ack=Object.assign({},sub.turnoAck||{}); ack[currentUser]=new Date().toISOString(); store.updateSubtask(tid,sid,{turnoAck:ack}); render(); }
 /* ===== Participantes de una subtarea ===== */
 function pendingTeam(){ const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{
     if(s.done||s.seriesId) return; const src=s.isSeries?seriesTpl(s):s; if(!(src.team||[]).includes(currentUser)) return; const inf=(src.teamInfo||{})[currentUser]; if(!inf||inf.by===currentUser) return; if((src.teamAck||{})[currentUser]) return; out.push({s,t,by:inf.by,ts:inf.ts}); }); });
@@ -526,7 +532,17 @@ function taskEtapaIds(t){
 }
 
 /* ================== RENDER DISPATCH ================== */
+let _rSig='';
+function renderSig(){ return [view,selClient,selProject,selTab,(typeof cpView!=='undefined'&&clientSess&&!session)?cpView:'',session?'s':(clientSess?'c':'p'),(typeof gestSub!=='undefined')?gestSub:''].join('|'); }
+function domPath(e){ const a=[]; while(e&&e.id!=='app'&&e.id!=='modal-root'&&e.parentElement){ a.push(Array.prototype.indexOf.call(e.parentElement.children,e)); e=e.parentElement; } a.push(e&&e.id==='app'?'a':'m'); return a.reverse().join('.'); }
+function scrollSnap(){ const out=[]; document.querySelectorAll('#app *, #modal-root *').forEach(e=>{ if(e.scrollTop>0||e.scrollLeft>0) out.push({p:domPath(e),c:e.tagName+'|'+e.className,t:e.scrollTop,l:e.scrollLeft}); }); return out; }
+function scrollRestore(list){ list.forEach(o=>{ const q=o.p.split('.'); let el=document.getElementById(q[0]==='a'?'app':'modal-root'); for(let i=1;i<q.length&&el;i++) el=el.children[+q[i]]; if(el&&(el.tagName+'|'+el.className)===o.c){ el.scrollTop=o.t; el.scrollLeft=o.l; } }); }
 function render(){
+  const sig=renderSig(); const keep=(sig===_rSig)&&!!document.getElementById('app').firstChild; const y=window.scrollY, snap=keep?scrollSnap():null; _rSig=sig;
+  renderBase();
+  if(keep){ scrollRestore(snap); if(window.scrollY!==y) window.scrollTo(0,y); requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-y)>2) window.scrollTo(0,y); }); }
+}
+function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
   setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
@@ -2897,8 +2913,9 @@ function ackClientResp(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtas
 function notifItems(){
   const m=pendingMentions().map(cm=>({id:'m:'+cm.id,type:'m',ts:cm.ts,cm,tid:cm.taskId}));
   const tm=pendingTeam().map(x=>({id:'t:'+x.s.id,type:'t',ts:x.ts,s:x.s,t:x.t,by:x.by,tid:x.t.id}));
+  const tu=pendingTurno().map(x=>({id:'r:'+x.s.id+':'+x.tu.ts,type:'r',ts:x.tu.ts,s:x.s,t:x.t,tu:x.tu,tid:x.t.id}));
   const cr=pendingClientResp().map(x=>({id:'c:'+x.s.id+':'+x.last.id,type:'c',ts:x.last.ts,s:x.s,t:x.t,last:x.last,tid:x.t.id}));
-  return m.concat(tm,cr).sort((a,b)=>a.ts<b.ts?1:-1); }
+  return m.concat(tm,cr,tu).sort((a,b)=>a.ts<b.ts?1:-1); }
 function notifUpdate(){
   const r=notifRoot(); if(!session){ r.innerHTML=''; notifSeen=null; return; }
   const list=notifItems(); const ids=list.map(x=>x.id); const me=store.person(currentUser);
@@ -2909,11 +2926,13 @@ function notifUpdate(){
       return `<div class="nf-it" onclick="goNotif('${cm.taskId}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te mencionó <span class="muted">· ${ago(cm.ts)}</span></div><div class="nf-t">${mdEsc(t.name)}</div><div class="nf-s">${mdEsc(txt)}</div></div><button class="nf-ok" title="Ya lo vi" onclick="event.stopPropagation();markRead('${cm.id}')">✓</button></div>`; }
     if(it.type==='c'){ const st=SES_ST[it.last.estado]; const cn=(store.client((store.project(it.t.projectId)||{}).clientId)||{}).name||'El cliente';
       return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:${st.c}">${it.last.estado==='confirmado'?'✓':it.last.estado==='cancelado'?'✕':'↻'}</span><div class="nf-tx"><div class="nf-h"><b>${mdEsc(cn)}</b> ${it.last.estado==='confirmado'?'confirmó':it.last.estado==='cancelado'?'canceló':'pidió reprogramar'} <span class="muted">· ${ago(it.last.ts)}</span></div><div class="nf-t">📅 ${mdEsc(it.s.name)}</div><div class="nf-s">${it.last.razon?'«'+mdEsc(it.last.razon)+'»':mdEsc(it.t.name)}</div>${(it.last.propuestas||[]).length?`<div class="nf-s" style="color:#9a7a00;font-weight:600">Propone: ${(it.last.propuestas||[]).map(x=>mdEsc(fmtPropuesta(x))).join(' · ')}</div>`:''}</div><button class="nf-ok" title="Ya la vi" onclick="event.stopPropagation();ackClientResp('${it.t.id}','${it.s.id}')">✓</button></div>`; }
+    if(it.type==='r'){ const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
+      return `<div class="nf-it" onclick="goNotif('${it.t.id}')"><span class="nf-av" style="background:#e7b800">🔔</span><div class="nf-tx"><div class="nf-h"><b>Ya te toca</b> <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">${mdEsc(it.s.name)}</div><div class="nf-s">Terminó «${mdEsc(it.tu.predName||'la actividad anterior')}» · ${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Enterado" onclick="event.stopPropagation();ackTurno('${it.t.id}','${it.s.id}')">✓</button></div>`; }
     const a=store.person(it.by); const when=[it.s.date?dLabel(it.s.date):'',it.s.time||''].filter(Boolean).join(' · ');
     return `<div class="nf-it" onclick="goNotif('${it.t.id}')">${notifAvatar(a)}<div class="nf-tx"><div class="nf-h"><b>${mdEsc(a.name||'')}</b> te agregó como participante <span class="muted">· ${ago(it.ts)}</span></div><div class="nf-t">🤝 ${mdEsc(it.s.name)}</div><div class="nf-s">${mdEsc(it.t.name)}${when?' · '+mdEsc(when):''}</div></div><button class="nf-ok" title="Ya la vi y la atendí" onclick="event.stopPropagation();ackTeam('${it.t.id}','${it.s.id}')">✓</button></div>`; }).join('');
   r.innerHTML=`${notifOpen?`<div class="nf-pop"><div class="nf-pop-h">Pendientes por atender <span class="nf-cnt">${list.length}</span></div><div class="nf-list">${items||'<div class="nf-empty">🎉 Nada pendiente</div>'}</div></div>`:''}
     <button class="nf-fab${fresh.length?' pulse':''}" onclick="event.stopPropagation();toggleNotif()" title="${list.length?list.length+' pendiente(s) por atender':'Nada pendiente'}">${notifAvatar(me)}${list.length?`<span class="nf-badge">${list.length>99?'99+':list.length}</span>`:''}</button>`;
-  if(fresh.length){ const f=fresh[0]; if(f.type==='c'){ notifToast('El cliente '+(f.last.estado==='confirmado'?'confirmó':f.last.estado==='cancelado'?'canceló':'pidió reprogramar')+' «'+f.s.name+'»',f.tid); } else { const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); } }
+  if(fresh.length){ const f=fresh[0]; if(f.type==='r'){ notifToast('🔔 Ya te toca «'+f.s.name+'» (terminó «'+(f.tu.predName||'la anterior')+'»)',f.tid); } else if(f.type==='c'){ notifToast('El cliente '+(f.last.estado==='confirmado'?'confirmó':f.last.estado==='cancelado'?'canceló':'pidió reprogramar')+' «'+f.s.name+'»',f.tid); } else { const who=store.person(f.type==='m'?f.cm.userId:f.by).name||'Alguien'; notifToast(f.type==='m'?(who+' te mencionó en «'+store.task(f.tid).name+'»'):(who+' te agregó como participante en «'+f.s.name+'»'), f.tid); } }
 }
 function notifToast(msg,tid){ const t=document.createElement('div'); t.className='nf-toast'; t.textContent='👋 '+msg; t.onclick=()=>{ t.remove(); goNotif(tid); }; notifRoot().appendChild(t); setTimeout(()=>t.remove(),6000); }
 function toggleNotif(){ notifOpen=!notifOpen; notifUpdate(); }
