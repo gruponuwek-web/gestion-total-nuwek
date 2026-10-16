@@ -579,7 +579,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -643,6 +643,7 @@ document.addEventListener('keydown',ev=>{
   if(depPrev){ depCancel(); return; }
   if(expS){ expClose(); return; }
   if(pdfS){ pdfClose(); return; }
+  if(movT){ closeMovT(); return; }
   if(movS){ closeMov(); return; }
   if(dupS){ closeDup(); return; }
   if(accEd){ closeAcc(); return; }
@@ -2367,7 +2368,7 @@ function taskBody(t,panel){
     <div class="m-head">
       <div class="m-top">${(panel||editingTask===t.id)?`<div class="muted" style="font-size:.8rem;font-weight:600">${editingTask===t.id?'Editar tarea':'Detalle de tarea'}</div>`:`<div class="m-nav"><button onclick="navTask(-1)" ${idx<=0?'disabled':''}>‹</button><button onclick="navTask(1)" ${idx>=siblings.length-1?'disabled':''}>›</button><span class="muted" style="font-size:.8rem">${idx+1} de ${siblings.length}</span></div>`}
         <div style="display:flex;gap:6px;align-items:center">
-          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button><button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}
+          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button>${canCopy()?`<button class="btn ghost sm" title="Copiar esta tarea (con subtareas) al mismo proyecto, a otro o a otro cliente" onclick="openCopy('${t.projectId}','${t.id}')">⧉ Copiar</button><button class="btn ghost sm" title="Mover esta tarea a otro proyecto o cliente" onclick="openMovT('${t.id}')">↦ Mover</button>`:''}<button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}
           ${(panel&&editingTask!==t.id)?'':`<button class="x" onclick="${editingTask===t.id?'cancelTaskEdit()':'closeTask()'}">×</button>`}
         </div></div>
       ${editingTask===t.id ? `
@@ -2819,7 +2820,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||pdfS||expS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||movT||pdfS||expS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3044,7 +3045,7 @@ function canCopy(){ return role==='gerencia'||role==='gerente'; }
 function copyBatches(){ try{ return JSON.parse(localStorage.getItem(COPY_KEY)||'[]'); }catch(_){ return []; } }
 function copySaveBatches(b){ try{ localStorage.setItem(COPY_KEY,JSON.stringify(b.slice(-15))); }catch(_){} }
 function copySubsOf(t){ return (t.subtasks||[]).filter(x=>!x.seriesId); }
-function openCopy(pid){ if(!canCopy()) return; const p=store.project(pid); if(!p) return; copyS={pid,sel:{},destClient:p.clientId,destPid:pid,frenteId:'',etapaId:'',mode:'same',start:'',resp:false,result:null}; render(); }
+function openCopy(pid,tid){ if(!canCopy()) return; const p=store.project(pid); if(!p) return; copyS={pid,sel:{},destClient:p.clientId,destPid:pid,frenteId:'',etapaId:'',mode:'same',start:'',resp:false,result:null}; if(tid&&store.task(tid)){ const o={}; copySubsOf(store.task(tid)).forEach(x=>o[x.id]=true); copyS.sel[tid]=o; } render(); }
 function closeCopy(){ copyS=null; render(); }
 function copyTaskToggle(tid,on){ const t=store.task(tid); if(!t) return; if(on){ const o={}; copySubsOf(t).forEach(x=>o[x.id]=true); copyS.sel[tid]=o; } else delete copyS.sel[tid]; render(); }
 function copySubToggle(tid,sid,on){ const t=store.task(tid); const o=copyS.sel[tid]; if(!t||!o) return; const subs=copySubsOf(t);
@@ -3598,6 +3599,38 @@ function expGo(fmt){ const p=store.project(expS.pid); if(!p) return; const cols=
   if(fmt==='xlsx'){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión.'); return; } const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([cols,...rows]); ws['!cols']=cols.map(k=>({wch:({nombre:46,descripcion:30,cita_objetivo:30,cita_link:30,cita_temario:30,links:30}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar'); XLSX.writeFile(wb,base+'.xlsx'); }
   else { const q=v=>{ v=String(v); return /[",\n\r;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }; const csv='﻿'+[cols,...rows].map(r=>r.map(q).join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=base+'.csv'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
   shareToast('⬇ Se exportaron '+rows.length+' fila(s)'); expS=null; render(); }
+
+/* ================== MOVER UNA TAREA COMPLETA A OTRO PROYECTO / CLIENTE (Dirección y Gerencia) ================== */
+let movT=null;
+function openMovT(tid){ if(!canCopy()) return; const t=store.task(tid); const p=t&&store.project(t.projectId); if(!p) return; movT={tid,destClient:p.clientId,destPid:p.id,frenteId:'',copyFr:false,mode:'same',start:''}; render(); }
+function closeMovT(){ movT=null; render(); }
+function movTSet(k,v){ const t=store.task(movT.tid); movT[k]=v; if(k==='destClient'){ const ps=store.d.projects.filter(x=>x.clientId===v); movT.destPid=ps[0]?ps[0].id:''; movT.frenteId=''; } if(k==='destClient'||k==='destPid'){ movT.frenteId=''; movT.copyFr=!!movT.destPid&&movT.destPid!==t.projectId&&store.frentesOf(movT.destPid).length===0; } render(); }
+function movTEff(){ const t=store.task(movT.tid); return !!movT.copyFr&&!!movT.destPid&&movT.destPid!==t.projectId; }
+function movTModal(){ const t=store.task(movT.tid); const p=t&&store.project(t.projectId); if(!p){ movT=null; return ''; }
+  const nSub=(t.subtasks||[]).filter(x=>!x.isSeries&&!x.seriesId).length; const dest=store.project(movT.destPid); const dFr=movT.destPid?store.frentesOf(movT.destPid):[];
+  const clients=store.d.clients.slice().sort((a,b)=>a.name.localeCompare(b.name)); const projs=store.d.projects.filter(x=>x.clientId===movT.destClient);
+  const other=movT.destPid&&movT.destPid!==t.projectId; const sameClient=dest&&dest.clientId===p.clientId;
+  const frUi=other?`<div class="field" style="margin:8px 0 0"><label>¿Qué hacemos con el frente?</label><label class="gf-opt" style="margin:3px 0"><input type="radio" name="mt-fr" ${movTEff()?'checked':''} onchange="movT.copyFr=true;render()"> Llevar el mismo frente <span class="muted">(se crea en el destino si no existe, con su nombre y color)</span></label><label class="gf-opt" style="margin:3px 0"><input type="radio" name="mt-fr" ${!movTEff()?'checked':''} onchange="movT.copyFr=false;render()"> Elegir un frente que ya tenga el proyecto destino</label></div>`:'';
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)closeMovT()"><div class="modal-card" style="max-width:520px"><div class="m-head"><div class="m-top"><h3 style="margin:0">↦ Mover «${esc(t.name)}»</h3><button class="x" onclick="closeMovT()">×</button></div></div><div class="m-body">
+    <p class="muted" style="margin-top:0">Se mueve la tarea completa con sus <b>${nSub}</b> subtareas y sub-subtareas. <b>Conserva</b> avance, tiempos, comentarios, sesiones y dependencias; <b>no</b> se deja una copia en «${esc(p.name)}».</p>
+    <div class="field"><label>Mover a</label><div style="display:flex;gap:8px;flex-wrap:wrap"><select onchange="movTSet('destClient',this.value)">${clients.map(c=>`<option value="${c.id}" ${c.id===movT.destClient?'selected':''}>${esc(c.name)}</option>`).join('')}</select><select onchange="movTSet('destPid',this.value)">${projs.map(x=>`<option value="${x.id}" ${x.id===movT.destPid?'selected':''}>${esc(x.name)}</option>`).join('')}</select></div></div>
+    ${frUi}${movTEff()?'':`<div class="field"><label>Frente destino</label><select onchange="movT.frenteId=this.value"><option value="">Frente…</option>${dFr.map(f=>`<option value="${f.id}" ${f.id===(movT.frenteId||(!other?t.frenteId:''))?'selected':''}>${esc(f.name)}</option>`).join('')}</select>${dFr.length?'':'<div class="hint">Ese proyecto no tiene frentes: elige «Llevar el mismo frente».</div>'}</div>`}
+    <div class="field"><label>Fechas</label>${[['same','Dejar las mismas fechas'],['start','Fecha nueva de inicio (respeta los días hábiles entre ellas)']].map(([k,l])=>`<label class="gf-opt" style="margin:3px 0"><input type="radio" name="mt-mode" ${movT.mode===k?'checked':''} onchange="movT.mode='${k}';render()"> ${l}</label>`).join('')}${movT.mode==='start'?`<input type="date" value="${movT.start}" onchange="movT.start=this.value" style="margin-top:6px">`:''}</div>
+    ${!sameClient&&dest?'<div class="ses-resp" style="background:#fff7e0;color:#7a5f00">Es otro cliente: los invitados del cliente anterior se quitan de las sesiones, porque no existen en el nuevo.</div>':''}
+    <div class="wiz-actions"><button class="btn ghost" onclick="closeMovT()">Cancelar</button><button class="btn" onclick="movTDo()" ${movT.destPid?'':'disabled'}>Mover</button></div></div></div></div>`; }
+function movTDo(){ const M=movT; if(!M||!canCopy()) return; const t=store.task(M.tid); const dp=store.project(M.destPid); const sp=t&&store.project(t.projectId); if(!t||!dp||!sp) return;
+  const other=dp.id!==sp.id; const eff=movTEff(); if(!eff&&!M.frenteId&&other){ alert('Elige el frente destino.'); return; }
+  if(M.mode==='start'&&!M.start){ alert('Escribe la fecha de inicio.'); return; }
+  if(!other&&!M.frenteId&&M.mode==='same'){ alert('Elige otro frente u otro proyecto para mover la tarea.'); return; }
+  let fid=M.frenteId||t.frenteId; const created=[];
+  if(eff){ const src=store.frentesOf(sp.id).find(f=>f.id===t.frenteId); const nm=(src&&src.name)||'General'; let f=store.frentesOf(dp.id).find(x=>impNz(x.name)===impNz(nm)); if(!f){ f=store.addFrente(dp.id,nm,src&&src.color); created.push(f.id); } fid=f.id; }
+  const subs=(t.subtasks||[]).filter(x=>!x.isSeries&&!x.seriesId); const mapD=copyDateMapper([{t,subs}],M.mode,M.start);
+  const dc=store.client(dp.clientId), sameClient=sp.clientId===dp.clientId;
+  t.projectId=dp.id; t.frenteId=fid; t.subtitle=dc.name; delete t.ord;
+  if(M.mode==='start'){ t.dueDate=mapD(t.dueDate); (t.subtasks||[]).forEach(x=>{ if(x.date) x.date=mapD(x.date); if(x.isSeries&&x.series&&x.series.startDate) x.series=Object.assign({},x.series,{startDate:mapD(x.series.startDate)}); }); }
+  if(!sameClient) (t.subtasks||[]).forEach(x=>{ x.invitados=[]; if(x.isSeries&&x.series&&x.series.tpl) x.series=Object.assign({},x.series,{tpl:Object.assign({},x.series.tpl,{invitados:[]})}); });
+  store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Movió la tarea de «'+sp.name+'» a «'+dp.name+'»');
+  movT=null; render(); shareToast('↦ «'+t.name+'» ahora está en «'+dp.name+'»'); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
