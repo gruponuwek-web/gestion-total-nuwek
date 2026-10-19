@@ -545,7 +545,7 @@ function render(){
 function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
+  setTimeout(mnRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
@@ -579,7 +579,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -643,6 +643,7 @@ document.addEventListener('keydown',ev=>{
   if(depPrev){ depCancel(); return; }
   if(expS){ expClose(); return; }
   if(pdfS){ pdfClose(); return; }
+  if(mnNew){ mnNewClose(); return; }
   if(movT){ closeMovT(); return; }
   if(movS){ closeMov(); return; }
   if(dupS){ closeDup(); return; }
@@ -1193,9 +1194,9 @@ function viewGestion(){
   const R=gestRange();
   const projOpts='<option value="">Todos los proyectos</option>'+store.d.projects.map(p=>`<option value="${p.id}" ${gestProject===p.id?'selected':''}>${store.client(p.clientId).name} · ${p.name}</option>`).join('');
   const persOpts='<option value="">Equipo Nuwek</option>'+store.activeStaff().map(u=>`<option value="${u.id}" ${gestPerson===u.id?'selected':''}>${u.name}</option>`).join('');
-  const body = gestSub==='asig' ? gestAsignaciones(R) : gestSub==='citas' ? gestCitas() : gestCalendar(R);
+  const body = gestSub==='asig' ? gestAsignaciones(R) : gestSub==='citas' ? gestCitas() : gestSub==='min' ? gestMinutas() : gestCalendar(R);
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Vista de mando · ${gestSub==='asig'?'quién trabaja en qué':'calendario del equipo'}</div></div>
-    <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button></div>
+    <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button><button class="${gestSub==='min'?'on':''}" onclick="setGestSub('min')">📝 Minutas</button></div>
     <div class="gf-bar"><span class="glabel">Vistas</span>
       <button class="gf-chip${gestFilterId?'':' on'}" onclick="clearGestFilter()">Todo</button>
       ${gestFilters().map(f=>`<button class="gf-chip${f.id===gestFilterId?' on':''}" onclick="applyGestFilter('${f.id}')">${esc(f.name)}${f.id===gestFilterId?` <span class="gf-ed" title="Editar vista" onclick="event.stopPropagation();openGestFilterForm('${f.id}')">✏️</span>`:''}</button>`).join('')}
@@ -2328,11 +2329,11 @@ function taskBody(t,panel){
     const serChip=s.isSeries?`<span class="sub-chip ser" title="Serie por calendario">↻ ${seriesLabel(s.series)}</span>${nextOcc?`<span class="sub-chip" title="Próxima repetición pendiente">Próxima: ${dLabel(nextOcc)}</span>`:''}`:'';
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🤝 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
-    const citaBase=(!_l&&subHasCita(s))?`<span class="sub-chip cita" title="Tiene cita con el cliente">📅 Cita</span>`:'';
+    const _ck=citaKind(s); const citaBase=(!_l&&subHasCita(s))?`<span class="sub-chip cita" title="Tiene cita con el cliente">📅 Cita</span>`:((_ck==='interna')?`<span class="sub-chip cita-int" title="Cita interna con el equipo: ${subPeopleN(s)} personas">👥 Cita interna</span>`:'');
     const predS=s.dependsOn?(t.subtasks||[]).find(x=>x.id===s.dependsOn):null; const depChip=`${predS?`<span class="sub-chip" title="Empieza cuando termina «${esc(predS.name)}»">⛓ tras «${esc(predS.name.length>22?predS.name.slice(0,21)+'…':predS.name)}»</span>`:''}${s.fija?'<span class="sub-chip" title="Fecha fija: no se mueve con las dependencias">📌 fija</span>':''}`;
     const chips=`${ackBtn}${depChip}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
-    const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}</span>`;
+    const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}${(_t.team||[]).length?`<i class="av-n" title="${(_t.team||[]).length} persona(s) más del equipo participan">+${(_t.team||[]).length}</i>`:''}</span>`;
     const right=timing
       ? `<div class="sub-time"><input type="number" min="1" id="stime-${s.id}" placeholder="min"><button class="mini ok" onclick="confirmSubTime('${t.id}','${s.id}')">✓</button><button class="mini no" onclick="cancelSubTime()">×</button></div>`
       : `<div class="sub-btns">${whoName}${av}
@@ -2820,7 +2821,7 @@ function syncIsBusy(){
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
-  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||movT||pdfS||expS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
+  if(editingTask||editingSub||timingSub||editingCmt||addingChild||subEd||clientPop||depPrev||copyS||dupS||movS||movT||mnNew||pdfS||expS||accEd||(impS&&impS.rows)||qm||wiz||lightbox||libModal) return true;
   // borradores sin enviar (comentario, nombre de subtarea, etc.)
   if([...document.querySelectorAll('#app textarea, #modal-root textarea, #app input[type=text], #modal-root input[type=text], #app input:not([type]), #modal-root input:not([type])')].some(i=>!i.readOnly&&!i.disabled&&(i.value||'').trim())) return true;
   return false;
@@ -3668,6 +3669,126 @@ function resetClientCode(cid,pid,fromNotif){ const c=store.client(cid); const p=
   store.updateClientPerson(cid,pid,{portal:Object.assign({},p.portal,{code:RESET_CODE,reset:true,recover:null})}); shareToast('🔑 Código restablecido a '+RESET_CODE+'. Avísale a '+p.name+'.'); render(); }
 function dismissRecovery(cid,pid){ const c=store.client(cid); const p=c&&(c.people||[]).find(x=>x.id===pid); if(!p||!p.portal) return; store.updateClientPerson(cid,pid,{portal:Object.assign({},p.portal,{recover:null})}); render(); }
 
+/* ================== MINUTAS: cita (con cliente o interna) + burbuja flotante con cronómetro ================== */
+/* Una cita nace sola: fecha + hora + más de una persona. Con invitados del cliente es «con cliente»; solo equipo Nuwek, «interna».
+   Las minutas viven dentro de la subtarea (sin tablas nuevas): s.minutas=[{id,by,start,end,estado,asist,lines,links}] */
+const MN_KEY='nuwekMinutaV';
+let mnV=null, mnOpen=false, mnRev=null, mnKind='n', mnPrompt=null, mnNew=null, mnLinksOpen=false; const mnSeen=new Set();
+function subPeopleN(s){ return (s.personId?1:0)+(s.team||[]).length+(s.invitados||[]).length; }
+function citaKind(s){ if(!s||s.isSeries) return null; if((s.invitados||[]).length) return 'cliente'; if(s.date&&s.time&&subPeopleN(s)>=2) return 'interna'; return null; }
+function mnClockTxt(ms){ const t=Math.max(0,Math.floor(ms/1000)); const h=Math.floor(t/3600), m=Math.floor(t%3600/60), x=t%60; return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
+function mnGet(){ if(!mnV) return null; const t=store.task(mnV.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnV.sid); const m=s&&(s.minutas||[]).find(x=>x.id===mnV.mid); return (t&&s&&m)?{t,s,m}:null; }
+function mnSave(mut){ const g=mnGet(); if(!g) return; const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?mut(JSON.parse(JSON.stringify(x))):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); mnRender(); }
+function mnActive(){ for(const t of store.d.tasks){ for(const s of (t.subtasks||[])){ const m=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(m) return {tid:t.id,sid:s.id,mid:m.id}; } } return null; }
+function mnStart(tid,sid){ const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
+  const act=mnActive(); if(act&&!(act.tid===tid&&act.sid===sid)){ if(!confirm('Ya tienes una minuta en curso. ¿Detenerla y empezar esta?')) return; mnV=act; mnStopNow(true); }
+  const cur=(s.minutas||[]).find(x=>x.estado==='curso'); let mid;
+  if(cur) mid=cur.id; else { const m={id:uid('mn_'),by:currentUser,start:new Date().toISOString(),end:null,estado:'curso',kind:citaKind(s)||'interna',asist:[],lines:[],links:[]}; store.updateSubtask(tid,sid,{minutas:[...(s.minutas||[]),m]}); mid=m.id; logEvent(tid,'Inició la minuta de «'+s.name+'»'); }
+  mnV={tid,sid,mid}; mnOpen=true; mnRev=null; mnPrompt=null; try{ localStorage.setItem(MN_KEY,JSON.stringify(mnV)); }catch(_){} mnRender(); }
+function mnView(tid,sid,mid){ mnV={tid,sid,mid}; mnOpen=true; mnRev=null; mnRender(); }
+function mnToggle(){ mnOpen=!mnOpen; mnRender(); }
+function mnStopNow(silent){ const g=mnGet(); if(!g) return; mnSave(m=>Object.assign(m,{end:new Date().toISOString(),estado:'cerrada'})); try{ localStorage.removeItem(MN_KEY); }catch(_){} logEvent(g.t.id,'Cerró la minuta de «'+g.s.name+'»'); if(!silent){ mnRev={}; mnOpen=true; mnRender(); } }
+function mnClose(){ mnRev=null; mnV=null; mnOpen=false; try{ localStorage.removeItem(MN_KEY); }catch(_){} mnRender(); }
+function mnAsistToggle(id,tipo,name){ mnSave(m=>{ const i=m.asist.findIndex(a=>a.id===id); if(i>=0) m.asist.splice(i,1); else m.asist.push({id,name,tipo,at:new Date().toISOString()}); return m; }); }
+function mnAsistAdd(sel){ const id=sel.value; if(!id) return; const u=store.person(id); mnAsistToggle(id,'n',u.name); }
+function mnAdd(){ const el=document.getElementById('mn-in'); const v=(el&&el.value||'').trim(); if(!v) return; mnSave(m=>{ m.lines.push({id:uid('ml_'),kind:mnKind,txt:v,done:false,link:null,resp:'',ts:new Date().toISOString()}); return m; }); setTimeout(()=>{ const e=document.getElementById('mn-in'); if(e){ e.value=''; e.focus(); const b=document.querySelector('.mn-lines'); if(b) b.scrollTop=b.scrollHeight; } },0); }
+function mnKindSet(k){ mnKind=k; mnRender(); setTimeout(()=>{ const e=document.getElementById('mn-in'); if(e) e.focus(); },0); }
+function mnLineKind(lid){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l){ l.kind=l.kind==='a'?'n':'a'; if(l.kind==='n') l.done=false; } return m; }); }
+function mnLineDone(lid){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.done=!l.done; return m; }); }
+function mnLineDel(lid){ mnSave(m=>{ m.lines=m.lines.filter(x=>x.id!==lid); return m; }); }
+function mnLineTxt(lid,v){ const g=mnGet(); if(!g) return; const arr=(g.s.minutas||[]).map(x=>{ if(x.id!==g.m.id) return x; const y=JSON.parse(JSON.stringify(x)); const l=y.lines.find(z=>z.id===lid); if(l) l.txt=v; return y; }); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); }
+function mnLineResp(lid,v){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.resp=v; return m; }); }
+function mnLineDate(lid,v){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.date=v; return m; }); }
+function mnLinkAdd(){ const t=(document.getElementById('mn-lt')||{}).value||'', u=(document.getElementById('mn-lu')||{}).value||''; if(!u.trim()) return; const url=/^https?:\/\//i.test(u.trim())?u.trim():'https://'+u.trim(); mnSave(m=>{ m.links.push({t:t.trim()||url.replace(/^https?:\/\//,'').slice(0,40),u:url}); return m; }); }
+function mnLinkDel(i){ mnSave(m=>{ m.links.splice(i,1); return m; }); }
+/* ligar un acuerdo con una tarea / subtarea / sub-subtarea */
+function mnLinkTo(lid,tid,sid){ const g=mnGet(); if(!g) return; const tt=store.task(tid); const ss=sid&&tt&&(tt.subtasks||[]).find(x=>x.id===sid); let txt='';
+  mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l){ txt=l.txt; l.link={tid,sid:sid||''}; } return m; }); logEvent(tid,'Acuerdo de minuta: «'+txt.slice(0,80)+'»'+(ss?' (ligado a «'+ss.name+'»)':'')); mnRev&&(mnRev.pick=null); mnRender(); }
+function mnUnlink(lid){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.link=null; return m; }); }
+function mnCreateSub(lid,tid){ if(!canSubDate()){ alert('Crear subtareas es de PM, Gerencia o Dirección. Deja el acuerdo ligado a una existente o pídeselo a alguien de ese nivel.'); return; }
+  const g=mnGet(); const l=g&&g.m.lines.find(x=>x.id===lid); if(!l) return; const t=store.task(tid); if(!t) return;
+  const st={name:l.txt,personId:l.resp||currentUser,date:l.date||'',time:'',durMin:null,invitados:[]}; store.addSubtask(tid,st); logEvent(tid,'Creó la subtarea «'+st.name+'» desde la minuta de «'+g.s.name+'»'); mnLinkTo(lid,tid,st.id); }
+function mnPickOpen(lid){ mnRev=mnRev||{}; const g=mnGet(); mnRev.pick={lid,pid:g?g.t.projectId:'',tid:g?g.t.id:'',sid:''}; mnRender(); }
+function mnPickSet(k,v){ const P=mnRev.pick; P[k]=v; if(k==='pid'){ P.tid=''; P.sid=''; } if(k==='tid') P.sid=''; mnRender(); }
+function mnReviewOpen(){ mnRev=mnRev||{}; mnRender(); }
+function mnReviewClose(){ mnRev=null; mnRender(); }
+function mnShareSet(v){ mnSave(m=>{ m.share=!!v; return m; }); }
+/* panel flotante */
+function mnRoot(){ let r=document.getElementById('mn-root'); if(!r){ r=document.createElement('div'); r.id='mn-root'; document.body.appendChild(r); } return r; }
+function mnLinkHtml(g,l){ const k=l.link; const tt=k&&store.task(k.tid); const ss=k&&k.sid&&tt&&(tt.subtasks||[]).find(x=>x.id===k.sid);
+  const P=mnRev&&mnRev.pick&&mnRev.pick.lid===l.id?mnRev.pick:null;
+  if(k&&tt) return `<div class="mn-lk ok">✔ Ligado a <b>${esc(tt.name)}</b>${ss?' › '+esc(ss.name):''} <a onclick="mnUnlink('${l.id}')">quitar</a></div>`;
+  if(P){ const projs=store.d.projects.slice().sort((a,b)=>(store.client(a.clientId).name+a.name).localeCompare(store.client(b.clientId).name+b.name)); const tasks=P.pid?store.tasksOf(P.pid):[]; const tk=P.tid&&store.task(P.tid); const subs=tk?(tk.subtasks||[]).filter(x=>!x.isSeries&&!x.seriesId):[];
+    return `<div class="mn-pick"><select onchange="mnPickSet('pid',this.value)"><option value="">Proyecto…</option>${projs.map(x=>`<option value="${x.id}" ${x.id===P.pid?'selected':''}>${esc(store.client(x.clientId).name)} · ${esc(x.name)}</option>`).join('')}</select>
+      <select onchange="mnPickSet('tid',this.value)"><option value="">Tarea…</option>${tasks.map(x=>`<option value="${x.id}" ${x.id===P.tid?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
+      <select onchange="mnPickSet('sid',this.value)"><option value="">(toda la tarea)</option>${subs.map(x=>`<option value="${x.id}" ${x.id===P.sid?'selected':''}>${x.parentId?'↳ ':''}${esc(x.name)}</option>`).join('')}</select>
+      <div class="mn-btns"><button class="mn-b" ${P.tid?'':'disabled'} onclick="mnLinkTo('${l.id}','${P.tid}','${P.sid}')">Ligar</button><button class="mn-b ghost" ${P.tid?'':'disabled'} onclick="mnCreateSub('${l.id}','${P.tid}')">+ Crear subtarea aquí</button><button class="mn-b ghost" onclick="mnRev.pick=null;mnRender()">Cancelar</button></div></div>`; }
+  return `<div class="mn-btns"><button class="mn-b" onclick="mnLinkTo('${l.id}','${g.t.id}','${g.s.id}')">Ligar a esta cita</button><button class="mn-b ghost" onclick="mnCreateSub('${l.id}','${g.t.id}')">+ Subtarea nueva</button><button class="mn-b ghost" onclick="mnPickOpen('${l.id}')">Elegir otra…</button></div>`; }
+function mnPanelHtml(g){ const {t,s,m}=g; const rec=m.estado==='curso'; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const kind=m.kind==='cliente'?'Con cliente':'Interna';
+  const planned=[]; if(s.personId) planned.push({id:s.personId,tipo:'n'}); (s.team||[]).forEach(id=>planned.push({id,tipo:'n'})); (s.invitados||[]).forEach(id=>planned.push({id,tipo:'c'}));
+  const here=new Set(m.asist.map(a=>a.id)); const names=(id,tipo)=>tipo==='c'?(((c.people||[]).find(x=>x.id===id)||{}).name||'Cliente'):(store.person(id).name||'—');
+  const chips=[...planned.map(x=>({id:x.id,tipo:x.tipo,name:names(x.id,x.tipo)})),...m.asist.filter(a=>!planned.some(x=>x.id===a.id)).map(a=>({id:a.id,tipo:a.tipo,name:a.name}))];
+  const staffOpts=store.activeStaff().filter(u=>!chips.some(x=>x.id===u.id)).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
+  const acts=m.lines.filter(l=>l.kind==='a'); const unl=acts.filter(l=>!l.link).length;
+  const dur=(m.end?new Date(m.end):new Date())-new Date(m.start);
+  const head=`<div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${kind} · ${esc(c.name)} · ${esc(t.name)}</div></div><div class="mn-hr"><div class="mn-clk" data-start="${m.start}" data-end="${m.end||''}">${mnClockTxt(dur)}</div>${rec?'<button class="mn-stop" title="Detener y revisar" onclick="mnStopNow()">■ Stop</button>':'<span class="mn-fin">terminada</span>'}<button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div>`;
+  if(mnRev){ return head+`<div class="mn-body"><div class="mn-sec">Revisión de acuerdos <span class="muted">· ${acts.length} actividad(es), ${unl} sin ligar</span></div>
+    ${acts.map(l=>`<div class="mn-rv"><div class="mn-rt">○ ${esc(l.txt)} <span class="muted">${l.resp?'· '+esc(store.person(l.resp).name):''}${l.date?' · '+esc(dLabel(l.date)):''}</span></div>
+      <div class="mn-opt"><select onchange="mnLineResp('${l.id}',this.value)"><option value="">Responsable…</option>${store.activeStaff().map(u=>`<option value="${u.id}" ${l.resp===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select><input type="date" value="${l.date||''}" onchange="mnLineDate('${l.id}',this.value)"></div>${mnLinkHtml(g,l)}</div>`).join('')||'<div class="muted" style="padding:8px">No marcaste actividades en esta minuta.</div>'}
+    <div class="mn-sec">Enlaces trabajados</div>${m.links.map((x,i)=>`<div class="mn-lkrow"><a href="${esc(x.u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(x.t)}</a><a class="mn-del" onclick="mnLinkDel(${i})">✕</a></div>`).join('')}
+    <div class="mn-add"><input id="mn-lt" placeholder="Título (Notion, documento…)"><input id="mn-lu" placeholder="https://…" onkeydown="if(event.key==='Enter')mnLinkAdd()"><button class="mn-b" onclick="mnLinkAdd()">＋</button></div>
+    ${m.kind==='cliente'?`<label class="mn-chk"><input type="checkbox" ${m.share?'checked':''} onchange="mnShareSet(this.checked)"> Marcar para compartir con el cliente <span class="muted">(próximamente en su portal)</span></label>`:''}
+    <div class="mn-btns" style="margin-top:8px"><button class="mn-b" onclick="mnReviewClose()">Listo</button></div></div>`; }
+  return head+`<div class="mn-body"><div class="mn-sec">¿Quién está?</div><div class="mn-chips">${chips.map(x=>`<button class="mn-chip ${here.has(x.id)?'on':''} ${x.tipo==='c'?'cli':''}" onclick="mnAsistToggle('${x.id}','${x.tipo}','${esc(x.name)}')">${here.has(x.id)?'✔ ':''}${esc(x.name)}</button>`).join('')}${staffOpts?`<select class="mn-addp" onchange="mnAsistAdd(this);this.value=''"><option value="">＋ Agregar</option>${staffOpts}</select>`:''}</div>
+    <div class="mn-sec">Notas y actividades <span class="muted">· ○ actividad · • nota</span></div>
+    <div class="mn-lines">${m.lines.map(l=>`<div class="mn-ln ${l.kind==='a'?'act':''} ${l.done?'done':''}"><button class="mn-mk" title="${l.kind==='a'?'Marcar hecha':'Es una nota'}" onclick="${l.kind==='a'?`mnLineDone('${l.id}')`:`mnLineKind('${l.id}')`}">${l.kind==='a'?(l.done?'◉':'○'):'•'}</button><input class="mn-tx" value="${esc(l.txt)}" onchange="mnLineTxt('${l.id}',this.value)"><button class="mn-sw" title="${l.kind==='a'?'Convertir en nota':'Convertir en actividad'}" onclick="mnLineKind('${l.id}')">${l.kind==='a'?'•':'○'}</button><button class="mn-del" onclick="mnLineDel('${l.id}')">✕</button>${l.link?'<span class="mn-ok" title="Ligada">🔗</span>':''}</div>`).join('')||'<div class="muted" style="padding:6px 2px">Escribe abajo. Enter agrega la línea.</div>'}</div>
+    <div class="mn-inrow"><div class="mn-kd"><button class="${mnKind==='n'?'on':''}" onclick="mnKindSet('n')">• Nota</button><button class="${mnKind==='a'?'on':''}" onclick="mnKindSet('a')">○ Actividad</button></div><input id="mn-in" placeholder="${mnKind==='a'?'Nueva actividad…':'Nueva nota…'}" onkeydown="if(event.key==='Enter'){event.preventDefault();mnAdd()}"><button class="mn-b" onclick="mnAdd()">↵</button></div>
+    <div class="mn-foot"><a onclick="mnLinksOpen=!mnLinksOpen;mnRender()">🔗 Enlaces (${m.links.length})</a><a onclick="mnReviewOpen()">Revisar acuerdos${unl?` (${unl} sin ligar)`:''}</a><a onclick="mnClose()">Cerrar panel</a></div>
+    ${mnLinksOpen?`<div class="mn-sec">Enlaces</div>${m.links.map((x,i)=>`<div class="mn-lkrow"><a href="${esc(x.u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(x.t)}</a><a class="mn-del" onclick="mnLinkDel(${i})">✕</a></div>`).join('')}<div class="mn-add"><input id="mn-lt" placeholder="Título"><input id="mn-lu" placeholder="https://…" onkeydown="if(event.key==='Enter')mnLinkAdd()"><button class="mn-b" onclick="mnLinkAdd()">＋</button></div>`:''}</div>`; }
+function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); if(r) r.innerHTML=''; return; } const r=mnRoot(); if(!mnV){ try{ const o=JSON.parse(localStorage.getItem(MN_KEY)||'null'); if(o) mnV=o; }catch(_){} }
+  const g=mnGet(); if(mnV&&!g) mnV=null;
+  const inEl=document.getElementById('mn-in'); const keep=inEl?{v:inEl.value,f:document.activeElement===inEl,s:inEl.selectionStart}:null; const ls=document.querySelector('.mn-lines'); const lt=ls?ls.scrollTop:0;
+  let h='';
+  if(mnPrompt&&!g){ h+=`<div class="mn-prompt"><b>📝 Es hora de «${esc(mnPrompt.title)}»</b><div class="muted">¿Iniciamos la minuta?</div><div class="mn-btns"><button class="mn-b" onclick="mnStart('${mnPrompt.tid}','${mnPrompt.sid}')">▶ Iniciar minuta</button><button class="mn-b ghost" onclick="mnPrompt=null;mnRender()">Ahora no</button></div></div>`; }
+  if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-panel">${mnPanelHtml(g)}</div>`;
+    h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
+  r.innerHTML=h;
+  const ni=document.getElementById('mn-in'); if(ni&&keep){ ni.value=keep.v; if(keep.f){ ni.focus(); try{ ni.setSelectionRange(keep.s,keep.s); }catch(_){} } } const nl=document.querySelector('.mn-lines'); if(nl) nl.scrollTop=lt; }
+setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ if(e.dataset.end) return; e.textContent=mnClockTxt(Date.now()-new Date(e.dataset.start)); }); },1000);
+/* aviso a la hora de una cita */
+function mnTodayCitas(){ const td=todayISO(); const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.done||s.date!==td) return; const k=citaKind(s)||(subHasCita(s)&&s.time?'cliente':null); if(!k) return; if(role==='colab'&&!subInvolves(s,currentUser)) return; out.push({t,s,k}); }); }); return out.sort((a,b)=>(a.s.time||'99')<(b.s.time||'99')?-1:1); }
+function mnWatch(){ if(!session||document.hidden||mnPrompt||mnActive()) return; const now=new Date(), nm=now.getHours()*60+now.getMinutes();
+  for(const {t,s} of mnTodayCitas()){ if(!s.time||!subInvolves(s,currentUser)) continue; const k=s.id+':'+todayISO(); if(mnSeen.has(k)) continue; const mm=toMin(s.time); if(mm==null) continue; if(nm>=mm-5&&nm<=mm+20){ mnSeen.add(k); mnPrompt={tid:t.id,sid:s.id,title:s.name}; mnRender(); return; } } }
+setInterval(mnWatch,30000);
+/* bloque dentro de la subtarea (pestaña Sesión) */
+function mnBlock(t,s){ const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1); const act=ms.find(m=>m.estado==='curso'); const k=citaKind(s)||(subHasCita(s)?'cliente':null);
+  return `<div class="field"><label>📝 Minutas de esta cita ${k?`<span class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</span>`:''}</label>${ms.map(m=>`<div class="dep-row"><span>${esc(dLabel(m.start.slice(0,10)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a style="cursor:pointer;color:var(--green)" onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="hint">Aún no hay minutas de esta cita.</div>'}<button type="button" class="btn sm" style="margin-top:6px" onclick="mnStart('${t.id}','${s.id}')">${act?'▶ Continuar minuta':'▶ Iniciar minuta'}</button></div>`; }
+/* Gestión → Minutas */
+function mnAll(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; (t.subtasks||[]).forEach(s=>(s.minutas||[]).forEach(m=>out.push({t,s,m,p,c:store.client(p.clientId)||{name:''}}))); }); return out.sort((a,b)=>a.m.start<b.m.start?1:-1); }
+let mnFilK='', mnFilQ='';
+function gestMinutas(){ const today=mnTodayCitas(); let all=mnAll(); if(mnFilK) all=all.filter(x=>x.m.kind===mnFilK); if(mnFilQ){ const q=impNz(mnFilQ); all=all.filter(x=>impNz(x.s.name+' '+x.c.name+' '+x.t.name+' '+x.m.lines.map(l=>l.txt).join(' ')).includes(q)); }
+  const rowT=x=>`<div class="cita-row"><div class="cita-when"><b>${x.s.time||'hoy'}</b><span>${x.k==='cliente'?'cliente':'interna'}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)}</div><div class="muted" style="font-size:.78rem">${esc((store.client((store.project(x.t.projectId)||{}).clientId)||{}).name||'')} · ${esc(x.t.name)}</div></div><div class="cita-side"><button class="btn sm" onclick="mnStart('${x.t.id}','${x.s.id}')">${(x.s.minutas||[]).some(m=>m.estado==='curso')?'▶ Continuar':'▶ Iniciar minuta'}</button></div></div>`;
+  return `<div class="sec-title"><h2 style="font-size:1.1rem">Citas de hoy</h2><button class="btn sm" onclick="mnNewOpen()">+ Nueva minuta</button></div><div class="cita-list">${today.map(rowT).join('')||'<div class="muted">Hoy no hay citas con hora y más de una persona.</div>'}</div>
+    <div class="sec-title" style="margin-top:18px"><h2 style="font-size:1.1rem">Historial de minutas</h2><div style="display:flex;gap:8px"><select onchange="mnFilK=this.value;render()"><option value="">Todas</option><option value="cliente" ${mnFilK==='cliente'?'selected':''}>Con cliente</option><option value="interna" ${mnFilK==='interna'?'selected':''}>Internas</option></select><input placeholder="Buscar…" value="${esc(mnFilQ)}" onchange="mnFilQ=this.value;render()" style="width:180px"></div></div>
+    <div class="cita-list">${all.map(x=>{ const a=x.m.lines.filter(l=>l.kind==='a'); const dur=x.m.end?mnClockTxt(new Date(x.m.end)-new Date(x.m.start)):'en curso';
+      return `<div class="cita-row" style="cursor:pointer" onclick="mnView('${x.t.id}','${x.s.id}','${x.m.id}')"><div class="cita-when"><b>${dLabel(x.m.start.slice(0,10))}</b><span>${dur}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)} <span class="pill ${x.m.kind==='cliente'?'green':'yellow'}">${x.m.kind==='cliente'?'con cliente':'interna'}</span></div><div class="muted" style="font-size:.78rem">${esc(x.c.name)} · ${esc(x.p.name)} · ${esc(x.t.name)}</div></div><div class="cita-side"><div class="muted" style="font-size:.76rem">${x.m.lines.length-a.length} nota(s) · ${a.length} actividad(es) · ${a.filter(l=>l.link).length} ligada(s)${x.m.links.length?' · 🔗 '+x.m.links.length:''}</div></div></div>`; }).join('')||'<div class="muted">Aún no hay minutas. Se crean desde una cita o con «+ Nueva minuta».</div>'}</div>`; }
+/* nueva minuta interna (Daily / Weekly / Monthly / otra) */
+function mnNewOpen(){ mnNew={tipo:'Daily',nombre:'',team:[]}; render(); }
+function mnNewClose(){ mnNew=null; render(); }
+function mnNewModal(){ const staff=store.activeStaff().filter(u=>u.id!==currentUser);
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)mnNewClose()"><div class="modal-card" style="max-width:460px"><div class="m-head"><div class="m-top"><h3 style="margin:0">📝 Nueva minuta interna</h3><button class="x" onclick="mnNewClose()">×</button></div></div><div class="m-body">
+    <div class="field"><label>Tipo</label><select onchange="mnNew.tipo=this.value">${['Daily','Weekly','Monthly','Reunión'].map(x=>`<option ${mnNew.tipo===x?'selected':''}>${x}</option>`).join('')}</select></div>
+    <div class="field"><label>Nombre (opcional)</label><input value="${esc(mnNew.nombre)}" onchange="mnNew.nombre=this.value" placeholder="Ej. Daily comercial"></div>
+    <div class="field"><label>¿Quiénes participan?</label><div class="mn-chips">${staff.map(u=>`<button type="button" class="mn-chip ${mnNew.team.includes(u.id)?'on':''}" onclick="mnNew.team=mnNew.team.includes('${u.id}')?mnNew.team.filter(x=>x!=='${u.id}'):[...mnNew.team,'${u.id}'];render()">${mnNew.team.includes(u.id)?'✔ ':''}${esc(u.name)}</button>`).join('')}</div><div class="hint">Se crea una cita interna de hoy, a esta hora, dentro del proyecto «Gestión interna» (frente «Reuniones»).</div></div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="mnNewClose()">Cancelar</button><button class="btn" onclick="mnNewGo()">▶ Crear e iniciar</button></div></div></div></div>`; }
+function mnNewGo(){ const N=mnNew; const ic=store.d.clients.find(c=>c.tipo==='interno'); if(!ic){ alert('No hay un cliente interno. Crea el cliente «Grupo Nuwek» de tipo Interno y su proyecto «Gestión interna».'); return; }
+  const projs=store.d.projects.filter(x=>x.clientId===ic.id); const p=projs.find(x=>/gesti[oó]n interna/i.test(x.name))||projs[0]; if(!p){ alert('Crea el proyecto «Gestión interna» dentro de «'+ic.name+'» para colgar las reuniones.'); return; }
+  let f=store.frentesOf(p.id).find(x=>/^reuniones/i.test(x.name)); if(!f) f=store.addFrente(p.id,'Reuniones');
+  let t=store.tasksOf(p.id).find(x=>x.frenteId===f.id&&/^reuniones/i.test(x.name)); if(!t) t=store.addTask({projectId:p.id,frenteId:f.id,name:'Reuniones internas',subtitle:ic.name,description:'Daily, Weekly, Monthly y demás reuniones internas del equipo.',tags:[],workLink:'',deliverables:[],responsibleId:currentUser,status:'to-do',dueDate:p.endDate||todayISO(),viaticos:0,subtasks:[]});
+  const now=new Date(); const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'); const nm=(N.nombre||'').trim()||N.tipo; const nowIso=now.toISOString(); const info={}; N.team.forEach(id=>info[id]={by:currentUser,ts:nowIso});
+  const st={name:nm+' · '+dLabel(todayISO()),personId:currentUser,date:todayISO(),time:hm,durMin:30,team:N.team.slice(),teamInfo:info,teamAck:{},invitados:[]}; store.addSubtask(t.id,st); logEvent(t.id,'Creó la reunión «'+st.name+'»');
+  mnNew=null; render(); mnStart(t.id,st.id); }
+
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
 function closeSubEdit(){ subEd=null; render(); }
@@ -3914,6 +4035,7 @@ function smSesionPane(s0,t,c){
   const resp=last?`<div class="ses-resp" style="background:${st.bg};color:${st.c}"><b>${st.t}</b> · ${esc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div style="margin-top:4px;color:#333">«${esc(last.razon)}»</div>`:''}${(last.propuestas||[]).length?`<div style="margin-top:8px"><b style="font-size:.8rem">Fechas que propone:</b>${last.propuestas.map(x=>`<div class="rep-row" style="margin-top:4px"><span class="cita-prop"><span>${esc(fmtPropuesta(x))}</span></span><button type="button" class="rep-chip" onclick="smUseDate('${x.fecha}','${x.hora||''}')">Usar esta fecha</button></div>`).join('')}<div class="hint">Al guardar con la fecha nueva, la sesión se reabre para que el cliente la confirme.</div></div>`:''}${sesCanRespond(s0)?'':`<div style="margin-top:6px"><button type="button" class="btn ghost sm" onclick="smReopen()">Permitir que responda de nuevo</button></div>`}</div>`:'<div class="muted" style="font-size:.82rem">El cliente aún no responde.</div>';
   const rows=ses.temario.map((it,i)=>smTemRow(it,i,staffOpts)).join('');
   return `<div class="sm-pane" data-pane="ses" style="display:none">
+    ${mnBlock(t,s0)}
     <div class="field"><label>Objetivo de la reunión</label><textarea id="sm-obj" rows="3" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-family:inherit">${esc(ses.objetivo)}</textarea></div>
     <div class="field"><label>Lugar</label><select id="sm-ltipo" onchange="smLugarChange()"><option value="meet" ${ses.lugar.tipo==='presencial'?'':'selected'}>Videollamada (Meet, Zoom, Teams…)</option><option value="presencial" ${ses.lugar.tipo==='presencial'?'selected':''}>Presencial</option></select>
       <div id="sm-l-meet" style="margin-top:8px"><input id="sm-llink" placeholder="https://meet.google.com/…" value="${esc(ses.lugar.link)}"></div>
