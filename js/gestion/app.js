@@ -3794,11 +3794,12 @@ function mnCanEdit(m){ return m.estado==='curso'?(m.by===currentUser||role==='ge
 function mnLogEdit(label){ const g=mnGet(); if(g&&g.m.estado!=='curso') logEvent(g.t.id,'Editó la minuta cerrada de «'+g.s.name+'»'+(label?': '+label:'')); }
 function mnSumOpen(tid,sid,mid){ mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
 function mnSumClose(){ mnSum=null; render(); }
-function mnSumPick(mid){ mnSum.mid=mid; render(); }
+function mnSumPick(mid){ mnSum.mid=mid; mnSum.askDel=false; render(); }
 function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!['gerente','gerencia'].includes(role)){ shareToast('Solo Gerencia o Dirección pueden eliminar una minuta.'); return; }
-  if(!confirm('¿Eliminar esta minuta de «'+g.s.name+'» ('+dLabel(g.m.start.slice(0,10))+')? No se puede deshacer.')) return;
+  if(!mnSum.askDel){ mnSum.askDel=true; render(); return; }
   store.updateSubtask(g.t.id,g.s.id,{minutas:(g.s.minutas||[]).filter(x=>x.id!==g.m.id)}); logEvent(g.t.id,'Eliminó la minuta del '+dLabel(g.m.start.slice(0,10))+' de «'+g.s.name+'»');
-  if(mnV&&mnV.mid===g.m.id){ mnV=null; try{ localStorage.removeItem(MN_KEY); }catch(_){} } mnSum.mid=''; mnRender(); render(); }
+  if(mnV&&mnV.mid===g.m.id){ mnV=null; try{ localStorage.removeItem(MN_KEY); }catch(_){} } mnSum=null; mnRender(); render(); shareToast('Minuta eliminada.'); }
+function mnDelNo(){ if(mnSum){ mnSum.askDel=false; render(); } }
 function mnSumStart(){ const {tid,sid}=mnSum; mnSum=null; mnStart(tid,sid); render(); }
 function mnSumEdit(){ const g=mnSumGet(); if(!g||!g.m) return; mnSum=null; mnView(g.t.id,g.s.id,g.m.id); render(); }
 function mnSumGet(){ if(!mnSum) return null; const t=store.task(mnSum.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnSum.sid); if(!s) return null; const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1); const m=mnSum.mid?ms.find(x=>x.id===mnSum.mid):ms[0]; return {t,s,ms,m:m||null}; }
@@ -3816,7 +3817,7 @@ function mnSumModal(){ const esc=mnEsc; const g=mnSumGet(); if(!g){ mnSum=null; 
     <div class="field"><label>🔗 Link de la sesión</label><div style="display:flex;gap:6px"><input readonly value="${esc(url||'Se genera al copiarlo')}" style="flex:1;font-size:.78rem" onfocus="this.select()"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}');setTimeout(render,300)">Copiar</button></div></div>
     ${m?`${ms.length>1?`<div class="mn-chips" style="margin-bottom:8px">${ms.map(x=>`<button class="mn-chip ${x.id===m.id?'on':''}" onclick="mnSumPick('${x.id}')">${esc(dLabel(x.start.slice(0,10)))} · ${x.estado==='curso'?'en curso':mnClockTxt(new Date(x.end)-new Date(x.start))}</button>`).join('')}</div>`:''}${mnSumBody(g)}
       <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${role==='gerencia'?'Solo Dirección edita; cada cambio queda en el log.':'Solo Dirección puede editar una minuta cerrada.'}</span>
-        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}${['gerente','gerencia'].includes(role)?`<button class="btn ghost" style="color:#c0392b" onclick="mnDel()">🗑 Eliminar</button>`:''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
+        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}${['gerente','gerencia'].includes(role)?(mnSum.askDel?`<span style="color:#c0392b;font-weight:700;font-size:.8rem">¿Eliminar esta minuta? No se puede deshacer.</span><button class="btn" style="background:#c0392b" onclick="mnDel()">Sí, eliminar</button><button class="btn ghost" onclick="mnDelNo()">No</button>`:`<button class="btn ghost" style="color:#c0392b" onclick="mnDel()">🗑 Eliminar</button>`):''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
     :`<div class="ses-resp" style="background:#f2f1ea;color:#4b5b54;margin:8px 0">Esta cita todavía no tiene minuta.</div>${mnRoleOk()?`<button class="mn-play" onclick="mnSumStart()">▶ Iniciar minuta</button>`:'<div class="muted" style="font-size:.78rem">Solo PM, Gerencia o Dirección pueden iniciarla.</div>'}`}
     ${m&&m.estado!=='curso'&&mnRoleOk()?`<div style="margin-top:8px"><a style="cursor:pointer;color:var(--green);font-weight:700;font-size:.8rem" onclick="mnSumStart()">＋ Iniciar otra minuta de esta cita</a></div>`:''}</div></div></div>`; }
 function mnPrint(){ const g=mnSumGet(); if(!g||!g.m) return; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const by=store.person(m.by).name||'—'; const hx=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
