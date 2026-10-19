@@ -548,7 +548,7 @@ function renderBase(){
   setTimeout(mnRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
-    if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnAuth?mnAuthModal():''); return; }
+    if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnSum?mnSumModal():'')+(mnAuth?mnAuthModal():''); return; }
     if(clientSess){ renderClientPortal(); return; }
     if(showClientLogin){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
     if(publicTaskId){ app.innerHTML=viewPublicTask(); document.getElementById('modal-root').innerHTML=''; return; }
@@ -556,7 +556,7 @@ function renderBase(){
     document.getElementById('modal-root').innerHTML = loginUser ? pinModal() : '';
     return;
   }
-  if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal(); return; }
+  if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnSum?mnSumModal():'')+(mnAuth?mnAuthModal():''); return; }
   let body='';
   if(isColab()){
     if(view==='proyecto') body=viewProyecto();
@@ -3681,13 +3681,17 @@ function mnClockTxt(ms){ const t=Math.max(0,Math.floor(ms/1000)); const h=Math.f
 function mnGet(){ if(!mnV) return null; const t=store.task(mnV.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnV.sid); const m=s&&(s.minutas||[]).find(x=>x.id===mnV.mid); return (t&&s&&m)?{t,s,m}:null; }
 function mnSave(mut,label){ const g=mnGet(); if(!g) return; if(!mnCanEdit(g.m)){ shareToast('Solo Dirección puede editar una minuta cerrada.'); return; } if(g.m.estado!=='curso') mnLogEdit(label||'cambios'); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?mut(JSON.parse(JSON.stringify(x))):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); mnRender(); }
 function mnActive(){ for(const t of store.d.tasks){ for(const s of (t.subtasks||[])){ const m=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(m) return {tid:t.id,sid:s.id,mid:m.id}; } } return null; }
+function mnRoleOk(){ return ['pm','gerente','gerencia'].includes(role); }
 function mnStart(tid,sid){ const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
+  if(!mnRoleOk()){ shareToast('Solo PM, Gerencia o Dirección pueden tomar la minuta.'); return; }
+  const open=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by!==currentUser);
+  if(open){ const who=store.person(open.by).name||'otra persona'; if(role!=='gerencia'){ alert('Esta cita ya tiene una minuta abierta por '+who+'. Solo una persona a la vez puede tomarla; debe cerrarla primero (o Dirección puede tomarla).'); return; } if(!confirm('La minuta está abierta por '+who+'. ¿Cerrarla y abrir una nueva a tu nombre?')) return; mnV={tid,sid,mid:open.id}; mnStopNow(true); }
   const act=mnActive(); if(act&&!(act.tid===tid&&act.sid===sid)){ if(!confirm('Ya tienes una minuta en curso. ¿Detenerla y empezar esta?')) return; mnV=act; mnStopNow(true); }
   const cur=(s.minutas||[]).find(x=>x.estado==='curso'); let mid;
   if(cur) mid=cur.id; else { const m={id:uid('mn_'),by:currentUser,start:new Date().toISOString(),end:null,estado:'curso',kind:citaKind(s)||'interna',asist:[],lines:[],links:[]}; store.updateSubtask(tid,sid,{minutas:[...(s.minutas||[]),m]}); mid=m.id; logEvent(tid,'Inició la minuta de «'+s.name+'»'); }
   mnPre=null; mnV={tid,sid,mid}; mnOpen=true; mnRev=null; mnPrompt=null; try{ localStorage.setItem(MN_KEY,JSON.stringify(mnV)); }catch(_){} mnRender(); }
 let mnPre=null;
-function mnOpenCita(tid,sid){ const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const cur=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(cur){ mnPre=null; mnView(tid,sid,cur.id); return; } mnV=null; mnPre={tid,sid}; mnOpen=true; mnRev=null; mnRender(); }
+function mnOpenCita(tid,sid){ if(!mnRoleOk()) return; const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const cur=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(cur){ mnPre=null; mnView(tid,sid,cur.id); return; } mnV=null; mnPre={tid,sid}; mnOpen=true; mnRev=null; mnRender(); }
 function mnPrePanel(){ const t=store.task(mnPre.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnPre.sid); if(!s){ mnPre=null; return ''; } const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const k=citaKind(s)||(subHasCita(s)?'cliente':'interna'); const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1);
   return `<div class="mn-panel"><div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${k==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · ${s.date?esc(dLabel(s.date)):''} ${esc(s.time||'')}</div></div><div class="mn-hr"><button class="mn-x" title="Cerrar" onclick="mnPre=null;mnOpen=false;mnRender()">×</button></div></div>
     <div class="mn-body"><button class="mn-play" onclick="mnStart('${t.id}','${s.id}')">▶ Iniciar minuta</button><div class="mn-sec">Minutas de esta cita</div>${ms.map(m=>`<div class="mn-lkrow"><span>${esc(dLabel(m.start.slice(0,10)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="muted" style="padding:4px 0">Aún no hay minutas de esta cita.</div>'}</div></div>`; }
@@ -3789,8 +3793,8 @@ function mnSumModal(){ const esc=mnEsc; const g=mnSumGet(); if(!g){ mnSum=null; 
     ${m?`${ms.length>1?`<div class="mn-chips" style="margin-bottom:8px">${ms.map(x=>`<button class="mn-chip ${x.id===m.id?'on':''}" onclick="mnSumPick('${x.id}')">${esc(dLabel(x.start.slice(0,10)))} · ${x.estado==='curso'?'en curso':mnClockTxt(new Date(x.end)-new Date(x.start))}</button>`).join('')}</div>`:''}${mnSumBody(g)}
       <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${role==='gerencia'?'Solo Dirección edita; cada cambio queda en el log.':'Solo Dirección puede editar una minuta cerrada.'}</span>
         ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
-    :`<div class="ses-resp" style="background:#f2f1ea;color:#4b5b54;margin:8px 0">Esta cita todavía no tiene minuta.</div><button class="mn-play" onclick="mnSumStart()">▶ Iniciar minuta</button>`}
-    ${m&&m.estado!=='curso'?`<div style="margin-top:8px"><a style="cursor:pointer;color:var(--green);font-weight:700;font-size:.8rem" onclick="mnSumStart()">＋ Iniciar otra minuta de esta cita</a></div>`:''}</div></div></div>`; }
+    :`<div class="ses-resp" style="background:#f2f1ea;color:#4b5b54;margin:8px 0">Esta cita todavía no tiene minuta.</div>${mnRoleOk()?`<button class="mn-play" onclick="mnSumStart()">▶ Iniciar minuta</button>`:'<div class="muted" style="font-size:.78rem">Solo PM, Gerencia o Dirección pueden iniciarla.</div>'}`}
+    ${m&&m.estado!=='curso'&&mnRoleOk()?`<div style="margin-top:8px"><a style="cursor:pointer;color:var(--green);font-weight:700;font-size:.8rem" onclick="mnSumStart()">＋ Iniciar otra minuta de esta cita</a></div>`:''}</div></div></div>`; }
 function mnPrint(){ const g=mnSumGet(); if(!g||!g.m) return; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const by=store.person(m.by).name||'—'; const hx=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const dur=(m.end?new Date(m.end):new Date())-new Date(m.start); const tm=d=>new Date(d).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
   const notes=m.lines.filter(l=>l.kind==='n'), acts=m.lines.filter(l=>l.kind==='a');
@@ -3813,7 +3817,7 @@ function mnAuthSubmit(){ const code=((document.getElementById('au-code')||{}).va
   const el=store.activeStaff().filter(u=>['pm','gerente','gerencia'].includes(u.perm)&&String(u.password||'')===code&&code);
   if(!el.length){ const a=mnFails.x||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; mnAuth.err='Demasiados intentos. Espera 5 minutos.'; } else mnAuth.err='Código incorrecto o sin permiso (solo PM, Gerencia o Dirección).'; mnFails.x=a; render(); return; }
   mnFails.x=null; if(el.length>1){ mnAuth.opts=el; render(); return; } mnAuthLogin(el[0].id); }
-function mnAuthLogin(uid){ const u=store.person(uid); const ps=publicSes; session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; modalTask=null; opSelTask=null; mnAuth=null; saveSession(); render(); if(ps) mnSumOpen(ps.tid,ps.sid); }
+function mnAuthLogin(uid){ const u=store.person(uid); const ps=publicSes; if(!['pm','gerente','gerencia'].includes(u.perm)) return; session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; modalTask=null; opSelTask=null; mnAuth=null; saveSession(); render(); if(ps) mnSumOpen(ps.tid,ps.sid); }
 
 /* aviso a la hora de una cita */
 function mnTodayCitas(){ const td=todayISO(); const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.done||s.date!==td) return; const k=citaKind(s)||(subHasCita(s)&&s.time?'cliente':null); if(!k) return; if(role==='colab'&&!subInvolves(s,currentUser)) return; out.push({t,s,k}); }); }); return out.sort((a,b)=>(a.s.time||'99')<(b.s.time||'99')?-1:1); }
@@ -4126,7 +4130,7 @@ function sesProvider(url){ try{ const h=new URL(/^https?:\/\//i.test(url)?url:'h
 function sesAv(person,size){ person=person||{}; const st=`width:${size}px;height:${size}px`; return person.photo?`<span class="ps-av" style="${st};background-image:url('${person.photo}')"></span>`:`<span class="ps-av" style="${st};background:${person.color||'#3f7d6e'}">${mdEsc((person.name||'?')[0])}</span>`; }
 function sesClientLogo(c,size){ const st=`width:${size}px;height:${size}px`; return c.logo?`<span class="ps-av ps-logo" style="${st};background-image:url('${c.logo}')"></span>`:`<span class="ps-av" style="${st};background:#8a9a93">${mdEsc((c.name||'?')[0])}</span>`; }
 function viewPublicSession(){
-  const f=sesFind(); const _mt=session&&f&&f.ok?`<button class="pub-back pub-min" onclick="mnSumOpen('${f.t.id}','${f.s.id}')">📝 ${(f.s.minutas||[]).length?'Ver minuta':'Minuta'}</button>`:''; const _au=(!session&&!clientSess&&f&&f.ok)?`<button class="pub-back pub-min" onclick="mnAuthOpen()">🔐 Acceso Nuwek</button>`:''; const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${(session||clientSess)?`<div class="pub-acts">${_mt}<button class="pub-back" onclick="closePublicSes()">← Volver al portal</button></div>`:(_au?`<div class="pub-acts">${_au}</div>`:'')}</div>`;
+  const f=sesFind(); const _mt=session&&f&&f.ok&&mnRoleOk()?`<button class="pub-back pub-min" onclick="mnAuthOpen()">📝 ${(f.s.minutas||[]).length?'Ver minuta':'Minuta'}</button>`:''; const _au=(!session&&!clientSess&&f&&f.ok)?`<button class="pub-back pub-min" onclick="mnAuthOpen()">🔐 Acceso Nuwek</button>`:''; const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${(session||clientSess)?`<div class="pub-acts">${_mt}<button class="pub-back" onclick="closePublicSes()">← Volver al portal</button></div>`:(_au?`<div class="pub-acts">${_au}</div>`:'')}</div>`;
   if(!f||!f.ok) return `<div class="pub-wrap">${top}<div class="pub-card"><h2>Este link no es válido</h2><p class="muted">Pudo haber cambiado o estar incompleto. Pídele a tu contacto en Nuwek que te lo vuelva a enviar.</p></div></div>`;
   const {t,s,c}=f; const ses=sesOf(s); const last=sesLast(s); const staffIds=[...new Set([s.personId,...(s.team||[])].filter(Boolean))].filter(id=>store.d.staff.some(u=>u.id===id));
   const nuwek=staffIds.map(id=>{ const u=store.person(id); return `<button class="ps-p" onclick="openSesContact('${id}')" title="${esc(u.name)} · clic para contactar">${sesAv(u,64)}<span class="ps-pn">${mdEsc((u.name||'').split(' ')[0])}</span></button>`; }).join('')||'<span class="muted">Por definir</span>';
