@@ -2330,7 +2330,7 @@ function taskBody(t,panel){
     const serChip=s.isSeries?`<span class="sub-chip ser" title="Serie por calendario">↻ ${seriesLabel(s.series)}</span>${nextOcc?`<span class="sub-chip" title="Próxima repetición pendiente">Próxima: ${dLabel(nextOcc)}</span>`:''}`:'';
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🤝 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
-    const _ck=citaKind(s); const citaBase=(!_l&&subHasCita(s))?`<span class="sub-chip cita chip-link" title="Cita con el cliente · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">📅 Cita</span>`:((_ck==='interna')?`<span class="sub-chip cita-int chip-link" title="Cita interna (${subPeopleN(s)} personas) · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">👥 Cita interna</span>`:'');
+    const _ck=citaKind(s); const citaBase=(subHasCita(s)&&_ck!=='interna')?`<span class="sub-chip cita chip-link" title="Cita con el cliente · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">📅 Cita</span>`:((_ck==='interna')?`<span class="sub-chip cita-int chip-link" title="Cita interna (${subPeopleN(s)} personas) · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">👥 Cita interna</span>`:'');
     const predS=s.dependsOn?(t.subtasks||[]).find(x=>x.id===s.dependsOn):null; const depChip=`${predS?`<span class="sub-chip" title="Empieza cuando termina «${esc(predS.name)}»">⛓ tras «${esc(predS.name.length>22?predS.name.slice(0,21)+'…':predS.name)}»</span>`:''}${s.fija?'<span class="sub-chip" title="Fecha fija: no se mueve con las dependencias">📌 fija</span>':''}`;
     const chips=`${ackBtn}${depChip}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
@@ -3724,6 +3724,20 @@ function mnReviewOpen(){ mnRev=mnRev||{}; mnRender(); }
 function mnReviewClose(){ mnRev=null; mnRender(); }
 function mnShareSet(v){ mnSave(m=>{ m.share=!!v; return m; }); }
 /* panel flotante */
+let mnGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekMinutaGeo')||'null')||{}; }catch(_){ return {}; } })();
+function mnGeoSave(){ try{ localStorage.setItem('nuwekMinutaGeo',JSON.stringify(mnGeo)); }catch(_){} }
+function mnGeoApply(){ const r=document.getElementById('mn-root'); if(!r) return;
+  if(mnGeo.x!=null){ const x=Math.max(0,Math.min(mnGeo.x,window.innerWidth-90)), y=Math.max(0,Math.min(mnGeo.y,window.innerHeight-60)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.bottom='auto'; }
+  const pn=r.querySelector('.mn-panel'); if(pn&&mnGeo.w){ pn.style.width=Math.min(mnGeo.w,window.innerWidth-16)+'px'; pn.style.maxHeight='none'; if(mnGeo.h) pn.style.height=Math.min(mnGeo.h,window.innerHeight-16)+'px'; } }
+(function(){ if(window.__mnDrag) return; window.__mnDrag=1; let d=null;
+  document.addEventListener('pointerdown',e=>{ const pn=document.querySelector('#mn-root .mn-panel'); if(pn&&e.target===pn){ const b=pn.getBoundingClientRect(); window.__mnRz=(e.clientX>b.right-26&&e.clientY>b.bottom-26); } const h=e.target.closest&&e.target.closest('#mn-root .mn-h,#mn-root .mn-fab'); if(!h||e.target.closest('button.mn-x,.mn-hr button,.mn-hr a')) return; const r=document.getElementById('mn-root'); const b=r.getBoundingClientRect(); d={h,sx:e.clientX,sy:e.clientY,ox:b.left,oy:b.top,moved:false}; });
+  document.addEventListener('pointermove',e=>{ if(!d) return; const dx=e.clientX-d.sx, dy=e.clientY-d.sy; if(!d.moved&&Math.abs(dx)+Math.abs(dy)<6) return; d.moved=true; e.preventDefault(); mnGeo.x=d.ox+dx; mnGeo.y=d.oy+dy; mnGeoApply(); },{passive:false});
+  document.addEventListener('pointerup',e=>{ const rs=document.querySelector('#mn-root .mn-panel'); if(d&&d.moved){ if(d.h.classList.contains('mn-fab')) window.__mnNoClick=Date.now(); mnGeo.x=Math.max(0,Math.min(mnGeo.x,window.innerWidth-90)); mnGeo.y=Math.max(0,Math.min(mnGeo.y,window.innerHeight-60)); mnGeoSave(); }
+    else if(rs&&window.__mnRz){ mnGeo.w=rs.offsetWidth; mnGeo.h=rs.offsetHeight; mnGeoSave(); }
+    window.__mnRz=false; d=null; });
+  document.addEventListener('click',e=>{ if(window.__mnNoClick&&Date.now()-window.__mnNoClick<400&&e.target.closest&&e.target.closest('.mn-fab')){ e.stopPropagation(); e.preventDefault(); } },true);
+})();
+function mnGeoReset(){ mnGeo={}; mnGeoSave(); const r=document.getElementById('mn-root'); if(r){ r.style.left=r.style.top=r.style.bottom=''; } mnRender(); }
 function mnRoot(){ let r=document.getElementById('mn-root'); if(!r){ r=document.createElement('div'); r.id='mn-root'; document.body.appendChild(r); } return r; }
 function mnLinkHtml(g,l){ const k=l.link; const tt=k&&store.task(k.tid); const ss=k&&k.sid&&tt&&(tt.subtasks||[]).find(x=>x.id===k.sid);
   const P=mnRev&&mnRev.pick&&mnRev.pick.lid===l.id?mnRev.pick:null;
@@ -3765,7 +3779,7 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
   if(mnPre&&!g&&mnOpen) h+=mnPrePanel();
   if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-panel">${mnPanelHtml(g)}</div>`;
     h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
-  r.innerHTML=h;
+  r.innerHTML=h; mnGeoApply();
   const ni=document.getElementById('mn-in'); if(ni&&keep){ ni.value=keep.v; if(keep.f){ ni.focus(); try{ ni.setSelectionRange(keep.s,keep.s); }catch(_){} } } const nl=document.querySelector('.mn-lines'); if(nl) nl.scrollTop=lt; }
 setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ if(e.dataset.end) return; e.textContent=mnClockTxt(Date.now()-new Date(e.dataset.start)); }); },1000);
 /* ---- Resumen imprimible, permisos y acceso por código desde el link de la sesión ---- */
@@ -3775,6 +3789,10 @@ function mnLogEdit(label){ const g=mnGet(); if(g&&g.m.estado!=='curso') logEvent
 function mnSumOpen(tid,sid,mid){ mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
 function mnSumClose(){ mnSum=null; render(); }
 function mnSumPick(mid){ mnSum.mid=mid; render(); }
+function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!['gerente','gerencia'].includes(role)){ shareToast('Solo Gerencia o Dirección pueden eliminar una minuta.'); return; }
+  if(!confirm('¿Eliminar esta minuta de «'+g.s.name+'» ('+dLabel(g.m.start.slice(0,10))+')? No se puede deshacer.')) return;
+  store.updateSubtask(g.t.id,g.s.id,{minutas:(g.s.minutas||[]).filter(x=>x.id!==g.m.id)}); logEvent(g.t.id,'Eliminó la minuta del '+dLabel(g.m.start.slice(0,10))+' de «'+g.s.name+'»');
+  if(mnV&&mnV.mid===g.m.id){ mnV=null; try{ localStorage.removeItem(MN_KEY); }catch(_){} } mnSum.mid=''; mnRender(); render(); }
 function mnSumStart(){ const {tid,sid}=mnSum; mnSum=null; mnStart(tid,sid); render(); }
 function mnSumEdit(){ const g=mnSumGet(); if(!g||!g.m) return; mnSum=null; mnView(g.t.id,g.s.id,g.m.id); render(); }
 function mnSumGet(){ if(!mnSum) return null; const t=store.task(mnSum.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnSum.sid); if(!s) return null; const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1); const m=mnSum.mid?ms.find(x=>x.id===mnSum.mid):ms[0]; return {t,s,ms,m:m||null}; }
@@ -3792,7 +3810,7 @@ function mnSumModal(){ const esc=mnEsc; const g=mnSumGet(); if(!g){ mnSum=null; 
     <div class="field"><label>🔗 Link de la sesión</label><div style="display:flex;gap:6px"><input readonly value="${esc(url||'Se genera al copiarlo')}" style="flex:1;font-size:.78rem" onfocus="this.select()"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}');setTimeout(render,300)">Copiar</button></div></div>
     ${m?`${ms.length>1?`<div class="mn-chips" style="margin-bottom:8px">${ms.map(x=>`<button class="mn-chip ${x.id===m.id?'on':''}" onclick="mnSumPick('${x.id}')">${esc(dLabel(x.start.slice(0,10)))} · ${x.estado==='curso'?'en curso':mnClockTxt(new Date(x.end)-new Date(x.start))}</button>`).join('')}</div>`:''}${mnSumBody(g)}
       <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${role==='gerencia'?'Solo Dirección edita; cada cambio queda en el log.':'Solo Dirección puede editar una minuta cerrada.'}</span>
-        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
+        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}${['gerente','gerencia'].includes(role)?`<button class="btn ghost" style="color:#c0392b" onclick="mnDel()">🗑 Eliminar</button>`:''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
     :`<div class="ses-resp" style="background:#f2f1ea;color:#4b5b54;margin:8px 0">Esta cita todavía no tiene minuta.</div>${mnRoleOk()?`<button class="mn-play" onclick="mnSumStart()">▶ Iniciar minuta</button>`:'<div class="muted" style="font-size:.78rem">Solo PM, Gerencia o Dirección pueden iniciarla.</div>'}`}
     ${m&&m.estado!=='curso'&&mnRoleOk()?`<div style="margin-top:8px"><a style="cursor:pointer;color:var(--green);font-weight:700;font-size:.8rem" onclick="mnSumStart()">＋ Iniciar otra minuta de esta cita</a></div>`:''}</div></div></div>`; }
 function mnPrint(){ const g=mnSumGet(); if(!g||!g.m) return; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const by=store.person(m.by).name||'—'; const hx=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
