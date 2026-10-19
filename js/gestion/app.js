@@ -1164,13 +1164,14 @@ function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){ale
   const i=list.findIndex(x=>x.id===f.id); if(i>=0) list[i]=f; else list.push(f);
   saveGestFilters(list); qm=null; applyGestFilter(f.id); }
 function delGestFilter(){ if(!confirm('¿Eliminar esta vista?')) return; saveGestFilters(gestFilters().filter(x=>x.id!==qm.fid)); if(gestFilterId===qm.fid) clearGestFilter(true); qm=null; render(); }
-function setGestSub(v){ gestSub=v; if(v==='citas') gestScope='mes'; render(); }
+function setGestSub(v){ gestSub=v; if(v==='citas'||v==='min') gestScope='mes'; else if(gestScope==='todo') gestScope='mes'; render(); }
 function setGestScope(s){ gestScope=s; render(); }
 function setGestProject(v){ gestProject=v; render(); }
 function setGestPerson(v){ gestPerson=v; render(); }
 function sundayOf(iso){ return addDaysISO(iso, -isoWeekday(iso)); }
 function gestRange(){
   const pad=n=>String(n).padStart(2,'0');
+  if(gestScope==='todo') return {start:'0000-01-01',end:'9999-12-31'};
   if(gestScope==='dia') return {start:gestAnchor,end:gestAnchor};
   if(gestScope==='semana'){ const s=sundayOf(gestAnchor); return {start:s,end:addDaysISO(s,6)}; }
   const [y,m]=gestAnchor.split('-').map(Number); const last=new Date(Date.UTC(y,m,0)).getUTCDate();
@@ -1179,11 +1180,13 @@ function gestRange(){
 function gestRangeLabel(R){
   const ab=iso=>MESES[(+iso.split('-')[1])-1].slice(0,3).toLowerCase();
   const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']; const dn=iso=>+iso.split('-')[2];
+  if(gestScope==='todo') return 'Todo el historial';
   if(gestScope==='dia') return `${WD[isoWeekday(gestAnchor)]} ${dn(gestAnchor)} ${ab(gestAnchor)} ${gestAnchor.slice(0,4)}`;
   if(gestScope==='semana'){ const s=R.start,e=R.end; return `${dn(s)} ${ab(s)} – ${dn(e)} ${ab(e)}`; }
   const [y,m]=gestAnchor.split('-').map(Number); return `${MESES[m-1]} ${y}`;
 }
 function gestShift(dir){
+  if(gestScope==='todo') return;
   if(gestScope==='dia') gestAnchor=addDaysISO(gestAnchor,dir);
   else if(gestScope==='semana') gestAnchor=addDaysISO(gestAnchor,dir*7);
   else { let [y,m]=gestAnchor.split('-').map(Number); m+=dir; if(m<1){m=12;y--;} if(m>12){m=1;y++;} gestAnchor=`${y}-${String(m).padStart(2,'0')}-01`; }
@@ -1204,7 +1207,7 @@ function viewGestion(){
       <button class="gf-chip gf-new" onclick="openGestFilterForm()">+ Nueva vista</button>
     </div>
     <div class="kb-ctl">
-      <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button></div>
+      <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button>${gestSub==='min'?`<button class="${gestScope==='todo'?'on':''}" onclick="setGestScope('todo')">Todo</button>`:''}</div>
       <label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="setGestProject(this.value)">${projOpts}</select></label>
       <label class="filt"><span class="glabel">Persona</span><select class="filter-val" onchange="setGestPerson(this.value)">${persOpts}</select></label>
       <div class="kb-month"><button onclick="gestShift(-1)" title="Anterior">‹</button><span class="kb-month-lbl">${gestRangeLabel(R)}</span><button onclick="gestShift(1)" title="Siguiente">›</button></div>
@@ -3857,12 +3860,15 @@ function mnBlock(t,s){ const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.st
 /* Gestión → Minutas */
 function mnAll(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; (t.subtasks||[]).forEach(s=>(s.minutas||[]).forEach(m=>out.push({t,s,m,p,c:store.client(p.clientId)||{name:''}}))); }); return out.sort((a,b)=>a.m.start<b.m.start?1:-1); }
 let mnFilK='', mnFilQ='';
-function gestMinutas(){ const today=mnTodayCitas(); let all=mnAll(); if(mnFilK) all=all.filter(x=>x.m.kind===mnFilK); if(mnFilQ){ const q=impNz(mnFilQ); all=all.filter(x=>impNz(x.s.name+' '+x.c.name+' '+x.t.name+' '+x.m.lines.map(l=>l.txt).join(' ')).includes(q)); }
+function mnQFocus(){ const e=document.getElementById('mn-q'); if(e){ e.focus(); const n=e.value.length; try{ e.setSelectionRange(n,n); }catch(_){} } }
+function gestMinutas(){ const R=gestRange(); const td=todayISO(); const pers=x=>!gestPerson||x.s.personId===gestPerson||x.m&&(x.m.by===gestPerson||(x.m.asist||[]).some(a=>a.id===gestPerson))||(!x.m&&((x.s.team||[]).includes(gestPerson)));
+  let today=(td>=R.start&&td<=R.end)?mnTodayCitas().map(x=>Object.assign(x,{p:store.project(x.t.projectId)||{},c:store.client((store.project(x.t.projectId)||{}).clientId)||{name:''}})).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(pers):[];
+  let all=mnAll().filter(x=>{ const d=x.m.start.slice(0,10); return d>=R.start&&d<=R.end; }).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(pers); if(mnFilK) all=all.filter(x=>x.m.kind===mnFilK); if(mnFilQ){ const q=impNz(mnFilQ); all=all.filter(x=>impNz(x.s.name+' '+x.c.name+' '+x.t.name+' '+x.m.lines.map(l=>l.txt).join(' ')).includes(q)); }
   const rowT=x=>`<div class="cita-row"><div class="cita-when"><b>${x.s.time||'hoy'}</b><span>${x.k==='cliente'?'cliente':'interna'}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)}</div><div class="muted" style="font-size:.78rem">${esc((store.client((store.project(x.t.projectId)||{}).clientId)||{}).name||'')} · ${esc(x.t.name)}</div></div><div class="cita-side"><button class="btn sm" onclick="mnSumOpen('${x.t.id}','${x.s.id}')">📝 Ver minuta</button></div></div>`;
-  return `<div class="sec-title"><h2 style="font-size:1.1rem">Citas de hoy</h2><button class="btn sm" onclick="mnNewOpen()">+ Nueva minuta</button></div><div class="cita-list">${today.map(rowT).join('')||'<div class="muted">Hoy no hay citas con hora y más de una persona.</div>'}</div>
-    <div class="sec-title" style="margin-top:18px"><h2 style="font-size:1.1rem">Historial de minutas</h2><div style="display:flex;gap:8px"><select onchange="mnFilK=this.value;render()"><option value="">Todas</option><option value="cliente" ${mnFilK==='cliente'?'selected':''}>Con cliente</option><option value="interna" ${mnFilK==='interna'?'selected':''}>Internas</option></select><input placeholder="Buscar…" value="${esc(mnFilQ)}" onchange="mnFilQ=this.value;render()" style="width:180px"></div></div>
+  return `<div class="sec-title"><h2 style="font-size:1.1rem">Citas de hoy${(R.start>td||R.end<td)?' <span class="muted" style="font-weight:400">(fuera del periodo)</span>':''}</h2><button class="btn sm" onclick="mnNewOpen()">+ Nueva minuta</button></div><div class="cita-list">${today.map(rowT).join('')||'<div class="muted">Hoy no hay citas con hora y más de una persona.</div>'}</div>
+    <div class="sec-title" style="margin-top:18px"><h2 style="font-size:1.1rem">Historial de minutas <span class="muted" style="font-weight:400">· ${all.length} · ${esc(gestRangeLabel(R))}</span></h2><div style="display:flex;gap:8px"><select onchange="mnFilK=this.value;render()"><option value="">Todas</option><option value="cliente" ${mnFilK==='cliente'?'selected':''}>Con cliente</option><option value="interna" ${mnFilK==='interna'?'selected':''}>Internas</option></select><input id="mn-q" placeholder="Buscar…" value="${esc(mnFilQ)}" oninput="mnFilQ=this.value;render();mnQFocus()" style="width:180px"></div></div>
     <div class="cita-list">${all.map(x=>{ const a=x.m.lines.filter(l=>l.kind==='a'); const dur=x.m.end?mnClockTxt(new Date(x.m.end)-new Date(x.m.start)):'en curso';
-      return `<div class="cita-row" style="cursor:pointer" onclick="mnSumOpen('${x.t.id}','${x.s.id}','${x.m.id}')"><div class="cita-when"><b>${dLabel(x.m.start.slice(0,10))}</b><span>${dur}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)} <span class="pill ${x.m.kind==='cliente'?'green':'yellow'}">${x.m.kind==='cliente'?'con cliente':'interna'}</span></div><div class="muted" style="font-size:.78rem">${esc(x.c.name)} · ${esc(x.p.name)} · ${esc(x.t.name)}</div></div><div class="cita-side"><div class="muted" style="font-size:.76rem">${x.m.lines.length-a.length} nota(s) · ${a.length} actividad(es) · ${a.filter(l=>l.link).length} ligada(s)${x.m.links.length?' · 🔗 '+x.m.links.length:''}</div></div></div>`; }).join('')||'<div class="muted">Aún no hay minutas. Se crean desde una cita o con «+ Nueva minuta».</div>'}</div>`; }
+      return `<div class="cita-row" style="cursor:pointer" onclick="mnSumOpen('${x.t.id}','${x.s.id}','${x.m.id}')"><div class="cita-when"><b>${dLabel(x.m.start.slice(0,10))}</b><span>${dur}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)} <span class="pill ${x.m.kind==='cliente'?'green':'yellow'}">${x.m.kind==='cliente'?'con cliente':'interna'}</span></div><div class="muted" style="font-size:.78rem">${esc(x.c.name)} · ${esc(x.p.name)} · ${esc(x.t.name)}</div></div><div class="cita-side"><div class="muted" style="font-size:.76rem">${x.m.lines.length-a.length} nota(s) · ${a.length} actividad(es) · ${a.filter(l=>l.link).length} ligada(s)${x.m.links.length?' · 🔗 '+x.m.links.length:''}</div></div></div>`; }).join('')||'<div class="muted">No hay minutas con estos filtros. Prueba con «Todo» o quita filtros. Se crean desde una cita o con «+ Nueva minuta».</div>'}</div>`; }
 /* nueva minuta interna (Daily / Weekly / Monthly / otra) */
 function mnNewOpen(){ mnNew={tipo:'Daily',nombre:'',team:[]}; render(); }
 function mnNewClose(){ mnNew=null; render(); }
