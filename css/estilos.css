@@ -1081,3 +1081,5 @@
   .mn-sm h5{margin:12px 0 4px;font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}.mn-sm-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:#4b5b54}.mn-sl{padding:3px 0;font-size:.84rem;border-bottom:1px solid #f2f1ea}.mn-sm a{color:var(--green);font-weight:600}
 
   .mn-panel{resize:both;min-width:min(300px,calc(100vw - 32px));min-height:200px}.mn-h,.mn-fab{cursor:grab;touch-action:none;user-select:none}.mn-h:active,.mn-fab:active{cursor:grabbing}
+
+  .mn-hd{cursor:grab;color:#c3cbc6;font-size:.95rem;padding:0 2px;user-select:none}.mn-ln:hover .mn-hd{color:var(--green)}.mn-ln.drag{opacity:.4}.mn-ln.over{box-shadow:0 -2px 0 var(--green)}
