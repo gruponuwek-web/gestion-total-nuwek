@@ -1223,8 +1223,10 @@ function gestCalendar(R){
 function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function gestCitas(){ let all=citasAll().filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
-  const [y,m]=gestAnchor.split('-').map(Number); const mi=all.filter(x=>x.s.date.slice(0,7)===gestAnchor.slice(0,7)); const n=k=>mi.filter(x=>x.est.k===k).length;
-  return `<div class="cita-leg"><span style="color:#1f7a44">● Confirmadas ${n('confirmado')}</span><span style="color:#9a7a00">● Piden reprogramar ${n('reprogramar')}</span><span style="color:#c0392b">● Canceladas ${n('cancelado')}</span><span style="color:#6b7a73">● Sin respuesta ${n('pendiente')}</span></div>`+gestMonthView(byDay,citaChip); }
+  if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
+  const R=gestRange(); const mi=all.filter(x=>x.s.date>=R.start&&x.s.date<=R.end); const n=k=>mi.filter(x=>x.est.k===k).length;
+  const view=gestScope==='dia'?(mi.length?`<div class="cita-list">${mi.slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1).map(x=>citaCard(x,true,false)).join('')}</div>`:'<div class="gc-day"><div class="muted" style="padding:24px;text-align:center">Sin citas este día.</div></div>'):gestScope==='semana'?gestWeekView(byDay,citaChip):gestMonthView(byDay,citaChip);
+  return `<div class="cita-leg"><span style="color:#1f7a44">● Confirmadas ${n('confirmado')}</span><span style="color:#9a7a00">● Piden reprogramar ${n('reprogramar')}</span><span style="color:#c0392b">● Canceladas ${n('cancelado')}</span><span style="color:#6b7a73">● Sin respuesta ${n('pendiente')}</span></div>`+view; }
 function gestMonthView(byDay,chipFn){ chipFn=chipFn||gestChip;
   const pad=n=>String(n).padStart(2,'0'); const [y,m]=gestAnchor.split('-').map(Number);
   const last=new Date(Date.UTC(y,m,0)).getUTCDate();
@@ -1241,11 +1243,11 @@ function gestMonthView(byDay,chipFn){ chipFn=chipFn||gestChip;
   }
   return `<div class="gc-grid"><div class="gc-wdhead">${WD.map(d=>`<div class="gc-wd">${d}</div>`).join('')}</div><div class="gc-cells">${cells}</div></div>`;
 }
-function gestWeekView(byDay){
+function gestWeekView(byDay,chipFn){ chipFn=chipFn||gestChip;
   const s=sundayOf(gestAnchor); const WD=['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB']; const today=todayISO();
   let cols='';
   for(let i=0;i<7;i++){ const day=addDaysISO(s,i); const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
-    const chips=items.map(gestChip).join('')||'<div class="gc-none">—</div>';
+    const chips=items.map(chipFn).join('')||'<div class="gc-none">—</div>';
     cols+=`<div class="gc-wcol"><div class="gc-wh ${day===today?'today':''}">${WD[i]} ${+day.split('-')[2]}</div><div class="gc-wbody">${chips}</div></div>`;
   }
   return `<div class="gc-week">${cols}</div>`;
