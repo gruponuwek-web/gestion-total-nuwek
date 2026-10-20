@@ -2855,7 +2855,7 @@ async function boot(){
     if(typeof dbLoadComentarios==='function'){ store.d.comments = await dbLoadComentarios(); store.save(); }
     if(typeof dbLoadLog==='function'){ store.d.log = await dbLoadLog(); store.save(); }
     if(typeof dbLoadTags==='function'){ store.d.tags = await dbLoadTags(); store.save(); }
-    try{ const pf=await dbLoadPerfiles(); if(pf){ store.d.perfiles=pf; perfVer++; store.save(); } }catch(_){}
+    try{ const pf=await dbLoadPerfiles(); if(pf){ const loc=store.d.perfiles||[]; const falta=loc.filter(l=>!pf.some(x=>x.id===l.id)); if(falta.length){ perfDirty=true; store.d.perfiles=pf.concat(falta); } else store.d.perfiles=pf; perfVer++; store.save(); } }catch(_){}
     if(typeof dbLoadPagos==='function'){ store.d.payments = await dbLoadPagos(); store.save(); }
   }catch(e){
     console.error('Error cargando Personal desde Supabase:', e);
@@ -2901,14 +2901,14 @@ async function syncTables(set){
     if(want('clientes')&&typeof dbLoadClientes==='function') jobs.clients=dbLoadClientes();
     if(want('personal')&&typeof dbLoadPersonal==='function') jobs.staff=dbLoadPersonal();
     if(want('etiquetas')&&typeof dbLoadTags==='function') jobs.tags=dbLoadTags();
-    if(set.has('all')) jobs.perfiles=dbLoadPerfiles();
+    if(set.has('all')){ jobs.perfiles=dbLoadPerfiles(); perfRetry(); }
     const keys=Object.keys(jobs); const vals=await Promise.all(keys.map(k=>jobs[k])); const got={}; keys.forEach((k,i)=>got[k]=vals[i]);
     if(lastLocalWrite>t0-1500) return;          // acabas de guardar algo: no lo pises, el siguiente ciclo lo trae
     let changed=false; const put=(k,v)=>{ if(JSON.stringify(store.d[k])!==JSON.stringify(v)){ store.d[k]=v; changed=true; } };
     if(got.comments){ const prev={}; (store.d.comments||[]).forEach(c=>{ if(c.attachments!==undefined) prev[c.id]=c.attachments; }); got.comments.forEach(c=>{ if(c.attachments===undefined&&prev[c.id]!==undefined) c.attachments=prev[c.id]; }); }
     if(got.tasks) put('tasks',got.tasks); if(got.comments) put('comments',got.comments); if(got.log) put('log',got.log); if(got.payments) put('payments',got.payments);
     if(got.pr){ put('projects',got.pr.projects); put('frentes',got.pr.frentes); put('etapas',got.pr.etapas); }
-    if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags); if(got.perfiles){ const b=JSON.stringify(store.d.perfiles||[]); put('perfiles',got.perfiles); if(b!==JSON.stringify(got.perfiles)) perfVer++; }
+    if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags); if(got.perfiles&&!perfDirty){ const b=JSON.stringify(store.d.perfiles||[]); put('perfiles',got.perfiles); if(b!==JSON.stringify(got.perfiles)) perfVer++; }
     if(!changed) return;
     if(modalTask&&!store.task(modalTask)){ modalTask=null; editingTask=null; }
     if(opSelTask&&!store.task(opSelTask)) opSelTask=null;
@@ -4035,11 +4035,15 @@ const PERF_SQL=`create table if not exists perfiles (
   miembros jsonb default '[]'::jsonb,
   builtin boolean default false
 );
-alter table perfiles disable row level security;
+alter table perfiles enable row level security;
+drop policy if exists "perfiles_abierto" on perfiles;
+create policy "perfiles_abierto" on perfiles for all to anon, authenticated using (true) with check (true);
 grant all on perfiles to anon, authenticated;`;
-async function dbLoadPerfiles(){ try{ const {data,error}=await sb.from('perfiles').select('*'); if(error) throw error; perfDbState='ok'; return (data||[]).map(r=>({id:r.id,name:r.name||'',base:r.base||'colab',perms:r.perms||{},miembros:Array.isArray(r.miembros)?r.miembros:[],builtin:!!r.builtin})); }catch(e){ perfDbState='missing'; return null; } }
-async function dbSavePerfil(pf){ try{ const {error}=await sb.from('perfiles').upsert({id:pf.id,name:pf.name,base:pf.base,perms:pf.perms||{},miembros:pf.miembros||[],builtin:!!pf.builtin}); if(error) throw error; perfDbState='ok'; }catch(e){ perfDbState='missing'; console.warn('perfiles:',e&&e.message||e); } }
+let perfDirty=false, perfErr='';
+async function dbLoadPerfiles(){ try{ const {data,error}=await sb.from('perfiles').select('*'); if(error) throw error; if(perfDbState!=='rls') perfDbState='ok'; return (data||[]).map(r=>({id:r.id,name:r.name||'',base:r.base||'colab',perms:r.perms||{},miembros:Array.isArray(r.miembros)?r.miembros:[],builtin:!!r.builtin})); }catch(e){ perfDbState='missing'; perfErr=(e&&e.message)||''; return null; } }
+async function dbSavePerfil(pf){ try{ const {error}=await sb.from('perfiles').upsert({id:pf.id,name:pf.name,base:pf.base,perms:pf.perms||{},miembros:pf.miembros||[],builtin:!!pf.builtin}); if(error) throw error; perfDbState='ok'; perfErr=''; return true; }catch(e){ perfErr=(e&&e.message)||''; perfDbState=/row-level security|permission denied/i.test(perfErr)?'rls':'missing'; perfDirty=true; console.warn('perfiles:',perfErr); return false; } }
 async function dbDeletePerfil(id){ try{ const {error}=await sb.from('perfiles').delete().eq('id',id); if(error) throw error; }catch(e){ console.warn('perfiles:',e&&e.message||e); } }
+async function perfRetry(){ if(!perfDirty) return; const list=(store.d.perfiles||[]).slice(); if(!list.length){ perfDirty=false; return; } let ok=true; for(const pf of list){ if(!(await dbSavePerfil(pf))) ok=false; } if(ok){ perfDirty=false; render(); } }
 function perfPut(pf){ const list=(store.d.perfiles||[]).filter(x=>x.id!==pf.id); list.push(pf); store.d.perfiles=list; perfVer++; store.save(); dbSavePerfil(pf); }
 function perfOpen(id){ perfSel=id; const p=perfAll().find(x=>x.id===id); perfDraft=p?JSON.parse(JSON.stringify(p)):null; perfMsg=''; render(); }
 function perfNew(){ perfSel='nuevo'; perfDraft={id:'',name:'',base:'colab',builtin:false,perms:{},miembros:[]}; perfMsg=''; render(); }
@@ -4061,7 +4065,7 @@ function viewPerfiles(){ const esc=mnEsc; if(!isDireccion()) return '<div class=
   const all=perfAll(); const staff=store.activeStaff(); const d=perfDraft;
   const countOf=pf=>pf.builtin?staff.filter(u=>(u.perm||'colab')===pf.id&&!all.some(x=>!x.builtin&&(x.miembros||[]).includes(u.id))).length:(pf.miembros||[]).filter(id=>staff.some(u=>u.id===id)).length;
   const list=all.map(pf=>`<div class="lib-side-it${perfSel===pf.id?' on':''}" onclick="perfOpen('${pf.id}')"><span class="lib-side-nm">${pf.builtin?'🔒':'🔐'} ${esc(pf.name)}<br><span class="muted" style="font-size:.68rem">${pf.builtin?'Perfil base':'Personalizado · se comporta como '+PERM_BASES[pf.base]}</span></span><span class="lib-side-n">${countOf(pf)}</span></div>`).join('');
-  const banner=perfDbState==='missing'?`<div class="ses-resp" style="background:#fff7e0;color:#7a5a00;margin-bottom:12px"><b>⚠ Falta crear la tabla en Supabase.</b> Mientras tanto, los perfiles solo se guardan en este navegador y los demás no los verán. Entra a Supabase → SQL Editor, pega esto y dale Run:<pre style="white-space:pre-wrap;background:#fff;border-radius:8px;padding:8px;margin:8px 0;font-size:.74rem">${esc(PERF_SQL)}</pre><button class="btn ghost sm" onclick="perfCopySql()">Copiar SQL</button></div>`:'';
+  const banner=(perfDbState==='missing'||perfDbState==='rls')?`<div class="ses-resp" style="background:#fff7e0;color:#7a5a00;margin-bottom:12px"><b>⚠ ${perfDbState==='rls'?'Supabase no deja guardar en la tabla «perfiles» (falta su permiso).':'Falta crear la tabla «perfiles» en Supabase.'}</b> Mientras tanto, los perfiles solo viven en este navegador y los demás no los verán. Entra a Supabase → SQL Editor, pega esto y dale Run (se puede correr aunque ya la tengas):<pre style="white-space:pre-wrap;background:#fff;border-radius:8px;padding:8px;margin:8px 0;font-size:.74rem">${esc(PERF_SQL)}</pre><button class="btn ghost sm" onclick="perfCopySql()">Copiar SQL</button> <span class="muted" style="font-size:.72rem">${esc(perfErr)}</span></div>`:'';
   let det;
   if(!d) det=`<div class="muted" style="padding:22px;text-align:center">Elige un perfil de la izquierda para verlo o editarlo, o crea uno nuevo.</div>`;
   else{ const lock=d.id==='gerencia'; const grp=PERM_KEYS.map(([k,l,desc])=>`<label class="perf-row ${lock?'lock':''}"><input type="checkbox" ${d.perms[k]?'checked':''} ${lock?'disabled':''} onchange="perfToggle('${k}',this.checked)"><span><b>${esc(l)}</b><span class="muted" style="display:block;font-size:.74rem">${esc(desc)}</span></span></label>`).join('');
