@@ -1083,3 +1083,5 @@
   .mn-panel{resize:both;min-width:min(300px,calc(100vw - 32px));min-height:200px}.mn-h,.mn-fab{cursor:grab;touch-action:none;user-select:none}.mn-h:active,.mn-fab:active{cursor:grabbing}
 
   .mn-hd{cursor:grab;color:#c3cbc6;font-size:.95rem;padding:0 2px;user-select:none}.mn-ln:hover .mn-hd{color:var(--green)}.mn-ln.drag{opacity:.4}.mn-ln.over{box-shadow:0 -2px 0 var(--green)}
+
+  .sub-chip.cita-warn{background:#fff3d6;color:#9a6a00;border:1px dashed #e0b44c;font-weight:700}
