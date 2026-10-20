@@ -1111,3 +1111,12 @@
   .ga-tbl th.ga-proj-h{z-index:4;background:#fafaf7}
   .ga-tbl td.ga-proj{display:table-cell}.ga-projin{display:flex;align-items:flex-start;gap:8px}
   .ga-chip.ga-part{background:#f1f2ee;border:1px dashed #b3bcb7}
+
+  /* Gestión · semana con horas (8:00–21:00) */
+  .gw{display:grid;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:auto;max-height:calc(100vh - 300px)}
+  .gw-corner{background:#fafaf7;border-bottom:1px solid #eeede6;position:sticky;top:0;z-index:3}.gw-sl{font-size:.62rem;color:var(--muted);padding:4px;display:flex;align-items:center;justify-content:flex-end;position:static}
+  .gw-dh{background:#fafaf7;border-bottom:1px solid #eeede6;border-left:1px solid #f0efe9;padding:8px 6px;text-align:center;font-weight:700;font-size:.74rem;position:sticky;top:0;z-index:3;cursor:pointer;color:#4b5b54}.gw-dh.today{background:#223c36;color:#fff}
+  .gw-strip{border-left:1px solid #f0efe9;border-bottom:1px solid #eeede6;padding:3px;max-height:110px;overflow:auto;display:flex;flex-direction:column;gap:2px;background:#fcfcfa}
+  .gw-hours{position:relative}.gw-hr{font-size:.64rem;color:var(--muted);text-align:right;padding:2px 6px;border-top:1px solid #f0efe9;box-sizing:border-box}
+  .gw-day{position:relative;border-left:1px solid #f0efe9}.gw-line{position:absolute;left:0;right:0;border-top:1px solid #f0efe9}
+  .gw-blk{position:absolute;padding:1px;box-sizing:border-box;z-index:1}.gw-blk .gc-chip{height:100%;box-sizing:border-box;white-space:normal;overflow:hidden;line-height:1.15;box-shadow:0 1px 3px rgba(34,60,54,.18);background:#fff}

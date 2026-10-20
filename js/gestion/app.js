@@ -1172,7 +1172,9 @@ function applyGestFilter(id,silent){ const f=gestFilters().find(x=>x.id===id); i
   try{ localStorage.setItem('gestLast_'+currentUser,f.id); }catch(_){} if(!silent) render(); }
 function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestPeople=[]; gestProject=''; gestPerson='';
   try{ localStorage.removeItem('gestLast_'+currentUser); }catch(_){} if(!silent) render(); }
-function gestPass(x){ return (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.includes(x.s.personId)); }
+function gestInv(s,id){ return s.personId===id||(s.team||[]).includes(id); }   // la persona es responsable o participa
+function gestPersonOk(s){ return !gestPerson||gestInv(s,gestPerson); }
+function gestPass(x){ return (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.some(id=>gestInv(x.s,id))); }
 function openGestFilterForm(id){ const f=id?gestFilters().find(x=>x.id===id):null; qm={kind:'gestFilter',fid:id||null,f:f||{name:'',clients:[],people:[],scope:gestScope}}; render(); }
 function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){alert('Ponle un nombre a la vista.');return;}
   const clients=[...document.querySelectorAll('.gf-cl:checked')].map(x=>x.value), people=[...document.querySelectorAll('.gf-pe:checked')].map(x=>x.value);
@@ -1190,7 +1192,7 @@ function gestRange(){
   const pad=n=>String(n).padStart(2,'0');
   if(gestScope==='todo') return {start:'0000-01-01',end:'9999-12-31'};
   if(gestScope==='dia') return {start:gestAnchor,end:gestAnchor};
-  if(gestScope==='semana'){ const s=sundayOf(gestAnchor); return {start:s,end:addDaysISO(s,6)}; }
+  if(gestScope==='semana'){ const s=mondayOf(gestAnchor); return {start:s,end:addDaysISO(s,6)}; }
   const [y,m]=gestAnchor.split('-').map(Number); const last=new Date(Date.UTC(y,m,0)).getUTCDate();
   return {start:`${y}-${pad(m)}-01`,end:`${y}-${pad(m)}-${pad(last)}`};
 }
@@ -1242,7 +1244,7 @@ function subMark(s){ if(s.done) return '<b class="mk-ok" title="Hecha">✓</b> '
 function tipoLegend(){ return `<div class="tp-leg">${['verde','azul','amarillo'].map(k=>`<span><i class="tp-dot" style="background:${SUBCOL[k][0]}"></i>${SUBCOL[k][1]}</span>`).join('')}<span class="tp-sep">|</span><span><b class="mk-ok">✓</b> hecha</span><span><span class="mk-late">⚠️</span> venció y sigue pendiente</span><span class="muted">· otros colores se eligen al editar la subtarea</span></div>`; }
 function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip${it.s.done?' gc-done':''}" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTaskHi('${it.t.id}','${it.s.id}')">${tipoDot(it.s,it.t)}${subMark(it.s)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
 function gestCalendar(R){
-  let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
+  let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>gestPersonOk(x.s));
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); });
   if(gestScope==='dia') return gestDayView(byDay);
   if(gestScope==='semana') return gestWeekView(byDay);
@@ -1251,9 +1253,8 @@ function gestCalendar(R){
 function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip${s.done?' gc-done':''}" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTaskHi('${t.id}','${s.id}')">${tipoDot(s,t)}${subMark(s)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function citasInternas(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; const c=store.client(p.clientId)||{name:'',id:''};
   (t.subtasks||[]).forEach(s=>{ if(s.isSeries||citaKind(s)!=='interna') return; out.push({s,t,p,c,est:{k:'interna',t:'Interna',c:'#2f6fd6',bg:'#e8f0fd',razon:'',prop:[]}}); }); }); return out; }
-function gestCitas(){ let all=citasAll().concat(citasInternas()).filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
+function gestCitas(){ let all=citasAll().concat(citasInternas()).filter(x=>x.s.date).filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>gestPersonOk(x.s));
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
-  if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const R=gestRange(); const mi=all.filter(x=>x.s.date>=R.start&&x.s.date<=R.end); const n=k=>mi.filter(x=>x.est.k===k).length;
   const view=gestScope==='dia'?(mi.length?`<div class="cita-list">${mi.slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1).map(x=>citaCard(x,true,false)).join('')}</div>`:'<div class="gc-day"><div class="muted" style="padding:24px;text-align:center">Sin citas este día.</div></div>'):gestScope==='semana'?gestWeekView(byDay,citaChip):gestMonthView(byDay,citaChip);
   const vacio=mi.length?'':`<div class="muted" style="padding:10px 2px;font-size:.84rem">No hay citas con cliente en este periodo con estos filtros. Una cita existe cuando la actividad tiene <b>invitados del cliente</b> (🫱🏽‍🫲🏾); las actividades sin invitados se ven en la pestaña <b>Calendario</b>.</div>`;
@@ -1275,13 +1276,23 @@ function gestMonthView(byDay,chipFn){ chipFn=chipFn||gestChip;
   return `<div class="gc-grid"><div class="gc-wdhead">${WD.map(d=>`<div class="gc-wd">${d}</div>`).join('')}</div><div class="gc-cells">${cells}</div></div>`;
 }
 function gestWeekView(byDay,chipFn){ chipFn=chipFn||gestChip;
-  const s=sundayOf(gestAnchor); const WD=['DOM','LUN','MAR','MIÉ','JUE','VIE','SÁB']; const today=todayISO();
-  let cols='';
-  for(let i=0;i<7;i++){ const day=addDaysISO(s,i); const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
-    const chips=items.map(chipFn).join('')||'<div class="gc-none">—</div>';
-    cols+=`<div class="gc-wcol"><div class="gc-wh ${day===today?'today':''}">${WD[i]} ${+day.split('-')[2]}</div><div class="gc-wbody">${chips}</div></div>`;
+  const mon=mondayOf(gestAnchor); const WD=['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM']; const today=todayISO(); const H0=8,H1=21,rowH=46;
+  const nd=(byDay[addDaysISO(mon,6)]||[]).length?7:6;   // el domingo solo aparece si tiene actividades
+  let head='<div class="gw-corner"></div>', strip='<div class="gw-corner gw-sl">sin hora</div>', body='';
+  const hours=[]; for(let h=H0;h<H1;h++) hours.push(`<div class="gw-hr" style="height:${rowH}px">${h}:00</div>`);
+  body+=`<div class="gw-hours">${hours.join('')}</div>`;
+  for(let i=0;i<nd;i++){ const day=addDaysISO(mon,i); const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
+    const timed=[], loose=[]; items.forEach(it=>{ const m=toMin(it.s.time||''); if(m!=null&&m>=H0*60&&m<H1*60) timed.push({it,st:m,en:Math.min(m+Math.max(+it.s.durMin||30,20),H1*60)}); else loose.push(it); });
+    // acomodo en carriles cuando se traslapan
+    timed.sort((a,b)=>a.st-b.st||a.en-b.en); let cluster=[], cend=0; const flush=()=>{ const lanes=[]; cluster.forEach(e=>{ let l=lanes.findIndex(x=>x<=e.st); if(l<0){ l=lanes.length; lanes.push(0); } lanes[l]=e.en; e.lane=l; }); cluster.forEach(e=>e.n=lanes.length); cluster=[]; };
+    timed.forEach(e=>{ if(cluster.length&&e.st>=cend){ flush(); cend=0; } cluster.push(e); cend=Math.max(cend,e.en); }); if(cluster.length) flush();
+    const blocks=timed.map(e=>`<div class="gw-blk" style="top:${(e.st-H0*60)/60*rowH}px;height:${Math.max((e.en-e.st)/60*rowH,22)}px;left:${e.lane/e.n*100}%;width:${100/e.n}%">${chipFn(e.it)}</div>`).join('');
+    const lines=[]; for(let k=0;k<H1-H0;k++) lines.push(`<div class="gw-line" style="top:${k*rowH}px"></div>`);
+    head+=`<div class="gw-dh ${day===today?'today':''}" onclick="gestGoDay('${day}')" title="Ver solo este día">${WD[i]} ${+day.split('-')[2]}</div>`;
+    strip+=`<div class="gw-strip">${loose.map(it=>chipFn(it)).join('')||'<span class="gc-none">—</span>'}</div>`;
+    body+=`<div class="gw-day" style="height:${(H1-H0)*rowH}px">${lines.join('')}${blocks}</div>`;
   }
-  return `<div class="gc-week">${cols}</div>`;
+  return `<div class="gw" style="grid-template-columns:54px repeat(${nd},minmax(0,1fr))">${head}${strip}${body}</div>`;
 }
 function gestDayView(byDay){
   const day=gestAnchor; const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
@@ -1297,7 +1308,7 @@ function gestDayView(byDay){
 function gestAsignaciones(R){
   let all=gestSubs().filter(gestPass).filter(x=>x.s.date>=R.start && x.s.date<=R.end);
   if(gestProject) all=all.filter(x=>x.p.id===gestProject);
-  if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson||(x.s.team||[]).includes(gestPerson));
+  if(gestPerson) all=all.filter(x=>gestPersonOk(x.s));
   const staff=(gestPerson?store.activeStaff().filter(u=>u.id===gestPerson):store.activeStaff()).filter(u=>!gestPeople.length||gestPeople.includes(u.id));
   const projects=(gestProject?store.d.projects.filter(p=>p.id===gestProject):store.d.projects).filter(p=>!gestClients.length||gestClients.includes(p.clientId)).slice().sort((a,b)=>{ const ca=(store.client(a.clientId)||{}).name||'', cb=(store.client(b.clientId)||{}).name||''; return ca.localeCompare(cb,'es')||(a.name||'').localeCompare(b.name||'','es'); });
   const head=`<th class="ga-proj-h">PROYECTO</th>`+staff.map(u=>`<th class="ga-ph"><div class="ga-phin">${avatar(u,true)}<span>${u.name}</span></div></th>`).join('');
