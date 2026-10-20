@@ -1217,9 +1217,16 @@ function viewGestion(){
       <div class="kb-month"><button onclick="gestShift(-1)" title="Anterior">‹</button><span class="kb-month-lbl">${gestRangeLabel(R)}</span><button onclick="gestShift(1)" title="Siguiente">›</button></div>
       <button class="btn sm" style="margin-left:auto" onclick="openKbTask()">+ Tarea</button>
     </div>
+    ${(gestSub==='cal'||gestSub==='citas')?tipoLegend():''}
     ${body}`;
 }
-function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip" style="border-left:3px solid ${fr.color}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name}" onclick="openTask('${it.t.id}')">${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
+/* ---- color distintivo por tipo de actividad (calendarios): cliente=verde · equipo=azul · trabajo solo=amarillo; editable: morado, gris, rojo ---- */
+const SUBCOL={verde:['#2f9e5b','Con cliente'],azul:['#2f6fd6','Con el equipo'],amarillo:['#e0a800','Trabajo solo'],morado:['#7d4fd1','Morado'],gris:['#8a948f','Gris'],rojo:['#d23b3b','Rojo (vacaciones / incapacidad)']};
+function subTipo(s,t){ let m=s; if(!(m&&m.color&&SUBCOL[m.color])&&s&&s.seriesId&&t) m=(t.subtasks||[]).find(x=>x.id===s.seriesId)||s; if(m&&m.color&&SUBCOL[m.color]) return m.color; const k=citaKind(s); return k==='cliente'?'verde':k==='interna'?'azul':'amarillo'; }
+function tipoCol(s,t){ return SUBCOL[subTipo(s,t)][0]; }
+function tipoDot(s,t){ const k=subTipo(s,t); return `<i class="tp-dot" style="background:${SUBCOL[k][0]}" title="${SUBCOL[k][1]}"></i>`; }
+function tipoLegend(){ return `<div class="tp-leg">${['verde','azul','amarillo'].map(k=>`<span><i class="tp-dot" style="background:${SUBCOL[k][0]}"></i>${SUBCOL[k][1]}</span>`).join('')}<span class="muted">· otros colores: se eligen al editar la subtarea</span></div>`; }
+function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTask('${it.t.id}')">${tipoDot(it.s,it.t)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
 function gestCalendar(R){
   let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); });
@@ -1227,7 +1234,7 @@ function gestCalendar(R){
   if(gestScope==='semana') return gestWeekView(byDay);
   return gestMonthView(byDay);
 }
-function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
+function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${tipoDot(s,t)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function gestCitas(){ let all=citasAll().filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
   if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
@@ -1263,9 +1270,9 @@ function gestDayView(byDay){
   const day=gestAnchor; const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
   if(!items.length) return `<div class="gc-day"><div class="muted" style="padding:24px;text-align:center">Sin actividades este día.</div></div>`;
   const rows=items.map(it=>{ const fr=kbFrente(it.t); const per=store.person(it.s.personId);
-    return `<div class="gc-drow" onclick="openTask('${it.t.id}')" style="border-left:4px solid ${fr.color}">
+    return `<div class="gc-drow" onclick="openTask('${it.t.id}')" style="border-left:5px solid ${tipoCol(it.s,it.t)}">
       <div class="gc-dtime">${it.s.time||'—'}</div>
-      <div class="gc-dmain"><div class="gc-dname">${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="gc-dmeta">${it.c.name} · ${it.p.name} · ${fr.name} · ${avatar(per,true)} ${per.name}</div></div>
+      <div class="gc-dmain"><div class="gc-dname">${tipoDot(it.s,it.t)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="gc-dmeta">${it.c.name} · ${it.p.name} · ${fr.name} · ${avatar(per,true)} ${per.name}</div></div>
       <div class="gc-ddur">${fmtDurShort(it.s.durMin||30)}</div></div>`;
   }).join('');
   return `<div class="gc-day">${rows}</div>`;
@@ -1317,7 +1324,7 @@ function agCalendar(days,pid){
       const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
       const sel=agSel&&agSel.sid===it.s.id;
       const canDrag=canEdit&&!it.part;
-      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${it.part?'🤝 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
+      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color};border-left:6px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${tipoDot(it.s,it.t)}${it.part?'🤝 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
     }).join('');
     if(off.length) anyOff=true;
     const lines=[]; for(let k=0;k<slots;k++) lines.push(`<div class="ag-line" style="top:${k*rowH}px"></div>`);
@@ -1420,6 +1427,7 @@ function viewAgenda(){
       <button class="btn ghost sm" onclick="agToday()">Hoy</button>
       ${agNotes(days)}
     </div>
+    ${tipoLegend()}
     <div class="ag-split">
       <div class="ag-left"><div class="op-list">${list}</div></div>
       <div class="ag-right">${agCalendar(days,agPerson)}</div>
@@ -3944,6 +3952,7 @@ function subEditModal(){
           <div><label>${s0.isSeries?'Inicio de la serie *':'Fecha *'}</label><input id="sm-date" type="date" value="${s.date||''}" class="${bad(s.date).trim()}" oninput="smDateChange()" ${dateLocked?`disabled title="${SUB_DATE_MSG}"`:''}></div></div>
         <div class="field row"><div><label>Hora *</label><input id="sm-time" type="time" value="${s.time||''}" class="${bad(s.time).trim()}"></div>
           <div><label>Cuánto tardará *</label><select id="sm-dur" class="${bad(s.durMin).trim()}">${durOpts}</select></div></div>
+        <div class="field"><label>Color en los calendarios</label><div class="tp-pick"><label title="Según la actividad: con cliente = verde, con el equipo = azul, trabajo solo = amarillo"><input type="radio" name="sm-col" value="" ${!s0.color?'checked':''}><span class="tp-sw auto">Auto</span></label>${Object.keys(SUBCOL).map(k=>`<label title="${SUBCOL[k][1]}"><input type="radio" name="sm-col" value="${k}" ${s0.color===k?'checked':''}><span class="tp-sw" style="background:${SUBCOL[k][0]}"></span></label>`).join('')}</div><div class="hint">«Auto» pinta verde si es con cliente, azul si es con el equipo y amarillo si es trabajo solo. Rojo está pensado para vacaciones o incapacidades.</div></div>
         <div class="field"><label>Etapa</label><select id="sm-etapa" onchange="smEtapaChange(this.value)" ${dateLocked||!etapas.length?'disabled':''}>${etOpts}</select><div class="hint">La etapa sale de la fecha; al elegir otra, la fecha se mueve al inicio de esa etapa.</div></div>
         ${canParent?`<div class="field"><label>Dentro de</label><select id="sm-parent">${parentOpts}</select></div>`:''}
         ${(!s0.isSeries&&!s0.seriesId)?`<div class="field"><label>⛓ Empieza cuando termina…</label><select id="sm-dep" ${dateLocked?'disabled':''}><option value="">— No depende de nada —</option>${(t.subtasks||[]).filter(m=>m.id!==s0.id&&!m.isSeries&&!m.seriesId&&!depWouldCycle(t,s0.id,m.id)).map(m=>`<option value="${m.id}" ${s0.dependsOn===m.id?'selected':''}>${esc(m.name)}${m.parentId?' (sub-subtarea)':''}</option>`).join('')}</select><div class="hint">Solo una. Si esa otra subtarea se mueve, esta (y las que dependan de esta) se acomodan en días y horas laborales (lunes a viernes, 9:00 a 18:00).</div>
@@ -3982,7 +3991,7 @@ function saveSubModal(){
   const person=val('sm-person')||'';
   const team=[...document.querySelectorAll('.sm-team:checked')].map(i=>i.value).filter(id=>id!==person);
   const cli=[...document.querySelectorAll('.sm-cli:checked')].map(i=>i.value);
-  const patch={name,personId:person,date:val('sm-date')||t.dueDate||'',time:val('sm-time')||'',durMin:+val('sm-dur')||null,team,invitados:cli};
+  const patch={name,personId:person,date:val('sm-date')||t.dueDate||'',time:val('sm-time')||'',durMin:+val('sm-dur')||null,team,invitados:cli}; { const ce=document.querySelector('input[name="sm-col"]:checked'); if(ce) patch.color=SUBCOL[ce.value]?ce.value:undefined; }
   const repMode=document.getElementById('sm-mode')?document.getElementById('sm-mode').value:null;
   if(document.getElementById('sm-rep')) patch.repeatAfter=(repMode==='after')?(Math.max(0,parseInt(val('sm-rep'),10)||0)||null):null;
   // a quién se le avisa: los que se agregaron ahora (por quién y cuándo); si alguien sale, se limpia su aviso
