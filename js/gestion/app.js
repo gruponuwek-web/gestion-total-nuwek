@@ -1225,8 +1225,9 @@ const SUBCOL={verde:['#2f9e5b','Con cliente'],azul:['#2f6fd6','Con el equipo'],a
 function subTipo(s,t){ let m=s; if(!(m&&m.color&&SUBCOL[m.color])&&s&&s.seriesId&&t) m=(t.subtasks||[]).find(x=>x.id===s.seriesId)||s; if(m&&m.color&&SUBCOL[m.color]) return m.color; const k=citaKind(s); return k==='cliente'?'verde':k==='interna'?'azul':'amarillo'; }
 function tipoCol(s,t){ return SUBCOL[subTipo(s,t)][0]; }
 function tipoDot(s,t){ const k=subTipo(s,t); return `<i class="tp-dot" style="background:${SUBCOL[k][0]}" title="${SUBCOL[k][1]}"></i>`; }
-function tipoLegend(){ return `<div class="tp-leg">${['verde','azul','amarillo'].map(k=>`<span><i class="tp-dot" style="background:${SUBCOL[k][0]}"></i>${SUBCOL[k][1]}</span>`).join('')}<span class="muted">· otros colores: se eligen al editar la subtarea</span></div>`; }
-function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTask('${it.t.id}')">${tipoDot(it.s,it.t)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
+function subMark(s){ if(s.done) return '<b class="mk-ok" title="Hecha">✓</b> '; if(s.date&&s.date<todayISO()) return '<span class="mk-late" title="Venció y sigue pendiente">⚠️</span> '; return ''; }
+function tipoLegend(){ return `<div class="tp-leg">${['verde','azul','amarillo'].map(k=>`<span><i class="tp-dot" style="background:${SUBCOL[k][0]}"></i>${SUBCOL[k][1]}</span>`).join('')}<span class="tp-sep">|</span><span><b class="mk-ok">✓</b> hecha</span><span><span class="mk-late">⚠️</span> venció y sigue pendiente</span><span class="muted">· otros colores se eligen al editar la subtarea</span></div>`; }
+function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip${it.s.done?' gc-done':''}" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTask('${it.t.id}')">${tipoDot(it.s,it.t)}${subMark(it.s)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
 function gestCalendar(R){
   let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); });
@@ -1234,7 +1235,7 @@ function gestCalendar(R){
   if(gestScope==='semana') return gestWeekView(byDay);
   return gestMonthView(byDay);
 }
-function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${tipoDot(s,t)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
+function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip${s.done?' gc-done':''}" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${tipoDot(s,t)}${subMark(s)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function gestCitas(){ let all=citasAll().filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
   if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
@@ -1272,7 +1273,7 @@ function gestDayView(byDay){
   const rows=items.map(it=>{ const fr=kbFrente(it.t); const per=store.person(it.s.personId);
     return `<div class="gc-drow" onclick="openTask('${it.t.id}')" style="border-left:5px solid ${tipoCol(it.s,it.t)}">
       <div class="gc-dtime">${it.s.time||'—'}</div>
-      <div class="gc-dmain"><div class="gc-dname">${tipoDot(it.s,it.t)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="gc-dmeta">${it.c.name} · ${it.p.name} · ${fr.name} · ${avatar(per,true)} ${per.name}</div></div>
+      <div class="gc-dmain"><div class="gc-dname">${tipoDot(it.s,it.t)}${subMark(it.s)}${esc(it.s.name)}</div><div class="gc-dmeta">${it.c.name} · ${it.p.name} · ${fr.name} · ${avatar(per,true)} ${per.name}</div></div>
       <div class="gc-ddur">${fmtDurShort(it.s.durMin||30)}</div></div>`;
   }).join('');
   return `<div class="gc-day">${rows}</div>`;
@@ -1324,7 +1325,7 @@ function agCalendar(days,pid){
       const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
       const sel=agSel&&agSel.sid===it.s.id;
       const canDrag=canEdit&&!it.part;
-      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color};border-left:6px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${tipoDot(it.s,it.t)}${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':''}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
+      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;background:${f.color};border-left:6px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${tipoDot(it.s,it.t)}${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':(it.s.date&&it.s.date<todayISO()?'⚠️ ':'')}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · ${f.name}</div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
     }).join('');
     if(off.length) anyOff=true;
     const lines=[]; for(let k=0;k<slots;k++) lines.push(`<div class="ag-line" style="top:${k*rowH}px"></div>`);
