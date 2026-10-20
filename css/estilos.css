@@ -1123,3 +1123,4 @@
 
   .gest-row1{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.gest-row1 .gest-tabs{margin-bottom:0}
   .kb-ctl .btn.sm[onclick*="openKbTask"]{margin-left:auto}
+  .gest-row1{align-items:center}.gest-row1 .subtoggle{margin-bottom:0}.gest-row1 .subtoggle button{height:40px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
