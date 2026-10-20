@@ -1414,7 +1414,7 @@ function viewAgenda(){
   const row=it=>{const p=store.project(it.t.projectId),c=store.client(p.clientId),f=kbFrente(it.t);const overdue=it.s.date&&it.s.date<today;
     const pend=(it.t.subtasks||[]).filter(x=>!x.done), sched=pend.filter(x=>x.date&&x.time).length; const sel=agSel&&agSel.sid===it.s.id; const canEdit=agCanEdit();
     return `<div class="ag-item${sel?' sel':''}${it.part?' part':''}" ${(canEdit&&!it.part)?`draggable="true" ondragstart="agListStart(event,'${it.t.id}','${it.s.id}')" ondragend="agListEnd()"`:''} onclick="openAgItem('${it.t.id}','${it.s.id}')" style="border-left:3px solid ${f.color}">
-      <div class="ag-it-nm">${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
+      <div class="ag-it-nm">${tipoDot(it.s,it.t)}${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${esc(it.s.name)} <span class="ag-cnt" title="Subtareas pendientes de esta tarea que ya tienen fecha y hora, de las pendientes totales">📅 ${sched}/${pend.length}</span></div>
       <div class="ag-it-tk">Tarea: ${esc(it.t.name)}</div>
       <div class="ag-it-mt"><span>${c.name} · <span style="color:${f.color};font-weight:600">${f.name}</span></span><span class="ag-it-date">${overdue?'🔴 ':''}${it.s.date?dLabel(it.s.date):'sin fecha'}</span></div></div>`;};
   const sec=(title,icon,arr)=>accSec('ag',title,icon,arr,row);
@@ -2363,7 +2363,7 @@ function taskBody(t,panel){
     return `<div class="sub-group-item"><div class="sub-item sub2${lateD?' is-late':''}${depth?' sub-child':''}${hiSub&&hiSub.sid===s.id?' sub-hi':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>${chev}
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${s.isSeries?'Serie: se palomea cada repetición':(locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas')}"`}>${s.done?'✓':''}</span>
-      <div class="sub-body" title="${esc(detail)}"><div class="sub-nm2 ${s.done?'done':''}">${s.name} ${donePct}</div>${chips?`<div class="sub-chips">${chips}</div>`:''}</div>
+      <div class="sub-body" title="${esc(detail)}"><div class="sub-nm2 ${s.done?'done':''}">${tipoDot(s,t)}${s.name} ${donePct}</div>${chips?`<div class="sub-chips">${chips}</div>`:''}</div>
       ${right}</div>${childForm}</div>`;
   }).join('');
   const persOpts=['<option value="" selected>— Sin responsable —</option>',staffOptEls('',' (Nuwek)'),...clientPeople.map(pp=>`<option value="${pp.id}">${pp.name} (Cliente)</option>`)].join('');
