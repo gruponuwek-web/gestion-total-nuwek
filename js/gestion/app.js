@@ -1241,7 +1241,8 @@ function gestCitas(){ let all=citasAll().filter(x=>x.s.date); if(gestClients.len
   if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const R=gestRange(); const mi=all.filter(x=>x.s.date>=R.start&&x.s.date<=R.end); const n=k=>mi.filter(x=>x.est.k===k).length;
   const view=gestScope==='dia'?(mi.length?`<div class="cita-list">${mi.slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1).map(x=>citaCard(x,true,false)).join('')}</div>`:'<div class="gc-day"><div class="muted" style="padding:24px;text-align:center">Sin citas este día.</div></div>'):gestScope==='semana'?gestWeekView(byDay,citaChip):gestMonthView(byDay,citaChip);
-  return `<div class="cita-leg"><span style="color:#1f7a44">● Confirmadas ${n('confirmado')}</span><span style="color:#9a7a00">● Piden reprogramar ${n('reprogramar')}</span><span style="color:#c0392b">● Canceladas ${n('cancelado')}</span><span style="color:#6b7a73">● Sin respuesta ${n('pendiente')}</span></div>`+view; }
+  const vacio=mi.length?'':`<div class="muted" style="padding:10px 2px;font-size:.84rem">No hay citas con cliente en este periodo con estos filtros. Una cita existe cuando la actividad tiene <b>invitados del cliente</b> (🫱🏽‍🫲🏾); las actividades sin invitados se ven en la pestaña <b>Calendario</b>.</div>`;
+  return `<div class="cita-leg"><span style="color:#1f7a44">● Confirmadas ${n('confirmado')}</span><span style="color:#9a7a00">● Piden reprogramar ${n('reprogramar')}</span><span style="color:#c0392b">● Canceladas ${n('cancelado')}</span><span style="color:#6b7a73">● Sin respuesta ${n('pendiente')}</span></div>`+vacio+view; }
 function gestMonthView(byDay,chipFn){ chipFn=chipFn||gestChip;
   const pad=n=>String(n).padStart(2,'0'); const [y,m]=gestAnchor.split('-').map(Number);
   const last=new Date(Date.UTC(y,m,0)).getUTCDate();
