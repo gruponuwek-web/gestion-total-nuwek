@@ -232,12 +232,12 @@ class Store{
   taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   taskDelLink(tid,idx){ const t=this.task(tid); if(t&&t.links){ t.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  addSubtask(tid,st){ const t=this.task(tid); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  addSubtask(tid,st){ const t=this.task(tid); if(st&&st.date) st.date=okDate(st.date); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   releaseNext(t,s){ const now=new Date().toISOString(); (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id&&!d.done){ d.turno={pred:s.id,predName:s.name,ts:now,by:currentUser}; d.turnoAck={}; } }); }
-  updateSubtask(tid,sid,patch){ const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateSubtask(tid,sid,patch){ if(patch&&patch.date) patch=Object.assign({},patch,{date:okDate(patch.date)}); const t=this.task(tid); const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   /* Ciclo "N días después de terminar": al terminar la subtarea se crea la siguiente (con sus sub-subtareas) en hoy + N */
   spawnNextSubtask(t,s){ const n=+s.repeatAfter; if(!n||(s.nextId&&t.subtasks.some(x=>x.id===s.nextId))) return null;
     const nd=addDaysISO(todayISO(),n); const shift=daysBetween(s.date||todayISO(),nd); const now=new Date().toISOString(); const sid=s.seriesId||s.id;
@@ -537,7 +537,11 @@ function renderSig(){ return [view,selClient,selProject,selTab,(typeof cpView!==
 function domPath(e){ const a=[]; while(e&&e.id!=='app'&&e.id!=='modal-root'&&e.parentElement){ a.push(Array.prototype.indexOf.call(e.parentElement.children,e)); e=e.parentElement; } a.push(e&&e.id==='app'?'a':'m'); return a.reverse().join('.'); }
 function scrollSnap(){ const out=[]; document.querySelectorAll('#app *, #modal-root *').forEach(e=>{ if(e.scrollTop>0||e.scrollLeft>0) out.push({p:domPath(e),c:e.tagName+'|'+e.className,t:e.scrollTop,l:e.scrollLeft}); }); return out; }
 function scrollRestore(list){ list.forEach(o=>{ const q=o.p.split('.'); let el=document.getElementById(q[0]==='a'?'app':'modal-root'); for(let i=1;i<q.length&&el;i++) el=el.children[+q[i]]; if(el&&(el.tagName+'|'+el.className)===o.c){ el.scrollTop=o.t; el.scrollLeft=o.l; } }); }
+/* fechas con año mal escrito (p. ej. 0026-10-19 por teclear «26» en un campo de fecha) */
+function okDate(v){ if(!v) return v; const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(String(v)); if(!m) return ''; let y=+m[1]; if(y<100) y+=2000; if(y<2000||y>2100) return ''; return y+'-'+m[2]+'-'+m[3]; }
+function fixBadDates(){ if(window.__dfix||typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return; window.__dfix=1; store.d.tasks.forEach(t=>{ let ch=false; (t.subtasks||[]).forEach(s=>{ if(s.date&&okDate(s.date)!==s.date){ s.date=okDate(s.date); ch=true; } (s.minutas||[]).forEach(m=>(m.lines||[]).forEach(l=>{ if(l.date&&okDate(l.date)!==l.date){ l.date=okDate(l.date); ch=true; } })); }); if(ch&&typeof dbSaveTask==='function') dbSaveTask(t); }); }
 function render(){
+  fixBadDates();
   const sig=renderSig(); const keep=(sig===_rSig)&&!!document.getElementById('app').firstChild; const y=window.scrollY, snap=keep?scrollSnap():null; _rSig=sig;
   renderBase();
   if(keep){ scrollRestore(snap); if(window.scrollY!==y) window.scrollTo(0,y); requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-y)>2) window.scrollTo(0,y); }); }
@@ -3719,7 +3723,7 @@ function mnLineDone(lid){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l)
 function mnLineDel(lid){ mnSave(m=>{ m.lines=m.lines.filter(x=>x.id!==lid); return m; }); }
 function mnLineTxt(lid,v){ const g=mnGet(); if(!g) return; const arr=(g.s.minutas||[]).map(x=>{ if(x.id!==g.m.id) return x; const y=JSON.parse(JSON.stringify(x)); const l=y.lines.find(z=>z.id===lid); if(l) l.txt=v; return y; }); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); }
 function mnLineResp(lid,v){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.resp=v; return m; }); }
-function mnLineDate(lid,v){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.date=v; return m; }); }
+function mnLineDate(lid,v){ const ok=okDate(v); if(v&&ok!==v) shareToast(ok?'Corregí el año de la fecha a '+ok.slice(0,4)+'.':'Esa fecha no es válida; revisa el año.'); mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l.date=ok; return m; }); }
 function mnLinkAdd(){ const t=(document.getElementById('mn-lt')||{}).value||'', u=(document.getElementById('mn-lu')||{}).value||''; if(!u.trim()) return; const url=/^https?:\/\//i.test(u.trim())?u.trim():'https://'+u.trim(); mnSave(m=>{ m.links.push({t:t.trim()||url.replace(/^https?:\/\//,'').slice(0,40),u:url}); return m; }); }
 function mnLinkDel(i){ mnSave(m=>{ m.links.splice(i,1); return m; }); }
 /* ligar un acuerdo con una tarea / subtarea / sub-subtarea */
