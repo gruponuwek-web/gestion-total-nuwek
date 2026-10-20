@@ -232,7 +232,7 @@ class Store{
   taskAddLink(tid,title,url){ const t=this.task(tid); if(!t)return; t.links=t.links||[]; t.links.push({title:title||'',url:url||''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   taskSetLink(tid,idx,field,val){ const t=this.task(tid); if(t&&t.links&&t.links[idx]){ t.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   taskDelLink(tid,idx){ const t=this.task(tid); if(t&&t.links){ t.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
-  addSubtask(tid,st){ const t=this.task(tid); if(st&&st.date) st.date=okDate(st.date); st.id=uid('s_'); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  addSubtask(tid,st){ const t=this.task(tid); if(st&&st.date) st.date=okDate(st.date); st.id=uid('s_'); st.createdAt=st.createdAt||new Date().toISOString(); st.invitados=st.invitados||[]; st.timeSpent=0; st.done=false; st.links=st.links||[]; t.subtasks.push(st); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
   subAddLink(tid,sid){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s){ s.links=s.links||[]; s.links.push({title:'',url:''}); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
@@ -554,7 +554,7 @@ function scrollRestore(list){ list.forEach(o=>{ const q=o.p.split('.'); let el=d
 function okDate(v){ if(!v) return v; const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(String(v)); if(!m) return ''; let y=+m[1]; if(y<100) y+=2000; if(y<2000||y>2100) return ''; return y+'-'+m[2]+'-'+m[3]; }
 function fixBadDates(){ if(window.__dfix||typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return; window.__dfix=1; store.d.tasks.forEach(t=>{ let ch=false; (t.subtasks||[]).forEach(s=>{ if(s.date&&okDate(s.date)!==s.date){ s.date=okDate(s.date); ch=true; } (s.minutas||[]).forEach(m=>(m.lines||[]).forEach(l=>{ if(l.date&&okDate(l.date)!==l.date){ l.date=okDate(l.date); ch=true; } })); }); if(ch&&typeof dbSaveTask==='function') dbSaveTask(t); }); }
 function render(){
-  fixBadDates(); parentSyncAll();
+  fixBadDates(); joinSyncAll(); parentSyncAll();
   const sig=renderSig(); const keep=(sig===_rSig)&&!!document.getElementById('app').firstChild; const y=window.scrollY, snap=keep?scrollSnap():null; _rSig=sig;
   renderBase();
   if(keep){ scrollRestore(snap); if(window.scrollY!==y) window.scrollTo(0,y); requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-y)>2) window.scrollTo(0,y); }); }
@@ -596,7 +596,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -1258,7 +1258,7 @@ function gestCalendar(R){
 }
 function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip${s.done?' gc-done':''}" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTaskHi('${t.id}','${s.id}')">${tipoDot(s,t)}${subMark(s)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function citasInternas(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; const c=store.client(p.clientId)||{name:'',id:''};
-  (t.subtasks||[]).forEach(s=>{ if(s.isSeries||citaKind(s)!=='interna') return; out.push({s,t,p,c,est:{k:'interna',t:'Interna',c:'#2f6fd6',bg:'#e8f0fd',razon:'',prop:[]}}); }); }); return out; }
+  (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.unida||citaKind(s)!=='interna') return; out.push({s,t,p,c,est:{k:'interna',t:'Interna',c:'#2f6fd6',bg:'#e8f0fd',razon:'',prop:[]}}); }); }); return out; }
 function gestCitas(){ let all=citasAll().concat(citasInternas()).filter(x=>x.s.date).filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>gestPersonOk(x.s));
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); }); Object.values(byDay).forEach(a=>a.sort((x,y)=>(x.s.time||'')<(y.s.time||'')?-1:1));
   const R=gestRange(); const mi=all.filter(x=>x.s.date>=R.start&&x.s.date<=R.end); const n=k=>mi.filter(x=>x.est.k===k).length;
@@ -2383,7 +2383,8 @@ function taskBody(t,panel){
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
     const _ck=citaKind(s); const citaBase=(subHasCita(s)&&_ck!=='interna'&&(((s.isSeries?seriesTpl(s):s).invitados)||[]).length)?`<span class="sub-chip cita chip-link" title="Cita con el cliente · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">📅 Cita</span>`:((_ck==='interna')?`<span class="sub-chip cita-int chip-link" title="Cita interna (${subPeopleN(s)} personas) · clic para copiar el link" onclick="event.stopPropagation();copySessionLink('${t.id}','${s.id}')">👥 Cita interna</span>`:'');
     const predS=s.dependsOn?(t.subtasks||[]).find(x=>x.id===s.dependsOn):null; const depChip=`${predS?`<span class="sub-chip" title="Empieza cuando termina «${esc(predS.name)}»">⛓ tras «${esc(predS.name.length>22?predS.name.slice(0,21)+'…':predS.name)}»</span>`:''}${s.fija?'<span class="sub-chip" title="Fecha fija: no se mueve con las dependencias">📌 fija</span>':''}`;
-    const chips=`${ackBtn}${depChip}${citaBase}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const _unid=s.unida?`<span class="sub-chip chip-link" style="background:#eef6ff;color:#1f4e8c" title="Comparte cita, link y minuta con «${esc((citaRoot(t,s).s||{}).name||'')}». Clic para separarla o verla" onclick="event.stopPropagation();openJoin('${t.id}','${s.id}')">🔗 unida a «${esc((((citaRoot(t,s).s||{}).name)||'').slice(0,22))}»</span>`:''; const _ch=citaChoque(t,s); const _choque=_ch?`<span class="sub-chip cita-warn chip-link" title="Hay otra cita con el mismo cliente (o equipo) a la misma hora. Clic para unirlas" onclick="event.stopPropagation();openJoin('${t.id}','${s.id}')">⚠ Misma hora que «${esc(_ch.s.name.slice(0,22))}» · Unir</span>`:'';
+    const chips=`${ackBtn}${depChip}${citaBase}${_unid}${_choque}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
     const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}${(_t.team||[]).length?`<i class="av-n" title="${(_t.team||[]).length} persona(s) más del equipo participan">+${(_t.team||[]).length}</i>`:''}</span>`;
     const right=timing
@@ -3742,7 +3743,7 @@ function mnGet(){ if(!mnV) return null; const t=store.task(mnV.tid); const s=t&&
 function mnSave(mut,label){ const g=mnGet(); if(!g) return; if(!mnCanEdit(g.m)){ shareToast('Solo Dirección puede editar una minuta cerrada.'); return; } if(g.m.estado!=='curso') mnLogEdit(label||'cambios'); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?mut(JSON.parse(JSON.stringify(x))):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); mnRender(); }
 function mnActive(){ for(const t of store.d.tasks){ for(const s of (t.subtasks||[])){ const m=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(m) return {tid:t.id,sid:s.id,mid:m.id}; } } return null; }
 function mnRoleOk(){ return ['pm','gerente','gerencia'].includes(role); }
-function mnStart(tid,sid){ const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
+function mnStart(tid,sid){ { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
   if(!mnRoleOk()){ shareToast('Solo PM, Gerencia o Dirección pueden tomar la minuta.'); return; }
   const open=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by!==currentUser);
   if(open){ const who=store.person(open.by).name||'otra persona'; if(role!=='gerencia'){ alert('Esta cita ya tiene una minuta abierta por '+who+'. Solo una persona a la vez puede tomarla; debe cerrarla primero (o Dirección puede tomarla).'); return; } if(!confirm('La minuta está abierta por '+who+'. ¿Cerrarla y abrir una nueva a tu nombre?')) return; mnV={tid,sid,mid:open.id}; mnStopNow(true); }
@@ -3751,7 +3752,7 @@ function mnStart(tid,sid){ const t=store.task(tid), s=t&&(t.subtasks||[]).find(x
   if(cur) mid=cur.id; else { const m={id:uid('mn_'),by:currentUser,start:new Date().toISOString(),end:null,estado:'curso',kind:citaKind(s)||'interna',asist:[],lines:[],links:[]}; store.updateSubtask(tid,sid,{minutas:[...(s.minutas||[]),m]}); mid=m.id; logEvent(tid,'Inició la minuta de «'+s.name+'»'); }
   mnPre=null; mnV={tid,sid,mid}; mnOpen=true; mnRev=null; mnPrompt=null; try{ localStorage.setItem(MN_KEY,JSON.stringify(mnV)); }catch(_){} mnRender(); }
 let mnPre=null;
-function mnOpenCita(tid,sid){ if(!mnRoleOk()) return; const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const cur=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(cur){ mnPre=null; mnView(tid,sid,cur.id); return; } mnV=null; mnPre={tid,sid}; mnOpen=true; mnRev=null; mnRender(); }
+function mnOpenCita(tid,sid){ if(!mnRoleOk()) return; { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const cur=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(cur){ mnPre=null; mnView(tid,sid,cur.id); return; } mnV=null; mnPre={tid,sid}; mnOpen=true; mnRev=null; mnRender(); }
 function mnPrePanel(){ const t=store.task(mnPre.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnPre.sid); if(!s){ mnPre=null; return ''; } const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const k=citaKind(s)||(subHasCita(s)?'cliente':'interna'); const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1);
   return `<div class="mn-panel"><div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${k==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · ${s.date?esc(dLabel(s.date)):''} ${esc(s.time||'')}</div></div><div class="mn-hr"><button class="mn-x" title="Cerrar" onclick="mnPre=null;mnOpen=false;mnRender()">×</button></div></div>
     <div class="mn-body"><button class="mn-play" onclick="mnStart('${t.id}','${s.id}')">▶ Iniciar minuta</button><div class="mn-sec">Minutas de esta cita</div>${ms.map(m=>`<div class="mn-lkrow"><span>${esc(dLabel(m.start.slice(0,10)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="muted" style="padding:4px 0">Aún no hay minutas de esta cita.</div>'}</div></div>`; }
@@ -3854,7 +3855,7 @@ setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ if(e.dataset
 let mnSum=null, mnAuth=null; const mnFails={};
 function mnCanEdit(m){ return m.estado==='curso'?(m.by===currentUser||role==='gerencia'):role==='gerencia'; }
 function mnLogEdit(label){ const g=mnGet(); if(g&&g.m.estado!=='curso') logEvent(g.t.id,'Editó la minuta cerrada de «'+g.s.name+'»'+(label?': '+label:'')); }
-function mnSumOpen(tid,sid,mid){ mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
+function mnSumOpen(tid,sid,mid){ { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
 function mnSumClose(){ mnSum=null; render(); }
 function mnSumPick(mid){ mnSum.mid=mid; mnSum.askDel=false; render(); }
 function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!['gerente','gerencia'].includes(role)){ shareToast('Solo Gerencia o Dirección pueden eliminar una minuta.'); return; }
@@ -3907,7 +3908,7 @@ function mnAuthSubmit(){ const code=((document.getElementById('au-code')||{}).va
 function mnAuthLogin(uid){ const u=store.person(uid); const ps=publicSes; if(!['pm','gerente','gerencia'].includes(u.perm)) return; session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; modalTask=null; opSelTask=null; mnAuth=null; saveSession(); render(); if(ps) mnSumOpen(ps.tid,ps.sid); }
 
 /* aviso a la hora de una cita */
-function mnTodayCitas(){ const td=todayISO(); const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.done||s.date!==td) return; const k=citaKind(s)||(subHasCita(s)&&s.time?'cliente':null); if(!k) return; if(role==='colab'&&!subInvolves(s,currentUser)) return; out.push({t,s,k}); }); }); return out.sort((a,b)=>(a.s.time||'99')<(b.s.time||'99')?-1:1); }
+function mnTodayCitas(){ const td=todayISO(); const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.unida||s.done||s.date!==td) return; const k=citaKind(s)||(subHasCita(s)&&s.time?'cliente':null); if(!k) return; if(role==='colab'&&!subInvolves(s,currentUser)) return; out.push({t,s,k}); }); }); return out.sort((a,b)=>(a.s.time||'99')<(b.s.time||'99')?-1:1); }
 function mnWatch(){ if(!session||document.hidden||mnPrompt||mnActive()) return; const now=new Date(), nm=now.getHours()*60+now.getMinutes();
   for(const {t,s} of mnTodayCitas()){ if(!s.time||!subInvolves(s,currentUser)) continue; const k=s.id+':'+todayISO(); if(mnSeen.has(k)) continue; const mm=toMin(s.time); if(mm==null) continue; if(nm>=mm-5&&nm<=mm+20){ mnSeen.add(k); mnPrompt={tid:t.id,sid:s.id,title:s.name}; mnRender(); return; } } }
 setInterval(mnWatch,30000);
@@ -3942,6 +3943,52 @@ function mnNewGo(){ const N=mnNew; const ic=store.d.clients.find(c=>c.tipo==='in
   const now=new Date(); const hm=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0'); const nm=(N.nombre||'').trim()||N.tipo; const nowIso=now.toISOString(); const info={}; N.team.forEach(id=>info[id]={by:currentUser,ts:nowIso});
   const st={name:nm+' · '+dLabel(todayISO()),personId:currentUser,date:todayISO(),time:hm,durMin:30,team:N.team.slice(),teamInfo:info,teamAck:{},invitados:[]}; store.addSubtask(t.id,st); logEvent(t.id,'Creó la reunión «'+st.name+'»');
   mnNew=null; render(); mnStart(t.id,st.id); }
+
+/* ================== CITAS UNIDAS: varias subtareas comparten una sola cita (un link, una confirmación, una minuta) ==================
+   La principal es la primera que se creó; las demás «cuelgan» de ella (s.unida={tid,sid,prev}) y siguen su fecha y hora.
+   Al separarlas vuelven a como estaban antes (prev). */
+let joinAsk=null;
+function subBirth(s){ if(s.createdAt) return s.createdAt; const m=/^s_([0-9a-z]{8})/.exec(s.id||''); return m?new Date(parseInt(m[1],36)).toISOString():'9'; }
+function citaRoot(t,s){ if(!s||!s.unida) return {t,s}; const tt=store.task(s.unida.tid); const p=tt&&(tt.subtasks||[]).find(x=>x.id===s.unida.sid); return (p&&!p.unida)?{t:tt,s:p}:{t,s}; }
+function citaRootS(s){ if(!s||!s.unida) return s; const tt=store.task(s.unida.tid); const p=tt&&(tt.subtasks||[]).find(x=>x.id===s.unida.sid); return (p&&!p.unida)?p:s; }
+function citaUnidas(root){ const out=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(x=>{ if(x.unida&&x.unida.sid===root.id) out.push({t,s:x}); })); return out; }
+function subSepararRaw(t,s,keepDT){ const prev=(s.unida&&s.unida.prev)||{}; delete s.unida; s.invitados=(prev.invitados||[]).slice(); if(!keepDT){ s.date=prev.date||s.date; s.time=prev.time||''; s.durMin=prev.durMin||null; } }
+function joinSyncAll(){ if(typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return;
+  store.d.tasks.forEach(t=>{ let ch=false; (t.subtasks||[]).forEach(x=>{ if(!x.unida) return; const R=citaRoot(t,x);
+      if(R.s===x){ subSepararRaw(t,x); ch=true; return; }   // la principal ya no existe (o se encadenó): se separa y vuelve a como estaba
+      const r=R.s; if(x.date!==r.date||(x.time||'')!==(r.time||'')||(x.durMin||null)!==(r.durMin||null)){ x.date=r.date; x.time=r.time||''; x.durMin=r.durMin||null; ch=true; }
+      if(JSON.stringify(x.invitados||[])!==JSON.stringify(r.invitados||[])){ x.invitados=(r.invitados||[]).slice(); ch=true; } });
+    if(ch&&typeof dbSaveTask==='function') dbSaveTask(t); }); }
+function subJoin(tid,sid,qtid,qsid){ if(!canSubDate()){ alert('Unir citas es de PM, Gerencia o Dirección.'); return; }
+  const tA=store.task(tid), A=tA&&(tA.subtasks||[]).find(x=>x.id===sid), tB=store.task(qtid), B=tB&&(tB.subtasks||[]).find(x=>x.id===qsid); if(!A||!B||A===B) return;
+  const aOld=subBirth(A)<subBirth(B)||(subBirth(A)===subBirth(B)&&A.id<B.id); const root=aOld?{t:tA,s:A}:{t:tB,s:B}, fol=aOld?{t:tB,s:B}:{t:tA,s:A};
+  citaUnidas(fol.s).forEach(u=>{ u.s.unida=Object.assign({},u.s.unida,{tid:root.t.id,sid:root.s.id}); });   // si la que se une ya tenía otras colgadas, pasan a la principal
+  const prev={date:fol.s.date,time:fol.s.time||'',durMin:fol.s.durMin||null,invitados:(fol.s.invitados||[]).slice()};
+  store.updateSubtask(fol.t.id,fol.s.id,{unida:{tid:root.t.id,sid:root.s.id,prev},date:root.s.date,time:root.s.time||'',durMin:root.s.durMin||null,invitados:(root.s.invitados||[]).slice()});
+  logEvent(fol.t.id,'Unió «'+fol.s.name+'» a la cita de «'+root.s.name+'»'); if(root.t.id!==fol.t.id) logEvent(root.t.id,'«'+fol.s.name+'» se unió a esta cita');
+  clientPop=null; render(); shareToast('🔗 Unidas: ahora comparten un solo link, una confirmación y una minuta. La principal es «'+root.s.name+'».'); }
+function subSeparar(tid,sid){ const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s||!s.unida) return; const R=citaRoot(t,s); subSepararRaw(t,s); store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);
+  logEvent(tid,'Separó «'+s.name+'» de la cita de «'+R.s.name+'»'); clientPop=null; render(); shareToast('Separada: «'+s.name+'» volvió a su cita como estaba antes.'); }
+function citaChoque(t,s){ if(!s||s.unida||s.isSeries||s.done||!s.date||!s.time) return null; const k=citaKind(s); if(!k) return null; const st=toMin(s.time), en=st+(+s.durMin||30); const cid=(store.project(t.projectId)||{}).clientId; let best=null;
+  store.d.tasks.forEach(t2=>{ const p2=store.project(t2.projectId); if(!p2) return; (t2.subtasks||[]).forEach(q=>{ if(q===s||q.unida||q.isSeries||q.date!==s.date||!q.time||citaKind(q)!==k) return; if(k==='cliente'&&p2.clientId!==cid) return; const qs=toMin(q.time), qe=qs+(+q.durMin||30); if(!(st<qe&&qs<en)) return;
+      if(subBirth(q)<subBirth(s)||(subBirth(q)===subBirth(s)&&q.id<s.id)){ if(!best||subBirth(q)<subBirth(best.s)) best={t:t2,s:q}; } }); }); return best; }
+function citaCandidatas(t,s){ const k=citaKind(s); if(!k) return []; const cid=(store.project(t.projectId)||{}).clientId; const out=[];
+  store.d.tasks.forEach(t2=>{ const p2=store.project(t2.projectId); if(!p2) return; (t2.subtasks||[]).forEach(q=>{ if(q===s||q.unida||q.isSeries||!q.date||citaKind(q)!==k) return; if(k==='cliente'&&p2.clientId!==cid) return; if(k==='interna'&&q.date!==s.date) return; out.push({t:t2,s:q,d:Math.abs(new Date(q.date)-new Date(s.date||q.date))}); }); });
+  return out.sort((a,b)=>a.d-b.d||(a.s.time||'')<(b.s.time||'')?-1:1).slice(0,12); }
+function openJoin(tid,sid){ openClientPop(tid,sid); clientPop.tab='unir'; render(); }
+function cpUnirHtml(t,s){ const esc=mnEsc;
+  if(s.unida){ const R=citaRoot(t,s); return `<div class="ses-resp" style="background:#eef6ff;color:#1f4e8c;margin:6px 0">🔗 Esta subtarea está <b>unida</b> a la cita de <b>${esc(R.s.name)}</b> (${esc(dLabel(R.s.date))} ${esc(R.s.time||'')}). Comparte con ella el link, la confirmación del cliente y la minuta, y se mueve cuando la principal se mueve.</div>
+    <div class="wiz-actions"><span class="muted" style="font-size:.76rem">Al separarla vuelve a su fecha, hora e invitados de antes.</span><button class="btn" onclick="subSeparar('${t.id}','${s.id}')">Separar de esta cita</button></div>`; }
+  if(!citaKind(s)) return `<div class="muted" style="padding:8px 0">Esta subtarea todavía no es una cita. Con fecha, hora y más de una persona (o invitados del cliente) se vuelve cita y aquí podrás unirla a otra.</div>`;
+  const cands=citaCandidatas(t,s); const hit=citaChoque(t,s);
+  return `<div class="muted" style="font-size:.82rem;margin-bottom:8px">Elige la cita a la que se une. Quedan con <b>un solo link, una confirmación y una minuta</b>; la principal es la que se creó primero.</div>
+    ${hit?`<div class="ses-resp" style="background:#fff7e0;color:#7a5a00;margin-bottom:8px">⚠ Coincide en horario con <b>${esc(hit.s.name)}</b>.</div>`:''}
+    <div class="cp-list">${cands.map(c=>`<div class="cp-row" style="justify-content:space-between"><span><b>${esc(c.s.name)}</b><br><span class="muted" style="font-size:.74rem">${esc(c.t.name)} · ${esc(dLabel(c.s.date))} ${esc(c.s.time||'sin hora')}</span></span><button class="btn sm" onclick="subJoin('${t.id}','${s.id}','${c.t.id}','${c.s.id}')">Unir</button></div>`).join('')||'<div class="muted" style="padding:8px 0">No hay otras citas parecidas con las que unirla.</div>'}</div>`; }
+function joinAskModal(){ const esc=mnEsc; const t=store.task(joinAsk.tid), s=t&&(t.subtasks||[]).find(x=>x.id===joinAsk.sid); if(!s||!s.unida){ joinAsk=null; return ''; } const R=citaRoot(t,s);
+  return `<div class="modal active" style="z-index:165" onclick="if(event.target===this)joinAskNo()"><div class="modal-card" style="max-width:440px"><div class="m-head"><div class="m-top"><h3 style="margin:0">🔗 Está unida a otra cita</h3><button class="x" onclick="joinAskNo()">×</button></div></div><div class="m-body"><p style="margin-top:0">«${esc(s.name)}» comparte cita con «${esc(R.s.name)}» (${esc(dLabel(R.s.date))} ${esc(R.s.time||'')}). Cambiar su fecha u hora la <b>separa</b> de esa cita.</p><p class="muted">¿Separarla y guardar el cambio?</p><div class="wiz-actions"><button class="btn ghost" onclick="joinAskNo()">Cancelar</button><button class="btn" onclick="joinAskYes()">Separar y guardar</button></div></div></div></div>`; }
+function joinAskNo(){ joinAsk=null; render(); }
+function joinAskYes(){ const {tid,sid,patch,name}=joinAsk; joinAsk=null; const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const R=citaRoot(t,s); patch.invitados=((s.unida&&s.unida.prev&&s.unida.prev.invitados)||[]).slice(); subSepararRaw(t,s,true);
+  depApply(tid,sid,patch,()=>{ logEvent(tid,'Separó «'+name+'» de la cita de «'+R.s.name+'» al cambiar su fecha u hora'); subEd=null; render(); }); }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
@@ -4067,6 +4114,7 @@ function saveSubModal(){
     const tp=seriesTpl(s); Object.assign(patch,{isSeries:false,series:null,personId:patch.personId,done:false}); t.subtasks.filter(x=>x.seriesId===sid).forEach(x=>{ delete x.seriesId; delete x.occDate; });
   }
   if(document.getElementById('sm-dep')){ patch.dependsOn=val('sm-dep')||null; patch.fija=!!(document.getElementById('sm-fija')||{}).checked; }
+  if(s.unida){ const R=citaRoot(t,s); const chg=(patch.date!==undefined&&patch.date!==R.s.date)||((patch.time||'')!==(R.s.time||'')); if(chg){ joinAsk={tid,sid,patch,name}; render(); return; } }
   depApply(tid,sid,patch,()=>{ logEvent(tid,'Editó la subtarea «'+name+'»'); subEd=null; render(); });
 }
 function cpToggle(id){ if(!clientPop) return; const i=clientPop.sel.indexOf(id); if(i>=0) clientPop.sel.splice(i,1); else clientPop.sel.push(id); }
@@ -4096,8 +4144,8 @@ function clientPopModal(){
   return `<div class="modal active" style="z-index:120" onclick="if(event.target===this)closeClientPop()"><div class="modal-card" style="max-width:480px">
     <div class="m-head"><div class="m-top"><div><div class="pill green">${esc(c.name)}</div><h3 style="margin:8px 0 0">🫱🏽‍🫲🏾 Participa del cliente</h3></div><button class="x" onclick="closeClientPop()">×</button></div></div>
     <div class="m-body"><div class="muted" style="margin-bottom:8px;font-size:.84rem">${esc(s.name)}</div>
-      <div class="sm-tabs" style="margin-bottom:10px"><button type="button" class="sm-tab ${clientPop.tab==='cli'?'on':''}" onclick="cpTab('cli')">🫱🏽‍🫲🏾 Cliente (${clientPop.sel.length})</button><button type="button" class="sm-tab ${clientPop.tab==='nuw'?'on':''}" onclick="cpTab('nuw')">👥 Equipo Nuwek (<span id="cp-tn">${clientPop.team.length}</span>)</button></div>
-      ${clientPop.tab==='nuw'?`<div class="cp-list">${store.activeStaff().filter(u=>u.id!==(s.isSeries?seriesTpl(s):s).personId).map(u=>`<label class="cp-row"><input type="checkbox" ${clientPop.team.includes(u.id)?'checked':''} onchange="cpTeamToggle('${u.id}')">${avatar(u,true)}<span><b>${esc(u.name)}</b><span class="muted" style="font-size:.76rem"> · ${esc(u.role||'')}</span></span></label>`).join('')}</div><div class="hint">El responsable de la subtarea ya participa. Con fecha, hora y más de una persona, la subtarea se vuelve una cita (interna si no hay gente del cliente).</div>
+      <div class="sm-tabs" style="margin-bottom:10px"><button type="button" class="sm-tab ${clientPop.tab==='cli'?'on':''}" onclick="cpTab('cli')">🫱🏽‍🫲🏾 Cliente (${clientPop.sel.length})</button><button type="button" class="sm-tab ${clientPop.tab==='nuw'?'on':''}" onclick="cpTab('nuw')">👥 Equipo Nuwek (<span id="cp-tn">${clientPop.team.length}</span>)</button><button type="button" class="sm-tab ${clientPop.tab==='unir'?'on':''}" onclick="cpTab('unir')">🔗 Unir${s.unida?' ✓':''}</button></div>
+      ${clientPop.tab==='unir'?cpUnirHtml(t,s):clientPop.tab==='nuw'?`<div class="cp-list">${store.activeStaff().filter(u=>u.id!==(s.isSeries?seriesTpl(s):s).personId).map(u=>`<label class="cp-row"><input type="checkbox" ${clientPop.team.includes(u.id)?'checked':''} onchange="cpTeamToggle('${u.id}')">${avatar(u,true)}<span><b>${esc(u.name)}</b><span class="muted" style="font-size:.76rem"> · ${esc(u.role||'')}</span></span></label>`).join('')}</div><div class="hint">El responsable de la subtarea ya participa. Con fecha, hora y más de una persona, la subtarea se vuelve una cita (interna si no hay gente del cliente).</div>
       <div class="wiz-actions"><span></span><span style="display:flex;gap:8px"><button class="btn ghost" onclick="closeClientPop()">Cancelar</button><button class="btn" onclick="cpSave()">Guardar</button></span></div>`:`
       ${empty}<div class="cp-list">${list}</div>${addForm}
       <div class="wiz-actions">${clientPop.adding?'<span></span>':`<button class="btn ghost" ${people.length?'':'style="border-color:var(--green);color:var(--green);font-weight:700"'} onclick="cpShowAdd()">＋ Agregar contacto</button>`}
@@ -4109,7 +4157,7 @@ function clientPopModal(){
 function subHasCita(s){ const src=s.isSeries?seriesTpl(s):s; return !!((src.invitados||[]).length); }   // cita con cliente = hay invitados del cliente
 function citaEstadoInfo(s){ const l=sesLast(s); return l?{k:l.estado,t:({confirmado:'Confirmada',cancelado:'Cancelada',reprogramar:'Pide reprogramar'})[l.estado],c:SES_ST[l.estado].c,bg:SES_ST[l.estado].bg,razon:l.razon,prop:l.propuestas||[],ts:l.ts}:{k:'pendiente',t:'Sin respuesta',c:'#6b7a73',bg:'#eef0ec',razon:'',prop:[],ts:''}; }
 function citasAll(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; const c=store.client(p.clientId)||{name:'',id:''};
-  (t.subtasks||[]).forEach(s=>{ if(s.isSeries||!subHasCita(s)||!(s.invitados||[]).length) return; out.push({s,t,p,c,est:citaEstadoInfo(s)}); }); });
+  (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.unida||!subHasCita(s)||!(s.invitados||[]).length) return; out.push({s,t,p,c,est:citaEstadoInfo(s)}); }); });
   return out; }
 function fmtPropuesta(pr){ if(!pr||!pr.fecha) return ''; const d=new Date(pr.fecha+'T00:00:00'); return ['dom','lun','mar','mié','jue','vie','sáb'][d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3).toLowerCase()+(pr.hora?' · '+pr.hora:''); }
 let citaFilter='todas', subOnlyCita=false;
@@ -4118,7 +4166,7 @@ function toggleCitaFilter(){ subOnlyCita=!subOnlyCita; render(); }
 function citaCard(it,showClient,cp){ const {s,t,p,c,est}=it; const link=s.shareToken?'':'';
   return `<div class="cita-row" style="border-left:4px solid ${est.c}"><div class="cita-when"><b>${s.date?dLabel(s.date):'sin fecha'}</b><span>${s.time||''}</span></div>
     <div class="cita-main"><div class="cita-nm">${esc(s.name)}</div><div class="muted" style="font-size:.76rem">${showClient?esc(c.name)+' · ':''}${esc(p.name)} · ${esc(t.name)}</div>
-      ${est.razon?`<div class="cita-razon">«${esc(est.razon)}»</div>`:''}${est.prop.length?`<div class="cita-prop">Propone: ${est.prop.map(x=>`<span>${esc(fmtPropuesta(x))}</span>`).join('')}</div>`:''}</div>
+      ${citaUnidas(s).length?`<div class="cita-prop">🔗 Incluye: ${citaUnidas(s).map(u=>`<span>${esc(u.s.name)}</span>`).join('')}</div>`:''}${est.razon?`<div class="cita-razon">«${esc(est.razon)}»</div>`:''}${est.prop.length?`<div class="cita-prop">Propone: ${est.prop.map(x=>`<span>${esc(fmtPropuesta(x))}</span>`).join('')}</div>`:''}</div>
     <div class="cita-side"><span class="cita-st" style="background:${est.bg};color:${est.c}">${est.t}</span>${cp?`<div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end"><button class="btn sm" onclick="openCpSesion('${t.id}','${s.id}')">Ver y responder</button></div>`:`<div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end"><button class="btn ghost sm" title="Abrir la tarea" onclick="openTaskHi('${t.id}','${s.id}')">Abrir</button><button class="btn ghost sm" title="Editar la sesión (objetivo, lugar, temario)" onclick="editCita('${t.id}','${s.id}')">✏️</button><button class="btn ghost sm" title="Ver la página que ve el cliente" onclick="visitSession('${t.id}','${s.id}')">👁</button><button class="btn ghost sm" title="Copiar link de la sesión" onclick="copySessionLink('${t.id}','${s.id}')">🔗</button></div>`}</div></div>`; }
 let citaSel=null;
 function selectCitaGrp(k){ citaSel=(citaSel===k?null:k); render(); }
@@ -4176,11 +4224,11 @@ function savePayEstado(){ const x=store.d.payments.find(z=>z.id===qm.payId); if(
   store.updatePayment(x.id,patch); qm=null; render(); }
 
 /* ================== SESIÓN CON EL CLIENTE (página pública de una subtarea con participantes del cliente) ================== */
-function sesOf(s){ const x=s.sesion||{}; return {objetivo:x.objetivo||'',lugar:Object.assign({tipo:'meet',link:'',direccion:''},x.lugar||{}),temario:x.temario||[],respuestas:x.respuestas||[],reabierta:x.reabierta||0,respAck:x.respAck||{}}; }
+function sesOf(s0){ const s=citaRootS(s0); const x=s.sesion||{}; return {objetivo:x.objetivo||'',lugar:Object.assign({tipo:'meet',link:'',direccion:''},x.lugar||{}),temario:x.temario||[],respuestas:x.respuestas||[],reabierta:x.reabierta||0,respAck:x.respAck||{}}; }
 function sesLast(s){ const r=sesOf(s).respuestas; return r.length?r[r.length-1]:null; }
 function sesCanRespond(s){ const x=sesOf(s); const last=sesLast(s); return !last||(x.reabierta&&x.reabierta>last.tsN); }
 function sessionShareUrl(tid,sid,token){ return location.origin+location.pathname+'#/sesion/'+encodeURIComponent(tid)+'/'+encodeURIComponent(sid)+'/'+encodeURIComponent(token); }
-function copySessionLink(tid,sid){ const t=store.task(tid); const s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
+function copySessionLink(tid,sid){ const t0=store.task(tid); const s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(!s0) return; const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; const t=R.t, s=R.s;
   let tok=s.shareToken; if(!tok){ tok=Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8); store.updateSubtask(tid,sid,{shareToken:tok}); }
   const url=sessionShareUrl(tid,sid,tok); const done=()=>shareToast(citaKind(s)==='interna'?'🔗 Link de la cita interna copiado.':'🔗 Link de la sesión copiado. Cualquiera con el link la ve sin iniciar sesión.');
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copia el link:',url)); else prompt('Copia el link:',url); }
@@ -4215,6 +4263,7 @@ function takeSesionHash(){ const m=(location.hash||'').match(/^#\/sesion\/([^/]+
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){} return {tid:d(m[1]),sid:d(m[2]),token:d(m[3])}; }
 let shareSesionAtLoad=takeSesionHash();
 function sesFind(){ if(!publicSes) return null; const t=store.task(publicSes.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===publicSes.sid); if(!s||!s.shareToken||s.shareToken!==publicSes.token) return {ok:false};
+  if(s.unida){ const R=citaRoot(t,s); if(R.s!==s){ const pp=store.project(R.t.projectId)||{}; return {ok:true,t:R.t,s:R.s,p:pp,c:store.client(pp.clientId)||{people:[],name:''}}; } }
   const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{people:[],name:''}; return {ok:true,t,s,p,c}; }
 function sesWhen(s){ if(!s.date) return 'Fecha por confirmar'; const d=new Date(s.date+'T00:00:00'); const wd=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'][d.getDay()]; let r=wd+' '+d.getDate()+' de '+MESES[d.getMonth()].toLowerCase()+' de '+d.getFullYear();
   if(s.time){ r+=' · '+s.time; if(s.durMin){ const [h,m]=s.time.split(':').map(Number); const e=h*60+m+(+s.durMin); r+=' – '+String(Math.floor(e/60)%24).padStart(2,'0')+':'+String(e%60).padStart(2,'0'); } } return r; }
@@ -4230,7 +4279,8 @@ function viewPublicSession(){
   const lug=ses.lugar; let lugarHtml;
   if(lug.tipo==='presencial'){ const dir=lug.direccion||c.location||''; lugarHtml=dir?`<div class="ps-lug"><b>📍 Presencial</b><div>${mdEsc(dir)}</div><iframe class="ps-map" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://maps.google.com/maps?q=${encodeURIComponent(dir)}&z=15&output=embed"></iframe><a class="btn ghost sm" target="_blank" rel="noopener noreferrer" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}">Abrir en Google Maps ↗</a></div>`:'<div class="muted">Dirección por confirmar.</div>'; }
   else lugarHtml=lug.link?`<div class="ps-lug"><b>💻 Videollamada · ${mdEsc(sesProvider(lug.link))}</b><a class="btn" target="_blank" rel="noopener noreferrer" href="${esc(/^https?:\/\//i.test(lug.link)?lug.link:'https://'+lug.link)}">Unirse a la reunión ↗</a><div class="muted" style="word-break:break-all;font-size:.76rem">${mdEsc(lug.link)}</div></div>`:'<div class="muted">El link de la reunión se compartirá pronto.</div>';
-  const tem=ses.temario.map((it,i)=>{ const pr=it.por==='cliente'?{logo:true}:store.person(it.personId); return `<div class="ps-tem"><span class="ps-n">${i+1}</span><div class="ps-tt">${mdEsc(it.titulo)}</div>${it.por==='cliente'?`<span class="ps-by" title="${mdEsc(c.name)}">${sesClientLogo(c,34)}<span>${mdEsc(c.name)}</span></span>`:`<span class="ps-by">${sesAv(pr,34)}<span>${mdEsc((pr.name||'').split(' ')[0])}</span></span>`}</div>`; }).join('')||'<div class="muted">Aún sin temario.</div>';
+  const _tem0=ses.temario.map((it,i)=>{ const pr=it.por==='cliente'?{logo:true}:store.person(it.personId); return `<div class="ps-tem"><span class="ps-n">${i+1}</span><div class="ps-tt">${mdEsc(it.titulo)}</div>${it.por==='cliente'?`<span class="ps-by" title="${mdEsc(c.name)}">${sesClientLogo(c,34)}<span>${mdEsc(c.name)}</span></span>`:`<span class="ps-by">${sesAv(pr,34)}<span>${mdEsc((pr.name||'').split(' ')[0])}</span></span>`}</div>`; }).join('');
+  const _uns=citaUnidas(s).map((u,i)=>{ const pr=store.person(u.s.personId); return `<div class="ps-tem"><span class="ps-n">${ses.temario.length+i+1}</span><div class="ps-tt">${mdEsc(u.s.name)}</div><span class="ps-by">${sesAv(pr,34)}<span>${mdEsc((pr.name||'').split(' ')[0])}</span></span></div>`; }).join(''); const tem=(_tem0+_uns)||'<div class="muted">Aún sin temario.</div>';
   const canAdd=!(last&&last.estado==='cancelado');
   let actions;
   if(last&&!sesCanRespond(s)){ const st=SES_ST[last.estado]; actions=`<div class="ps-done" style="background:${st.bg};color:${st.c}"><b>${st.t.replace('El cliente','Tu respuesta:')}</b> · ${mdEsc(new Date(last.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))}${last.razon?`<div class="ps-razon">Razón: «${mdEsc(last.razon)}»</div>`:''}${(last.propuestas||[]).length?`<div class="ps-razon">Fechas que propusiste: ${(last.propuestas||[]).map(x=>`<b>${mdEsc(fmtPropuesta(x))}</b>`).join(' · ')}</div>`:''}<div class="muted" style="font-size:.78rem;margin-top:6px">Tu respuesta ya quedó registrada y no se puede modificar. Si necesitas algo más, escríbele a tu contacto en Nuwek.</div></div>`; }
