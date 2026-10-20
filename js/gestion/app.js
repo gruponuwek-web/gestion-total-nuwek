@@ -363,8 +363,8 @@ function toggleSubUrgent(tid,sid){ const t=store.task(tid); const sub=t&&(t.subt
 const PERM_LABEL={gerencia:'Dirección',gerente:'Gerencia',pm:'Project Manager',colab:'Colaborador'};
 function permLabel(k){ return PERM_LABEL[k]||PERM_LABEL.colab; }
 function permOptions(sel){ return ['gerencia','gerente','pm','colab'].map(k=>`<option value="${k}" ${(sel===k||(!sel&&k==='colab'))?'selected':''}>${PERM_LABEL[k]}</option>`).join(''); }
-function canManageProject(){ return role==='gerencia' || role==='gerente'; }          // crear / editar / eliminar proyectos
-function canSubDate(){ return role==='gerencia' || role==='gerente' || role==='pm'; }   // fechas de subtareas y de tareas
+function canManageProject(){ return can('proyectos'); }          // crear / editar / eliminar proyectos
+function canSubDate(){ return can('fechas'); }   // fechas de subtareas y de tareas
 const SUB_DATE_MSG='Solo el PM puede cambiar las fechas de las subtareas.';
 /* ===== Sub-subtareas: tarea > subtarea (madre) > sub-subtarea (hija). Un solo nivel de sangría ===== */
 /* ===== Series por calendario: la MADRE (isSeries) guarda la regla y la plantilla; las HIJAS son las repeticiones ===== */
@@ -554,6 +554,7 @@ function scrollRestore(list){ list.forEach(o=>{ const q=o.p.split('.'); let el=d
 function okDate(v){ if(!v) return v; const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(String(v)); if(!m) return ''; let y=+m[1]; if(y<100) y+=2000; if(y<2000||y>2100) return ''; return y+'-'+m[2]+'-'+m[3]; }
 function fixBadDates(){ if(window.__dfix||typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return; window.__dfix=1; store.d.tasks.forEach(t=>{ let ch=false; (t.subtasks||[]).forEach(s=>{ if(s.date&&okDate(s.date)!==s.date){ s.date=okDate(s.date); ch=true; } (s.minutas||[]).forEach(m=>(m.lines||[]).forEach(l=>{ if(l.date&&okDate(l.date)!==l.date){ l.date=okDate(l.date); ch=true; } })); }); if(ch&&typeof dbSaveTask==='function') dbSaveTask(t); }); }
 function render(){
+  if(session&&typeof profileBase==='function'){ const b=profileBase(currentUser); if(b&&b!==role) role=b; }
   fixBadDates(); joinSyncAll(); parentSyncAll();
   const sig=renderSig(); const keep=(sig===_rSig)&&!!document.getElementById('app').firstChild; const y=window.scrollY, snap=keep?scrollSnap():null; _rSig=sig;
   renderBase();
@@ -583,7 +584,7 @@ function renderBase(){
     else body=viewMisPendientes();
     app.innerHTML = shellOp(body);
   } else {
-    if(view==='catalogos' && !isGerencia()) view='clientes';
+    if(view==='catalogos' && !can('catalogos')) view='clientes';
     if(isMiEspacio()) body=miEspacioBody();
     else if(view==='clientes') body=viewClientes();
     else if(view==='cliente') body=viewCliente();
@@ -754,7 +755,7 @@ function shell(body){
         <button class="${isMiEspacio()?'active':''}" onclick="openMiEspacio()">Mi espacio</button>
         <button class="${view==='clientes'||view==='cliente'||view==='proyecto'||view==='wizard'?'active':''}" onclick="go('clientes')">Clientes</button>
         <button class="${view==='gestion'?'active':''}" onclick="openGestion()">Gestión</button>
-        ${isGerencia()?`<button class="${view==='catalogos'?'active':''}" onclick="go('catalogos')">Catálogos</button>`:''}
+        ${can('catalogos')?`<button class="${view==='catalogos'?'active':''}" onclick="go('catalogos')">Catálogos</button>`:''}
       </div>
       ${sessionBar()}
     </div></div>
@@ -780,9 +781,9 @@ function viewClientes(){
   const inact=store.d.clients.filter(c=>c.activo===false); const vis=c=>showInactive||c.activo!==false;
   const favList=favs.map(id=>store.client(id)).filter(Boolean).filter(vis);
   const rest=store.d.clients.filter(c=>!favs.includes(c.id)).filter(vis);
-  const add=isGerencia()?`<div class="card click" style="display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed" onclick="openClientForm()">+ Nuevo cliente</div>`:'';
+  const add=can('clientes')?`<div class="card click" style="display:flex;align-items:center;justify-content:center;color:var(--muted);border-style:dashed" onclick="openClientForm()">+ Nuevo cliente</div>`:'';
   return `<div class="crumb">Clientes</div>
-    <div class="sec-title"><h2>Clientes</h2>${isGerencia()&&inact.length?`<button class="btn ghost sm" onclick="showInactive=!showInactive;render()">${showInactive?'Ocultar':'Ver'} inactivos (${inact.length})</button>`:''}</div>
+    <div class="sec-title"><h2>Clientes</h2>${can('clientes')&&inact.length?`<button class="btn ghost sm" onclick="showInactive=!showInactive;render()">${showInactive?'Ocultar':'Ver'} inactivos (${inact.length})</button>`:''}</div>
     ${favList.length?`<div class="fav-title">★ Favoritos</div><div class="grid cols-3">${favList.map(card).join('')}</div><div class="fav-title" style="margin-top:22px">Todos los clientes</div>`:''}
     <div class="grid cols-3">${rest.map(card).join('')}
       ${add}
@@ -837,7 +838,7 @@ function viewCliente(){
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
         <div><div class="pill green">Cliente</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}<h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
-        <div style="display:flex;gap:8px">${isGerencia()?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
+        <div style="display:flex;gap:8px">${can('clientes')?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
       </div>
       <dl class="kv" style="margin-top:16px">
         <dt>RFC</dt><dd>${c.rfc||'—'}</dd>
@@ -1473,9 +1474,7 @@ function viewProyecto(){
   const c=store.client(p.clientId); const sv=store.service(p.serviceId);
   const colab=isColab();
   let tabs;
-  if(isGerencia()) tabs=['gestor','gantt','tareas','kpis','biblioteca'];
-  else if(isPM()||isGerente()) tabs=['gestor','gantt','tareas','biblioteca'];
-  else tabs=['gestor','gantt','tareas','biblioteca'];
+  tabs=['gestor','gantt','tareas'].concat(can('finanzas')?['kpis']:[],['biblioteca']);
   const tlabel={gestor:'Gestor',gantt:'Gantt',tareas:'Tareas',kpis:'KPIs',biblioteca:'📚 Biblioteca',datos:'Datos y alcances',scorecard:'📊 Scorecard'};
   if(!tabs.includes(selTab)) selTab='gestor';
   const tabbar=tabs.map(t=>`<button class="${selTab===t?'active':''}" onclick="setTab('${t}')">${tlabel[t]}</button>`).join('');
@@ -1979,7 +1978,7 @@ function quickModal(){
         <div><label>TikTok</label><input id="qm-tt" value="${esc(c.tiktok||'')}"></div></div>
       <div class="field row"><div><label>LinkedIn</label><input id="qm-in" value="${esc(c.linkedin||'')}"></div>
         <div><label>Otro</label><input id="qm-otro" value="${esc(c.otro||'')}"></div></div>
-      ${qm.kind==='clienteEdit'&&isGerencia()?`<div class="danger-zone"><div class="muted" style="font-size:.78rem;margin-bottom:6px">Zona delicada</div><button type="button" class="btn ghost sm" title="Se conserva todo, pero el cliente se oculta y sus usuarios no entran" onclick="toggleClientActive('${c.id}')">${c.activo===false?'↩ Reactivar cliente':'⏸ Desactivar cliente'}</button> <button type="button" class="btn ghost sm" style="color:#c0392b" onclick="deleteClient('${c.id}')">🗑️ Eliminar cliente</button></div>`:''}
+      ${qm.kind==='clienteEdit'&&can('clientes')?`<div class="danger-zone"><div class="muted" style="font-size:.78rem;margin-bottom:6px">Zona delicada</div><button type="button" class="btn ghost sm" title="Se conserva todo, pero el cliente se oculta y sus usuarios no entran" onclick="toggleClientActive('${c.id}')">${c.activo===false?'↩ Reactivar cliente':'⏸ Desactivar cliente'}</button> <button type="button" class="btn ghost sm" style="color:#c0392b" onclick="deleteClient('${c.id}')">🗑️ Eliminar cliente</button></div>`:''}
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="${qm.kind==='clienteEdit'?'saveClientEdit()':'saveClient()'}">Guardar</button></div>`;
   } else if(qm.kind==='contacto' || qm.kind==='contactoEdit'){
     const p=qm.kind==='contactoEdit'?(store.client(qm.cid).people.find(x=>x.id===qm.pid)||{}):{};
@@ -2192,10 +2191,10 @@ function delFrente(fid,pid){const n=store.tasksOf(pid).filter(t=>t.frenteId===fi
 /* ===== Catálogos ===== */
 function openClientForm(){qm={kind:'cliente'};render();}
 function saveClient(){const n=val('qm-name');if(!n){alert('El cliente necesita un nombre.');return;}const c=store.addClient({name:n,razon:val('qm-razon'),rfc:val('qm-rfc'),location:val('qm-loc'),web:val('qm-web'),ig:val('qm-ig'),fb:val('qm-fb'),youtube:val('qm-yt'),tiktok:val('qm-tt'),linkedin:val('qm-in'),otro:val('qm-otro'),generalResponsibleId:val('qm-resp2')||null,logo:val('qm-logo')||'',tipo:val('qm-tipo')==='interno'?'interno':'externo'});qm=null;openClient(c.id);}
-function toggleClientActive(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const off=c.activo!==false;
+function toggleClientActive(cid){ if(!can('clientes')) return; const c=store.client(cid); if(!c) return; const off=c.activo!==false;
   if(off&&!confirm('¿Desactivar a «'+c.name+'»?\n\nSe conservan sus proyectos y tareas, pero el cliente se oculta de la lista y sus usuarios del portal ya no podrán entrar. Puedes reactivarlo cuando quieras.')) return;
   qm=null; c.activo=off?false:true; store.save(); if(typeof dbSaveClient==='function') dbSaveClient(c); if(off){ shareToast('⏸ Cliente desactivado'); go('clientes'); } else { shareToast('↩ Cliente reactivado'); render(); } }
-function deleteClient(cid){ if(!isGerencia()) return; const c=store.client(cid); if(!c) return; const n=store.projectsOf(cid).length;
+function deleteClient(cid){ if(!can('clientes')) return; const c=store.client(cid); if(!c) return; const n=store.projectsOf(cid).length;
   if(n){ alert('«'+c.name+'» tiene '+n+' proyecto(s).\n\nPara no perder información, primero elimina sus proyectos o, mejor, usa «Desactivar», que lo oculta y bloquea a sus usuarios sin borrar nada.'); return; }
   if(!confirm('¿Eliminar definitivamente a «'+c.name+'»? Se borran también sus contactos y accesos. No se puede deshacer.')) return;
   qm=null; store.removeClient(cid); shareToast('🗑 Cliente eliminado'); go('clientes'); }
@@ -2422,7 +2421,7 @@ function taskBody(t,panel){
     <div class="m-head">
       <div class="m-top">${(panel||editingTask===t.id)?`<div class="muted" style="font-size:.8rem;font-weight:600">${editingTask===t.id?'Editar tarea':'Detalle de tarea'}</div>`:`<div class="m-nav"><button onclick="navTask(-1)" ${idx<=0?'disabled':''}>‹</button><button onclick="navTask(1)" ${idx>=siblings.length-1?'disabled':''}>›</button><span class="muted" style="font-size:.8rem">${idx+1} de ${siblings.length}</span></div>`}
         <div style="display:flex;gap:6px;align-items:center">
-          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button>${canCopy()?`<button class="btn ghost sm" title="Copiar esta tarea (con subtareas) al mismo proyecto, a otro o a otro cliente" onclick="openCopy('${t.projectId}','${t.id}')">⧉ Copiar</button><button class="btn ghost sm" title="Mover esta tarea a otro proyecto o cliente" onclick="openMovT('${t.id}')">↦ Mover</button>`:''}<button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}
+          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button>${canCopy()?`<button class="btn ghost sm" title="Copiar esta tarea (con subtareas) al mismo proyecto, a otro o a otro cliente" onclick="openCopy('${t.projectId}','${t.id}')">⧉ Copiar</button><button class="btn ghost sm" title="Mover esta tarea a otro proyecto o cliente" onclick="openMovT('${t.id}')">↦ Mover</button>`:''}${can('eliminarTareas')?`<button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}`:''}
           ${(panel&&editingTask!==t.id)?'':`<button class="x" onclick="${editingTask===t.id?'cancelTaskEdit()':'closeTask()'}">×</button>`}
         </div></div>
       ${editingTask===t.id ? `
@@ -2457,8 +2456,8 @@ function taskBody(t,panel){
     <div class="m-body" ${editingTask===t.id?'style="display:none"':''}>
       <div class="m-sec"><h4>Descripción</h4><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
       <div class="m-sec"><div class="subs-head"><h4 style="margin:0;display:flex;align-items:center;gap:8px">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length}) <button type="button" class="info-i" title="Cómo escribir subtareas y sub-subtareas" onclick="openVerbInfo()">i</button>${(nCita||subOnlyCita)?`<button type="button" class="sm-sub ${subOnlyCita?'on':''}" style="padding:3px 10px;font-size:.72rem" onclick="toggleCitaFilter()" title="Mostrar solo las subtareas con cita">📅 Con cita (${nCita})</button>`:''}</h4>
-        <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${!isColab()?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
-        ${(subView==='log'&&!isColab())?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
+        <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${can('log')?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
+        ${(subView==='log'&&can('log'))?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
         <div class="inline-add">
           <input class="grow" id="ns-name" placeholder="Nueva subtarea...">
           <span class="ns-field"><button type="button" class="ns-ico" title="Responsable" onclick="nsReveal('ns-person')">👤</button><select id="ns-person" class="ns-ctl hidden">${persOpts}</select></span>
@@ -2494,7 +2493,7 @@ function saveTaskEdit(id){
   logEvent(id,'Editó la tarea');
   editingTask=null;render();
 }
-function deleteTask(id){ if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ store.removeTask(id); modalTask=null; editingTask=null; render(); } }
+function deleteTask(id){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ store.removeTask(id); modalTask=null; editingTask=null; render(); } }
 function openTaskHi(id,sids){ hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
   const t=store.task(id); if(t){ const c=subCollapsedMap(); let ch=false; ids.forEach(sid=>{ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const par=(t.subtasks||[]).find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
   openTask(id); if(ids.length) setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${ids[0]}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },150); }
@@ -2734,7 +2733,7 @@ function viewCatalogos(){
     </div>`;
   }).join('') || '<div class="muted">Sin personal.</div>';
   const tags=store.d.tags.map(t=>`<span class="chip tag-chip"><span class="tag-sw" style="background:${t.color}"></span>${t.name} <button class="chip-e" title="Editar" onclick="openTagEdit('${esc(t.name)}')">✏️</button><button class="chip-x" title="Eliminar" onclick="delTag('${esc(t.name)}')">×</button></span>`).join('') || '<span class="muted">Sin etiquetas</span>';
-  const CT=[['servicios','🧩 Servicios'],['personal','👥 Personal Nuwek'],['etiquetas','🏷️ Etiquetas'],['accesos','🔑 Accesos de clientes'],['importar','⬆ Importar tareas'],['login','🎨 Apariencia del login']];
+  const CT=[['servicios','🧩 Servicios'],['personal','👥 Personal Nuwek'],['etiquetas','🏷️ Etiquetas'],['accesos','🔑 Accesos de clientes'],['perfiles','🔐 Perfiles de permisos'],['importar','⬆ Importar tareas'],['login','🎨 Apariencia del login']];
   const bars=CT.map(([k,l])=>`<button class="${catTab===k?'active':''}" onclick="setCatTab('${k}')">${l}</button>`).join('');
   const panes={servicios:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Servicios</h2><button class="btn sm" onclick="openSvcForm()">+ Nuevo servicio</button></div>
     <div class="svc-list">${svc||'<div class="muted">Sin servicios.</div>'}</div>
@@ -2742,7 +2741,7 @@ function viewCatalogos(){
     <div class="team-list">${staff}</div>
 `,etiquetas:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Etiquetas</h2><button class="btn sm" onclick="openTagForm()">+ Nueva etiqueta</button></div>
     <div class="chiplist">${tags}</div>
-`,accesos:()=>accesosHtml(),importar:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
+`,accesos:()=>accesosHtml(),perfiles:()=>viewPerfiles(),importar:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Importar tareas</h2><button class="btn sm" onclick="openImport('')">⬆ Importar desde Excel</button></div>
     <p class="muted" style="margin-top:-4px">Pasa un listado de tareas, subtareas y sub-subtareas desde Excel o CSV. También lo encuentras dentro de cada proyecto.</p>
 `,login:()=>`    <div class="sec-title"><h2 style="font-size:1.1rem">Apariencia del login</h2></div>
     <div class="card">
@@ -2856,6 +2855,7 @@ async function boot(){
     if(typeof dbLoadComentarios==='function'){ store.d.comments = await dbLoadComentarios(); store.save(); }
     if(typeof dbLoadLog==='function'){ store.d.log = await dbLoadLog(); store.save(); }
     if(typeof dbLoadTags==='function'){ store.d.tags = await dbLoadTags(); store.save(); }
+    try{ const pf=await dbLoadPerfiles(); if(pf){ store.d.perfiles=pf; perfVer++; store.save(); } }catch(_){}
     if(typeof dbLoadPagos==='function'){ store.d.payments = await dbLoadPagos(); store.save(); }
   }catch(e){
     console.error('Error cargando Personal desde Supabase:', e);
@@ -2901,13 +2901,14 @@ async function syncTables(set){
     if(want('clientes')&&typeof dbLoadClientes==='function') jobs.clients=dbLoadClientes();
     if(want('personal')&&typeof dbLoadPersonal==='function') jobs.staff=dbLoadPersonal();
     if(want('etiquetas')&&typeof dbLoadTags==='function') jobs.tags=dbLoadTags();
+    if(set.has('all')) jobs.perfiles=dbLoadPerfiles();
     const keys=Object.keys(jobs); const vals=await Promise.all(keys.map(k=>jobs[k])); const got={}; keys.forEach((k,i)=>got[k]=vals[i]);
     if(lastLocalWrite>t0-1500) return;          // acabas de guardar algo: no lo pises, el siguiente ciclo lo trae
     let changed=false; const put=(k,v)=>{ if(JSON.stringify(store.d[k])!==JSON.stringify(v)){ store.d[k]=v; changed=true; } };
     if(got.comments){ const prev={}; (store.d.comments||[]).forEach(c=>{ if(c.attachments!==undefined) prev[c.id]=c.attachments; }); got.comments.forEach(c=>{ if(c.attachments===undefined&&prev[c.id]!==undefined) c.attachments=prev[c.id]; }); }
     if(got.tasks) put('tasks',got.tasks); if(got.comments) put('comments',got.comments); if(got.log) put('log',got.log); if(got.payments) put('payments',got.payments);
     if(got.pr){ put('projects',got.pr.projects); put('frentes',got.pr.frentes); put('etapas',got.pr.etapas); }
-    if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags);
+    if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags); if(got.perfiles){ const b=JSON.stringify(store.d.perfiles||[]); put('perfiles',got.perfiles); if(b!==JSON.stringify(got.perfiles)) perfVer++; }
     if(!changed) return;
     if(modalTask&&!store.task(modalTask)){ modalTask=null; editingTask=null; }
     if(opSelTask&&!store.task(opSelTask)) opSelTask=null;
@@ -3106,7 +3107,7 @@ function depPrevModal(){ const d=depPrev; const t=store.task(d.tid); const s=t&&
    responsables, equipo, horas del día, avance, tiempos ni comentarios. Sí se copian: sesiones (sin respuestas), reglas de repetición y dependencias. */
 let copyS=null;
 const COPY_KEY='nuwek_copy_batches';
-function canCopy(){ return role==='gerencia'||role==='gerente'; }
+function canCopy(){ return can('copiar'); }
 function copyBatches(){ try{ return JSON.parse(localStorage.getItem(COPY_KEY)||'[]'); }catch(_){ return []; } }
 function copySaveBatches(b){ try{ localStorage.setItem(COPY_KEY,JSON.stringify(b.slice(-15))); }catch(_){} }
 function copySubsOf(t){ return (t.subtasks||[]).filter(x=>!x.seriesId); }
@@ -3189,7 +3190,7 @@ function copyModal(){ const S=copyS; const p=store.project(S.pid); if(!p){ copyS
    Paso 1: instrucciones, plantilla de Excel y texto para Claude (se arman con los frentes y personas del proyecto elegido). */
 let impS=null;
 const IMP_COLS=['codigo','nivel','padre','frente','nombre','descripcion','etiquetas','fecha','hora','duracion_min','responsable','depende_de','fecha_fija','urgente','cita_objetivo','cita_lugar','cita_link','cita_direccion','cita_temario','invitados'];
-function canImport(){ return role==='gerencia'||role==='gerente'; }
+function canImport(){ return can('importar'); }
 function openImport(pid){ if(!canImport()) return; impS={pid:pid||'',step:1,rows:null}; view='importar'; modalTask=null; render(); }
 function impBack(){ const pid=impS&&impS.pid; impS=null; if(pid&&store.project(pid)) openProject(pid); else go(role==='gerencia'?'catalogos':'clientes'); }
 function impSetProject(v){ impS.pid=v; if(impS.rows) impValidate(); render(); }
@@ -3725,7 +3726,7 @@ function cpRecSend(){ const u=(val('rc-user')||'').trim(); if(!u){ cpRecS.err='E
   const f=findPortalUser(u); if(f&&f.p.portal.activo!==false){ const po=f.p.portal; const last=po.recover&&po.recover.ts; if(!last||Date.now()-new Date(last)>30*60000) store.updateClientPerson(f.c.id,f.p.id,{portal:Object.assign({},po,{recover:{ts:new Date().toISOString()}})}); }
   cpRecS.done=true; render(); }
 /* lado Nuwek: Dirección y Michelle reciben el aviso y pueden restablecer */
-function canRecover(){ const me=store.person(currentUser)||{}; return role==='gerencia'||/^michell/.test(impNz(me.name||'')); }
+function canRecover(){ const me=store.person(currentUser)||{}; return can('codigos')||/^michell/.test(impNz(me.name||'')); }
 function pendingRecovery(){ if(!session||!canRecover()) return []; const out=[]; store.d.clients.forEach(c=>(c.people||[]).forEach(p=>{ const r=p.portal&&p.portal.recover; if(r&&p.portal.activo!==false) out.push({c,p,ts:r.ts}); })); return out; }
 function resetClientCode(cid,pid,fromNotif){ const c=store.client(cid); const p=c&&(c.people||[]).find(x=>x.id===pid); if(!p||!p.portal) return; if(!confirm('¿Restablecer el código de '+p.name+' ('+c.name+') a '+RESET_CODE+'? Al entrar, el sistema le pedirá elegir uno nuevo.')) return;
   store.updateClientPerson(cid,pid,{portal:Object.assign({},p.portal,{code:RESET_CODE,reset:true,recover:null})}); shareToast('🔑 Código restablecido a '+RESET_CODE+'. Avísale a '+p.name+'.'); render(); }
@@ -3740,13 +3741,13 @@ function subPeopleN(s){ return (s.personId?1:0)+(s.team||[]).length+(s.invitados
 function citaKind(s){ if(!s||s.isSeries) return null; if((s.invitados||[]).length) return 'cliente'; if(s.date&&s.time&&subPeopleN(s)>=2) return 'interna'; return null; }
 function mnClockTxt(ms){ const t=Math.max(0,Math.floor(ms/1000)); const h=Math.floor(t/3600), m=Math.floor(t%3600/60), x=t%60; return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(x).padStart(2,'0'); }
 function mnGet(){ if(!mnV) return null; const t=store.task(mnV.tid); const s=t&&(t.subtasks||[]).find(x=>x.id===mnV.sid); const m=s&&(s.minutas||[]).find(x=>x.id===mnV.mid); return (t&&s&&m)?{t,s,m}:null; }
-function mnSave(mut,label){ const g=mnGet(); if(!g) return; if(!mnCanEdit(g.m)){ shareToast('Solo Dirección puede editar una minuta cerrada.'); return; } if(g.m.estado!=='curso') mnLogEdit(label||'cambios'); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?mut(JSON.parse(JSON.stringify(x))):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); mnRender(); }
+function mnSave(mut,label){ const g=mnGet(); if(!g) return; if(!mnCanEdit(g.m)){ shareToast('Tu perfil no puede editar una minuta cerrada.'); return; } if(g.m.estado!=='curso') mnLogEdit(label||'cambios'); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?mut(JSON.parse(JSON.stringify(x))):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); mnRender(); }
 function mnActive(){ for(const t of store.d.tasks){ for(const s of (t.subtasks||[])){ const m=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by===currentUser); if(m) return {tid:t.id,sid:s.id,mid:m.id}; } } return null; }
-function mnRoleOk(){ return ['pm','gerente','gerencia'].includes(role); }
+function mnRoleOk(){ return can('minuta'); }
 function mnStart(tid,sid){ { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
   if(!mnRoleOk()){ shareToast('Solo PM, Gerencia o Dirección pueden tomar la minuta.'); return; }
   const open=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by!==currentUser);
-  if(open){ const who=store.person(open.by).name||'otra persona'; if(role!=='gerencia'){ alert('Esta cita ya tiene una minuta abierta por '+who+'. Solo una persona a la vez puede tomarla; debe cerrarla primero (o Dirección puede tomarla).'); return; } if(!confirm('La minuta está abierta por '+who+'. ¿Cerrarla y abrir una nueva a tu nombre?')) return; mnV={tid,sid,mid:open.id}; mnStopNow(true); }
+  if(open){ const who=store.person(open.by).name||'otra persona'; if(!can('minutaEditar')){ alert('Esta cita ya tiene una minuta abierta por '+who+'. Solo una persona a la vez puede tomarla; debe cerrarla primero (o Dirección puede tomarla).'); return; } if(!confirm('La minuta está abierta por '+who+'. ¿Cerrarla y abrir una nueva a tu nombre?')) return; mnV={tid,sid,mid:open.id}; mnStopNow(true); }
   const act=mnActive(); if(act&&!(act.tid===tid&&act.sid===sid)){ if(!confirm('Ya tienes una minuta en curso. ¿Detenerla y empezar esta?')) return; mnV=act; mnStopNow(true); }
   const cur=(s.minutas||[]).find(x=>x.estado==='curso'); let mid;
   if(cur) mid=cur.id; else { const m={id:uid('mn_'),by:currentUser,start:new Date().toISOString(),end:null,estado:'curso',kind:citaKind(s)||'interna',asist:[],lines:[],links:[]}; store.updateSubtask(tid,sid,{minutas:[...(s.minutas||[]),m]}); mid=m.id; logEvent(tid,'Inició la minuta de «'+s.name+'»'); }
@@ -3839,7 +3840,7 @@ function mnPanelHtml(g){ const {t,s,m}=g; const rec=m.estado==='curso'; if(!mnCa
     <div class="mn-foot"><a onclick="mnLinksOpen=!mnLinksOpen;mnRender()">🔗 Enlaces (${m.links.length})</a><a onclick="mnReviewOpen()">Revisar acuerdos${unl?` (${unl} sin ligar)`:''}</a><a onclick="mnClose()">Cerrar panel</a></div>
     ${mnLinksOpen?`<div class="mn-sec">Enlaces</div>${m.links.map((x,i)=>`<div class="mn-lkrow"><a href="${esc(x.u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(x.t)}</a><a class="mn-del" onclick="mnLinkDel(${i})">✕</a></div>`).join('')}<div class="mn-add"><input id="mn-lt" placeholder="Título"><input id="mn-lu" placeholder="https://…" onkeydown="if(event.key==='Enter')mnLinkAdd()"><button class="mn-b" onclick="mnLinkAdd()">＋</button></div>`:''}</div>`; }
 function mnPanelRO(g){ const esc=mnEsc; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''};
-  return `<div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${m.kind==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · solo lectura</div></div><div class="mn-hr"><button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div><div class="mn-body">${mnSumBody(g)}<div class="mn-btns" style="margin-top:8px"><button class="mn-b" onclick="mnSumOpen('${t.id}','${s.id}','${m.id}')">Ver resumen / imprimir</button></div><div class="muted" style="font-size:.74rem;margin-top:6px">Solo Dirección puede editar una minuta cerrada.</div></div>`; }
+  return `<div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${m.kind==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · solo lectura</div></div><div class="mn-hr"><button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div><div class="mn-body">${mnSumBody(g)}<div class="mn-btns" style="margin-top:8px"><button class="mn-b" onclick="mnSumOpen('${t.id}','${s.id}','${m.id}')">Ver resumen / imprimir</button></div><div class="muted" style="font-size:.74rem;margin-top:6px">Tu perfil no puede editar una minuta cerrada.</div></div>`; }
 function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); if(r) r.innerHTML=''; return; } const r=mnRoot(); if(!mnV){ try{ const o=JSON.parse(localStorage.getItem(MN_KEY)||'null'); if(o) mnV=o; }catch(_){} }
   const g=mnGet(); if(mnV&&!g) mnV=null;
   const inEl=document.getElementById('mn-in'); const keep=inEl?{v:inEl.value,f:document.activeElement===inEl,s:inEl.selectionStart}:null; const ls=document.querySelector('.mn-lines'); const lt=ls?ls.scrollTop:0;
@@ -3853,12 +3854,12 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
 setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ if(e.dataset.end) return; e.textContent=mnClockTxt(Date.now()-new Date(e.dataset.start)); }); },1000);
 /* ---- Resumen imprimible, permisos y acceso por código desde el link de la sesión ---- */
 let mnSum=null, mnAuth=null; const mnFails={};
-function mnCanEdit(m){ return m.estado==='curso'?(m.by===currentUser||role==='gerencia'):role==='gerencia'; }
+function mnCanEdit(m){ return m.estado==='curso'?(m.by===currentUser||can('minutaEditar')):can('minutaEditar'); }
 function mnLogEdit(label){ const g=mnGet(); if(g&&g.m.estado!=='curso') logEvent(g.t.id,'Editó la minuta cerrada de «'+g.s.name+'»'+(label?': '+label:'')); }
 function mnSumOpen(tid,sid,mid){ { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
 function mnSumClose(){ mnSum=null; render(); }
 function mnSumPick(mid){ mnSum.mid=mid; mnSum.askDel=false; render(); }
-function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!['gerente','gerencia'].includes(role)){ shareToast('Solo Gerencia o Dirección pueden eliminar una minuta.'); return; }
+function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!can('minutaEliminar')){ shareToast('Tu perfil no puede eliminar minutas.'); return; }
   if(!mnSum.askDel){ mnSum.askDel=true; render(); return; }
   store.updateSubtask(g.t.id,g.s.id,{minutas:(g.s.minutas||[]).filter(x=>x.id!==g.m.id)}); logEvent(g.t.id,'Eliminó la minuta del '+dLabel(g.m.start.slice(0,10))+' de «'+g.s.name+'»');
   if(mnV&&mnV.mid===g.m.id){ mnV=null; try{ localStorage.removeItem(MN_KEY); }catch(_){} } mnSum=null; mnRender(); render(); shareToast('Minuta eliminada.'); }
@@ -3879,8 +3880,8 @@ function mnSumModal(){ const esc=mnEsc; const g=mnSumGet(); if(!g){ mnSum=null; 
   return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)mnSumClose()"><div class="modal-card" style="max-width:640px"><div class="m-head"><div class="m-top"><div><div class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</div><h3 style="margin:6px 0 0">📝 ${esc(s.name)}</h3><div class="muted" style="font-size:.8rem">${esc(c.name)} · ${esc(p.name)} · ${esc(t.name)}${s.date?' · '+esc(dLabel(s.date)):''} ${esc(s.time||'')}</div></div><button class="x" onclick="mnSumClose()">×</button></div></div><div class="m-body">
     <div class="field"><label>🔗 Link de la sesión</label><div style="display:flex;gap:6px"><input readonly value="${esc(url||'Se genera al copiarlo')}" style="flex:1;font-size:.78rem" onfocus="this.select()"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}');setTimeout(render,300)">Copiar</button></div></div>
     ${m?`${ms.length>1?`<div class="mn-chips" style="margin-bottom:8px">${ms.map(x=>`<button class="mn-chip ${x.id===m.id?'on':''}" onclick="mnSumPick('${x.id}')">${esc(dLabel(x.start.slice(0,10)))} · ${x.estado==='curso'?'en curso':mnClockTxt(new Date(x.end)-new Date(x.start))}</button>`).join('')}</div>`:''}${mnSumBody(g)}
-      <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${role==='gerencia'?'Solo Dirección edita; cada cambio queda en el log.':'Solo Dirección puede editar una minuta cerrada.'}</span>
-        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&role==='gerencia'?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}${['gerente','gerencia'].includes(role)?(mnSum.askDel?`<span style="color:#c0392b;font-weight:700;font-size:.8rem">¿Eliminar esta minuta? No se puede deshacer.</span><button class="btn" style="background:#c0392b" onclick="mnDel()">Sí, eliminar</button><button class="btn ghost" onclick="mnDelNo()">No</button>`:`<button class="btn ghost" style="color:#c0392b" onclick="mnDel()">🗑 Eliminar</button>`):''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
+      <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${can('minutaEditar')?'Tu perfil puede editar; cada cambio queda en el log.':'Tu perfil no puede editar una minuta cerrada.'}</span>
+        ${m.estado==='curso'&&mnCanEdit(m)?`<button class="btn ghost" onclick="mnSumEdit()">▶ Continuar</button>`:''}${m.estado!=='curso'&&can('minutaEditar')?`<button class="btn ghost" onclick="mnSumEdit()">✏️ Editar</button>`:''}${can('minutaEliminar')?(mnSum.askDel?`<span style="color:#c0392b;font-weight:700;font-size:.8rem">¿Eliminar esta minuta? No se puede deshacer.</span><button class="btn" style="background:#c0392b" onclick="mnDel()">Sí, eliminar</button><button class="btn ghost" onclick="mnDelNo()">No</button>`:`<button class="btn ghost" style="color:#c0392b" onclick="mnDel()">🗑 Eliminar</button>`):''}<button class="btn" onclick="mnPrint()">🖨 Imprimir / PDF</button></div>`
     :`<div class="ses-resp" style="background:#f2f1ea;color:#4b5b54;margin:8px 0">Esta cita todavía no tiene minuta.</div>${mnRoleOk()?`<button class="mn-play" onclick="mnSumStart()">▶ Iniciar minuta</button>`:'<div class="muted" style="font-size:.78rem">Solo PM, Gerencia o Dirección pueden iniciarla.</div>'}`}
     ${m&&m.estado!=='curso'&&mnRoleOk()?`<div style="margin-top:8px"><a style="cursor:pointer;color:var(--green);font-weight:700;font-size:.8rem" onclick="mnSumStart()">＋ Iniciar otra minuta de esta cita</a></div>`:''}</div></div></div>`; }
 function mnPrint(){ const g=mnSumGet(); if(!g||!g.m) return; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const by=store.person(m.by).name||'—'; const hx=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -3902,10 +3903,10 @@ function mnAuthModal(){ const esc=mnEsc; return `<div class="modal active" style
   ${mnAuth.opts?`<p class="muted" style="margin-top:0">Ese código coincide con más de una persona. ¿Quién eres?</p><div class="mn-chips">${mnAuth.opts.map(u=>`<button class="mn-chip" onclick="mnAuthLogin('${u.id}')">${esc(u.name)}</button>`).join('')}</div>`
   :`<p class="muted" style="margin-top:0">Escribe tu <b>código de 6 cifras</b> (PM, Gerencia o Dirección). Así queda registrado quién toma la minuta.</p><div class="field"><input id="au-code" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')mnAuthSubmit()"></div><div class="pin-err" style="color:#c0392b;min-height:18px">${esc(mnAuth.err||'')}</div><div class="wiz-actions"><button class="btn ghost" onclick="mnAuthClose()">Cancelar</button><button class="btn" onclick="mnAuthSubmit()">Entrar</button></div>`}</div></div></div>`; }
 function mnAuthSubmit(){ const code=((document.getElementById('au-code')||{}).value||'').trim(); const lock=mnFails.x; if(lock&&lock.until&&Date.now()<lock.until){ mnAuth.err='Demasiados intentos. Espera unos minutos.'; render(); return; }
-  const el=store.activeStaff().filter(u=>['pm','gerente','gerencia'].includes(u.perm)&&String(u.password||'')===code&&code);
+  const el=store.activeStaff().filter(u=>canFor(u.id,'minuta')&&String(u.password||'')===code&&code);
   if(!el.length){ const a=mnFails.x||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; mnAuth.err='Demasiados intentos. Espera 5 minutos.'; } else mnAuth.err='Código incorrecto o sin permiso (solo PM, Gerencia o Dirección).'; mnFails.x=a; render(); return; }
   mnFails.x=null; if(el.length>1){ mnAuth.opts=el; render(); return; } mnAuthLogin(el[0].id); }
-function mnAuthLogin(uid){ const u=store.person(uid); const ps=publicSes; if(!['pm','gerente','gerencia'].includes(u.perm)) return; session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; modalTask=null; opSelTask=null; mnAuth=null; saveSession(); render(); if(ps) mnSumOpen(ps.tid,ps.sid); }
+function mnAuthLogin(uid){ const u=store.person(uid); const ps=publicSes; if(!canFor(u.id,'minuta')) return; session=u.id; currentUser=u.id; role=profileBase(u.id)||u.perm||'colab'; kbPerson=u.id; modalTask=null; opSelTask=null; mnAuth=null; saveSession(); render(); if(ps) mnSumOpen(ps.tid,ps.sid); }
 
 /* aviso a la hora de una cita */
 function mnTodayCitas(){ const td=todayISO(); const out=[]; store.d.tasks.forEach(t=>{ if(!store.project(t.projectId)) return; (t.subtasks||[]).forEach(s=>{ if(s.isSeries||s.unida||s.done||s.date!==td) return; const k=citaKind(s)||(subHasCita(s)&&s.time?'cliente':null); if(!k) return; if(role==='colab'&&!subInvolves(s,currentUser)) return; out.push({t,s,k}); }); }); return out.sort((a,b)=>(a.s.time||'99')<(b.s.time||'99')?-1:1); }
@@ -3989,6 +3990,94 @@ function joinAskModal(){ const esc=mnEsc; const t=store.task(joinAsk.tid), s=t&&
 function joinAskNo(){ joinAsk=null; render(); }
 function joinAskYes(){ const {tid,sid,patch,name}=joinAsk; joinAsk=null; const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return; const R=citaRoot(t,s); patch.invitados=((s.unida&&s.unida.prev&&s.unida.prev.invitados)||[]).slice(); subSepararRaw(t,s,true);
   depApply(tid,sid,patch,()=>{ logEvent(tid,'Separó «'+name+'» de la cita de «'+R.s.name+'» al cambiar su fecha u hora'); subEd=null; render(); }); }
+
+/* ================== PERFILES DE PERMISOS (Catálogos → 🔐 Perfiles) ==================
+   Cuatro perfiles base (Dirección, Gerencia, PM, Colaborador) más los que crees. Cada persona usa el perfil base de su puesto
+   o el personalizado en el que la agregues. Dirección siempre conserva todo (no se puede quitar para no quedarse sin acceso). */
+const PERM_KEYS=[
+  ['proyectos','Proyectos','Crear, editar y eliminar proyectos.'],
+  ['clientes','Clientes','Crear, editar, activar o desactivar y eliminar clientes.'],
+  ['copiar','Copiar y mover','Copiar y mover tareas y subtareas, duplicar y exportar.'],
+  ['importar','Importar con Excel','Importar y actualizar tareas desde Excel.'],
+  ['fechas','Fechas y citas','Cambiar fechas de tareas y subtareas, repetir por calendario, crear subtareas desde la minuta y unir o separar citas.'],
+  ['eliminarTareas','Eliminar tareas','Ver el botón 🗑️ para eliminar una tarea completa.'],
+  ['log','Ver el Log','Ver el historial de cambios de cada tarea.'],
+  ['finanzas','Finanzas y KPIs','Ver KPIs de los proyectos y las finanzas por cliente.'],
+  ['catalogos','Catálogos','Entrar a Catálogos (servicios, personal, etiquetas, accesos…).'],
+  ['minuta','Tomar minutas','Iniciar una minuta con su código y tomar notas.'],
+  ['minutaEditar','Editar minutas cerradas','Editar una minuta ya cerrada o tomar una que otra persona dejó abierta.'],
+  ['minutaEliminar','Eliminar minutas','Borrar minutas.'],
+  ['codigos','Aprobar códigos de clientes','Recibir y atender las solicitudes de «restaurar código» de los clientes.']
+];
+const PERM_BASES={gerencia:'Dirección',gerente:'Gerencia',pm:'PM',colab:'Colaborador'};
+const PERM_DEF={
+  gerencia:Object.fromEntries(PERM_KEYS.map(k=>[k[0],true])),
+  gerente:{proyectos:true,copiar:true,importar:true,fechas:true,eliminarTareas:true,log:true,minuta:true,minutaEliminar:true},
+  pm:{fechas:true,eliminarTareas:true,log:true,minuta:true},
+  colab:{}
+};
+let perfVer=0, perfDbState='unknown', perfSel='', perfDraft=null, perfMsg='';
+function perfBuiltins(){ const st=(store.d.perfiles||[]); return ['gerencia','gerente','pm','colab'].map(id=>{ const o=st.find(x=>x.id===id)||{}; return {id,name:PERM_BASES[id],base:id,builtin:true,perms:Object.assign({},PERM_DEF[id],id==='gerencia'?PERM_DEF.gerencia:(o.perms||{})),miembros:[]}; }); }
+function perfAll(){ const cust=(store.d.perfiles||[]).filter(x=>!x.builtin&&!['gerencia','gerente','pm','colab'].includes(x.id)); return perfBuiltins().concat(cust.map(x=>({id:x.id,name:x.name||'Perfil',base:x.base||'colab',builtin:false,perms:x.perms||{},miembros:x.miembros||[]}))); }
+const _pfMemo={};
+function perfilOf(uid){ const u=(store.d.staff||[]).find(x=>x.id===uid); if(!u) return null; const k=uid+'|'+u.perm+'|'+perfVer; if(_pfMemo[k]) return _pfMemo[k];
+  const all=perfAll(); let p=all.find(x=>!x.builtin&&(x.miembros||[]).includes(uid)); if(!p) p=all.find(x=>x.id===(u.perm||'colab'))||all[3];
+  Object.keys(_pfMemo).forEach(x=>{ if(x.startsWith(uid+'|')) delete _pfMemo[x]; }); _pfMemo[k]=p; return p; }
+function profileBase(uid){ const p=perfilOf(uid); return p?p.base:null; }
+function canFor(uid,k){ const u=(store.d.staff||[]).find(x=>x.id===uid); if(!u) return false; const p=perfilOf(uid); if(!p) return !!(PERM_DEF[u.perm||'colab']||{})[k]; return !!p.perms[k]; }
+function can(k){ return !!session&&canFor(currentUser,k); }
+function isDireccion(){ const u=(store.d.staff||[]).find(x=>x.id===currentUser); return !!u&&u.perm==='gerencia'; }
+const PERF_SQL=`create table if not exists perfiles (
+  id text primary key,
+  name text,
+  base text,
+  perms jsonb default '{}'::jsonb,
+  miembros jsonb default '[]'::jsonb,
+  builtin boolean default false
+);
+alter table perfiles disable row level security;
+grant all on perfiles to anon, authenticated;`;
+async function dbLoadPerfiles(){ try{ const {data,error}=await sb.from('perfiles').select('*'); if(error) throw error; perfDbState='ok'; return (data||[]).map(r=>({id:r.id,name:r.name||'',base:r.base||'colab',perms:r.perms||{},miembros:Array.isArray(r.miembros)?r.miembros:[],builtin:!!r.builtin})); }catch(e){ perfDbState='missing'; return null; } }
+async function dbSavePerfil(pf){ try{ const {error}=await sb.from('perfiles').upsert({id:pf.id,name:pf.name,base:pf.base,perms:pf.perms||{},miembros:pf.miembros||[],builtin:!!pf.builtin}); if(error) throw error; perfDbState='ok'; }catch(e){ perfDbState='missing'; console.warn('perfiles:',e&&e.message||e); } }
+async function dbDeletePerfil(id){ try{ const {error}=await sb.from('perfiles').delete().eq('id',id); if(error) throw error; }catch(e){ console.warn('perfiles:',e&&e.message||e); } }
+function perfPut(pf){ const list=(store.d.perfiles||[]).filter(x=>x.id!==pf.id); list.push(pf); store.d.perfiles=list; perfVer++; store.save(); dbSavePerfil(pf); }
+function perfOpen(id){ perfSel=id; const p=perfAll().find(x=>x.id===id); perfDraft=p?JSON.parse(JSON.stringify(p)):null; perfMsg=''; render(); }
+function perfNew(){ perfSel='nuevo'; perfDraft={id:'',name:'',base:'colab',builtin:false,perms:{},miembros:[]}; perfMsg=''; render(); }
+function perfSetName(v){ if(perfDraft) perfDraft.name=v; }
+function perfSetBase(v){ if(perfDraft){ perfDraft.base=v; render(); } }
+function perfToggle(k,on){ if(perfDraft&&!(perfDraft.id==='gerencia')){ perfDraft.perms[k]=!!on; } }
+function perfMember(uid,on){ if(!perfDraft) return; const m=new Set(perfDraft.miembros||[]); if(on) m.add(uid); else m.delete(uid); perfDraft.miembros=[...m]; }
+function perfSave(){ const d=perfDraft; if(!d||!isDireccion()) return; if(d.id==='gerencia') return;
+  if(!d.builtin){ const nm=(d.name||'').trim(); if(!nm){ perfMsg='Ponle un nombre al perfil.'; render(); return; } d.name=nm; if(!d.id){ d.id='pf_'+Date.now().toString(36); }
+    // una persona solo puede estar en un perfil personalizado
+    (store.d.perfiles||[]).filter(x=>!x.builtin&&x.id!==d.id).forEach(o=>{ const n=(o.miembros||[]).filter(m=>!(d.miembros||[]).includes(m)); if(n.length!==(o.miembros||[]).length){ o.miembros=n; dbSavePerfil(o); } }); }
+  perfPut({id:d.id,name:d.name,base:d.base,perms:Object.assign({},d.perms),miembros:(d.miembros||[]).slice(),builtin:!!d.builtin}); perfSel=d.id; perfDraft=JSON.parse(JSON.stringify(perfAll().find(x=>x.id===d.id)||d)); perfMsg='✅ Guardado. Se aplica de inmediato a esas personas.'; render(); }
+function perfDup(){ const d=perfDraft; if(!d) return; perfDraft={id:'',name:d.name+' (copia)',base:d.base,builtin:false,perms:Object.assign({},d.perms),miembros:[]}; perfSel='nuevo'; perfMsg='Copia lista: cámbiale el nombre y guarda.'; render(); }
+function perfDel(){ const d=perfDraft; if(!d||d.builtin||!isDireccion()) return; if(!perfDel.ask){ perfDel.ask=true; perfMsg='¿Eliminar este perfil? Sus personas vuelven al perfil de su puesto. Toca «Eliminar» otra vez para confirmar.'; render(); return; } perfDel.ask=false;
+  store.d.perfiles=(store.d.perfiles||[]).filter(x=>x.id!==d.id); perfVer++; store.save(); dbDeletePerfil(d.id); perfSel=''; perfDraft=null; perfMsg='Perfil eliminado.'; render(); }
+function perfReset(){ const d=perfDraft; if(!d||!d.builtin||d.id==='gerencia'||!isDireccion()) return; store.d.perfiles=(store.d.perfiles||[]).filter(x=>x.id!==d.id); perfVer++; store.save(); dbDeletePerfil(d.id); perfDraft=JSON.parse(JSON.stringify(perfAll().find(x=>x.id===d.id))); perfMsg='Se restauraron los permisos originales de este perfil.'; render(); }
+function perfCopySql(){ try{ navigator.clipboard.writeText(PERF_SQL); shareToast('SQL copiado.'); }catch(_){ prompt('Copia el SQL:',PERF_SQL); } }
+function viewPerfiles(){ const esc=mnEsc; if(!isDireccion()) return '<div class="muted">Solo Dirección administra los perfiles de permisos.</div>';
+  const all=perfAll(); const staff=store.activeStaff(); const d=perfDraft;
+  const countOf=pf=>pf.builtin?staff.filter(u=>(u.perm||'colab')===pf.id&&!all.some(x=>!x.builtin&&(x.miembros||[]).includes(u.id))).length:(pf.miembros||[]).filter(id=>staff.some(u=>u.id===id)).length;
+  const list=all.map(pf=>`<div class="lib-side-it${perfSel===pf.id?' on':''}" onclick="perfOpen('${pf.id}')"><span class="lib-side-nm">${pf.builtin?'🔒':'🔐'} ${esc(pf.name)}<br><span class="muted" style="font-size:.68rem">${pf.builtin?'Perfil base':'Personalizado · se comporta como '+PERM_BASES[pf.base]}</span></span><span class="lib-side-n">${countOf(pf)}</span></div>`).join('');
+  const banner=perfDbState==='missing'?`<div class="ses-resp" style="background:#fff7e0;color:#7a5a00;margin-bottom:12px"><b>⚠ Falta crear la tabla en Supabase.</b> Mientras tanto, los perfiles solo se guardan en este navegador y los demás no los verán. Entra a Supabase → SQL Editor, pega esto y dale Run:<pre style="white-space:pre-wrap;background:#fff;border-radius:8px;padding:8px;margin:8px 0;font-size:.74rem">${esc(PERF_SQL)}</pre><button class="btn ghost sm" onclick="perfCopySql()">Copiar SQL</button></div>`:'';
+  let det;
+  if(!d) det=`<div class="muted" style="padding:22px;text-align:center">Elige un perfil de la izquierda para verlo o editarlo, o crea uno nuevo.</div>`;
+  else{ const lock=d.id==='gerencia'; const grp=PERM_KEYS.map(([k,l,desc])=>`<label class="perf-row ${lock?'lock':''}"><input type="checkbox" ${d.perms[k]?'checked':''} ${lock?'disabled':''} onchange="perfToggle('${k}',this.checked)"><span><b>${esc(l)}</b><span class="muted" style="display:block;font-size:.74rem">${esc(desc)}</span></span></label>`).join('');
+    const mem=d.builtin?`<div class="muted" style="font-size:.8rem">Personas con este puesto (por defecto): ${staff.filter(u=>(u.perm||'colab')===d.id).map(u=>esc(u.name)).join(', ')||'—'}. Para darle otro perfil a alguien, agrégalo a un perfil personalizado.</div>`
+      :`<div class="cp-list" style="max-height:220px">${staff.map(u=>`<label class="cp-row"><input type="checkbox" ${(d.miembros||[]).includes(u.id)?'checked':''} onchange="perfMember('${u.id}',this.checked)">${avatar(u,true)}<span><b>${esc(u.name)}</b><span class="muted" style="font-size:.74rem"> · puesto: ${esc(PERM_BASES[u.perm||'colab'])}</span></span></label>`).join('')}</div>`;
+    det=`<div class="lib-det-h"><h3>${d.builtin?'🔒 ':'🔐 '}${d.id?esc(d.name):'Nuevo perfil'}</h3></div><div class="lib-det-b" style="padding:12px">
+      ${perfMsg?`<div class="ses-resp" style="background:#eef6ff;color:#1f4e8c;margin-bottom:10px">${esc(perfMsg)}</div>`:''}
+      ${lock?'<div class="muted" style="margin-bottom:10px">Dirección siempre tiene todos los permisos. No se puede cambiar para que nunca te quedes sin acceso.</div>':''}
+      ${d.builtin?'':`<div class="field"><label>Nombre del perfil</label><input value="${esc(d.name)}" oninput="perfSetName(this.value)" placeholder="Ej. PM con copiar"></div>
+      <div class="field"><label>Se comporta como</label><select onchange="perfSetBase(this.value)">${Object.keys(PERM_BASES).map(b=>`<option value="${b}" ${d.base===b?'selected':''}>${PERM_BASES[b]}</option>`).join('')}</select><div class="hint">Define qué pantallas ve: «Colaborador» solo ve Mi espacio; los demás ven también Clientes y Gestión. Los permisos de abajo se suman o quitan a partir de ahí.</div></div>`}
+      <div class="m-sec"><h4>Permisos</h4><div class="perf-grid">${grp}</div></div>
+      <div class="m-sec"><h4>${d.builtin?'Personas':'Quiénes tienen este perfil'}</h4>${mem}</div>
+      <div class="wiz-actions"><span style="display:flex;gap:8px">${d.builtin?(lock?'':'<button class="btn ghost" onclick="perfReset()">↺ Restaurar originales</button>'):'<button class="btn ghost" style="color:#c0392b" onclick="perfDel()">🗑 Eliminar</button>'}<button class="btn ghost" onclick="perfDup()">⧉ Duplicar</button></span>${lock?'<span></span>':'<button class="btn" onclick="perfSave()">Guardar</button>'}</div></div>`; }
+  return `<div class="sec-title"><h2 style="font-size:1.1rem">🔐 Perfiles de permisos</h2><button class="btn sm" onclick="perfNew()">+ Nuevo perfil</button></div>
+    <p class="muted" style="margin-top:-4px">Decide qué puede hacer cada tipo de persona. Los cambios se aplican en cuanto guardas.</p>${banner}
+    <div class="lib-split"><div class="lib-side">${list}</div><div class="lib-det">${det}</div></div>`; }
 
 /* ================== MODAL DE EDICIÓN DE SUBTAREA + PARTICIPACIÓN DEL CLIENTE ================== */
 function openSubEdit(tid,sid){ subEd={tid,sid,tab:'datos'}; clientPop=null; render(); setTimeout(()=>{ smTab('datos'); smFreqChange(); smCount(); smLugarChange(); },0); }
@@ -4184,7 +4273,7 @@ function citasHistorialHtml(c,cp){
 
 /* ================== FINANZAS POR CLIENTE (solo Dirección): programado · facturado · cobrado parcialmente · cobrado · conciliado ================== */
 const PAY_ST={programado:{t:'Programado',c:'#6b7a73',bg:'#eef0ec'},facturado:{t:'Facturado',c:'#2f5fa8',bg:'#eaf1fb'},parcial:{t:'Cobrado parcialmente',c:'#9a7a00',bg:'#fff7e0'},cobrado:{t:'Cobrado',c:'#1f7a44',bg:'#e8f6ee'},conciliado:{t:'Conciliado',c:'#5b4fc9',bg:'#efecfb'}};
-function canSeeFinance(){ return role==='gerencia'; }
+function canSeeFinance(){ return can('finanzas'); }
 function payEstado(x){ return x.estado||(x.paid?'cobrado':'programado'); }
 function payCobrado(x){ const e=payEstado(x); if(e==='cobrado'||e==='conciliado') return x.cobro&&x.cobro.monto!=null?+x.cobro.monto:(+x.amount||0); if(e==='parcial') return +(x.cobro&&x.cobro.monto)||0; return 0; }
 function paySaldo(x){ return Math.max(0,(+x.amount||0)-payCobrado(x)); }

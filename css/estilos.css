@@ -1124,3 +1124,6 @@
   .gest-row1{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.gest-row1 .gest-tabs{margin-bottom:0}
   .kb-ctl .btn.sm[onclick*="openKbTask"]{margin-left:auto}
   .gest-row1{align-items:center}.gest-row1 .subtoggle{margin-bottom:0}.gest-row1 .subtoggle button{height:40px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+
+  .perf-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}.perf-row{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border:1px solid #ecebe3;border-radius:10px;cursor:pointer;background:#fff}.perf-row:hover{background:#f7f6ef}.perf-row.lock{opacity:.7;cursor:default}.perf-row input{margin-top:3px}
+  .perf-row input[type=checkbox]{width:auto;flex:0 0 auto;margin:3px 0 0}.perf-row>span{flex:1;min-width:0}
