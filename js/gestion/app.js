@@ -1227,7 +1227,7 @@ function tipoCol(s,t){ return SUBCOL[subTipo(s,t)][0]; }
 function tipoDot(s,t){ const k=subTipo(s,t); return `<i class="tp-dot" style="background:${SUBCOL[k][0]}" title="${SUBCOL[k][1]}"></i>`; }
 function subMark(s){ if(s.done) return '<b class="mk-ok" title="Hecha">✓</b> '; if(s.date&&s.date<todayISO()) return '<span class="mk-late" title="Venció y sigue pendiente">⚠️</span> '; return ''; }
 function tipoLegend(){ return `<div class="tp-leg">${['verde','azul','amarillo'].map(k=>`<span><i class="tp-dot" style="background:${SUBCOL[k][0]}"></i>${SUBCOL[k][1]}</span>`).join('')}<span class="tp-sep">|</span><span><b class="mk-ok">✓</b> hecha</span><span><span class="mk-late">⚠️</span> venció y sigue pendiente</span><span class="muted">· otros colores se eligen al editar la subtarea</span></div>`; }
-function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip${it.s.done?' gc-done':''}" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTask('${it.t.id}')">${tipoDot(it.s,it.t)}${subMark(it.s)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
+function gestChip(it){ const fr=kbFrente(it.t); return `<div class="gc-chip${it.s.done?' gc-done':''}" style="border-left:4px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${it.c.name} · ${it.p.name} · ${fr.name}" onclick="openTaskHi('${it.t.id}','${it.s.id}')">${tipoDot(it.s,it.t)}${subMark(it.s)}${it.s.time?`<b>${it.s.time}</b> `:''}${esc(it.s.name)}</div>`; }
 function gestCalendar(R){
   let all=gestSubs().filter(gestPass); if(gestProject) all=all.filter(x=>x.p.id===gestProject); if(gestPerson) all=all.filter(x=>x.s.personId===gestPerson);
   const byDay={}; all.forEach(x=>{ (byDay[x.s.date]=byDay[x.s.date]||[]).push(x); });
@@ -1235,7 +1235,7 @@ function gestCalendar(R){
   if(gestScope==='semana') return gestWeekView(byDay);
   return gestMonthView(byDay);
 }
-function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip${s.done?' gc-done':''}" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTask('${t.id}')">${tipoDot(s,t)}${subMark(s)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
+function citaChip(it){ const {s,t,c,est}=it; return `<div class="gc-chip${s.done?' gc-done':''}" style="border-left:3px solid ${est.c};background:${est.bg}" title="${esc(s.name)} · ${esc(c.name)} · ${est.t}" onclick="openTaskHi('${t.id}','${s.id}')">${tipoDot(s,t)}${subMark(s)}${s.time?`<b>${s.time}</b> `:''}${esc(s.name)} <span class="muted">· ${esc(c.name)}</span></div>`; }
 function citasInternas(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; const c=store.client(p.clientId)||{name:'',id:''};
   (t.subtasks||[]).forEach(s=>{ if(s.isSeries||citaKind(s)!=='interna') return; out.push({s,t,p,c,est:{k:'interna',t:'Interna',c:'#2f6fd6',bg:'#e8f0fd',razon:'',prop:[]}}); }); }); return out; }
 function gestCitas(){ let all=citasAll().concat(citasInternas()).filter(x=>x.s.date); if(gestClients.length) all=all.filter(x=>gestClients.includes(x.p.clientId)); if(gestProject) all=all.filter(x=>x.p.id===gestProject);
@@ -1274,7 +1274,7 @@ function gestDayView(byDay){
   const day=gestAnchor; const items=(byDay[day]||[]).slice().sort((a,b)=>(a.s.time||'')<(b.s.time||'')?-1:1);
   if(!items.length) return `<div class="gc-day"><div class="muted" style="padding:24px;text-align:center">Sin actividades este día.</div></div>`;
   const rows=items.map(it=>{ const fr=kbFrente(it.t); const per=store.person(it.s.personId);
-    return `<div class="gc-drow" onclick="openTask('${it.t.id}')" style="border-left:5px solid ${tipoCol(it.s,it.t)}">
+    return `<div class="gc-drow" onclick="openTaskHi('${it.t.id}','${it.s.id}')" style="border-left:5px solid ${tipoCol(it.s,it.t)}">
       <div class="gc-dtime">${it.s.time||'—'}</div>
       <div class="gc-dmain"><div class="gc-dname">${tipoDot(it.s,it.t)}${subMark(it.s)}${esc(it.s.name)}</div><div class="gc-dmeta">${it.c.name} · ${it.p.name} · ${fr.name} · ${avatar(per,true)} ${per.name}</div></div>
       <div class="gc-ddur">${fmtDurShort(it.s.durMin||30)}</div></div>`;
@@ -1292,7 +1292,7 @@ function gestAsignaciones(R){
     const cells=staff.map(u=>{ const items=all.filter(x=>x.p.id===p.id && x.s.personId===u.id);
       const byT=[]; items.forEach(it=>{ let g=byT.find(x=>x.t.id===it.t.id); if(!g){ g={t:it.t,list:[]}; byT.push(g); } g.list.push(it); });
       const chips=byT.map(g=>{ const pend=g.list.filter(x=>!x.s.done); const tip=g.list.map(x=>(x.s.done?'✓ ':'• ')+x.s.name+(x.s.date?' ('+dLabel(x.s.date)+')':'')).slice(0,12).join('\n');
-        return `<div class="ga-chip ga-task" title="${esc(tip)}" onclick="openTask('${g.t.id}')"><span class="ga-tn">${esc(g.t.name)}</span><span class="ga-n ${pend.length?'':'ok'}">${pend.length?pend.length:'✓'}</span></div>`; }).join('')||'<div class="ga-none">—</div>';
+        return `<div class="ga-chip ga-task" title="${esc(tip)}" onclick="openTaskHi('${g.t.id}','${(pend.length?pend:g.list).map(x=>x.s.id).join(',')}')"><span class="ga-tn">${esc(g.t.name)}</span><span class="ga-n ${pend.length?'':'ok'}">${pend.length?pend.length:'✓'}</span></div>`; }).join('')||'<div class="ga-none">—</div>';
       return `<td class="ga-cell">${chips}</td>`; }).join('');
     return `<tr><td class="ga-proj"><span class="ga-dot" style="background:${fc}"></span><div class="ga-pinfo"><div class="ga-pn">${c.name}</div><div class="ga-ps">${sv?sv.name:''}</div></div></td>${cells}</tr>`;
   }).join('');
@@ -2364,7 +2364,7 @@ function taskBody(t,panel){
           <button class="sub-ib${miss.length?' bad':''}" title="${miss.length?'Falta: '+miss.join(', ')+' — clic para completar':'Editar'}" onclick="openSubEdit('${t.id}','${s.id}')">✏️</button>
           <button class="sub-ib" title="Eliminar" onclick="delSub('${t.id}','${s.id}')">🗑️</button></div>`;
     const childForm=(addingChild&&addingChild.sid===s.id&&addingChild.tid===t.id)?`<div class="sub-addkid"><input id="nc-name" placeholder="Nueva sub-subtarea en «${esc(s.name)}»…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChildSub()}else if(event.key==='Escape'){event.stopPropagation();cancelAddChild()}"><button class="btn sm" onclick="addChildSub()">+ Agregar</button><button class="btn ghost sm" onclick="cancelAddChild()">Cancelar</button></div>`:'';
-    return `<div class="sub-group-item"><div class="sub-item sub2${lateD?' is-late':''}${depth?' sub-child':''}${hiSub&&hiSub.sid===s.id?' sub-hi':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
+    return `<div class="sub-group-item"><div class="sub-item sub2${lateD?' is-late':''}${depth?' sub-child':''}${hiSub&&hiSub.ids.includes(s.id)?' sub-hi':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>${chev}
       <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${s.isSeries?'Serie: se palomea cada repetición':(locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas')}"`}>${s.done?'✓':''}</span>
       <div class="sub-body" title="${esc(detail)}"><div class="sub-nm2 ${s.done?'done':''}">${tipoDot(s,t)}${s.name} ${donePct}</div>${chips?`<div class="sub-chips">${chips}</div>`:''}</div>
@@ -2464,8 +2464,11 @@ function saveTaskEdit(id){
   editingTask=null;render();
 }
 function deleteTask(id){ if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ store.removeTask(id); modalTask=null; editingTask=null; render(); } }
-function openTask(id){modalTask=id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];subView='list';render();}
-function closeTask(){modalTask=null;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];render();}
+function openTaskHi(id,sids){ hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
+  const t=store.task(id); if(t){ const c=subCollapsedMap(); let ch=false; ids.forEach(sid=>{ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const par=(t.subtasks||[]).find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
+  openTask(id); if(ids.length) setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${ids[0]}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },150); }
+function openTask(id){ if(hiSub&&hiSub.tid!==id) hiClear(); modalTask=id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];subView='list';render();}
+function closeTask(){ hiClear(); modalTask=null;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];render();}
 function navTask(dir){const p=store.project(store.task(modalTask).projectId);const sib=store.tasksOf(p.id);let i=sib.findIndex(x=>x.id===modalTask);i=Math.max(0,Math.min(sib.length-1,i+dir));modalTask=sib[i].id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];render();}
 function setTaskStatus(id,s){const t=store.task(id);if(!canEditTask(t)){return;}store.updateTask(id,{status:s});logEvent(id,'Cambió el estado a '+(statusLabel[s]||s));render();}
 function openLibModal(pid){libModal=pid;render();}
@@ -2966,7 +2969,7 @@ function toggleNotif(){ notifOpen=!notifOpen; notifUpdate(); }
 let hiSub=null, hiTimer=null;
 function hiClear(){ hiSub=null; if(hiTimer){ clearTimeout(hiTimer); hiTimer=null; } }
 function goNotif(tid,sid){ notifOpen=false; opFilterClient=''; view='op_pendientes'; modalTask=null; opSelTask=tid; subView='list'; draftAtt=[]; draftMentions=[]; hiClear();
-  if(sid){ hiSub={tid,sid}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
+  if(sid){ hiSub={tid,ids:[sid]}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
     const t=store.task(tid); const sb=t&&(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const c=subCollapsedMap(); if(c[sb.parentId]===undefined?!!(((t.subtasks||[]).find(x=>x.id===sb.parentId)||{}).isSeries):c[sb.parentId]){ c[sb.parentId]=0; try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
   render();
   setTimeout(()=>{ const row=document.querySelector(`.op-row[onclick*="'${tid}'"]`); if(row){ const sec=row.closest('.op-sec'); if(sec&&sec.classList.contains('closed')) toggleAcc(sec.dataset.acc); row.scrollIntoView({block:'center'}); }
