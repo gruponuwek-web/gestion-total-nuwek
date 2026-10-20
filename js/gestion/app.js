@@ -1170,11 +1170,14 @@ function saveGestFilters(list){ try{ localStorage.setItem('gestFilters_'+current
 function applyGestFilter(id,silent){ const f=gestFilters().find(x=>x.id===id); if(!f) return;
   gestFilterId=f.id; gestClients=(f.clients||[]).slice(); gestPeople=(f.people||[]).slice(); gestScope=f.scope||'mes'; gestProject=''; gestPerson='';
   try{ localStorage.setItem('gestLast_'+currentUser,f.id); }catch(_){} if(!silent) render(); }
-function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestPeople=[]; gestProject=''; gestPerson='';
+function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestPeople=[]; gestProject=''; gestPerson=''; gestEstado='';
   try{ localStorage.removeItem('gestLast_'+currentUser); }catch(_){} if(!silent) render(); }
 function gestInv(s,id){ return s.personId===id||(s.team||[]).includes(id); }   // la persona es responsable o participa
+let gestEstado='';
+function setGestEstado(v){ gestEstado=v; render(); }
+function gestEstadoOk(s){ if(!gestEstado) return true; const late=!s.done&&s.date&&s.date<todayISO(); return gestEstado==='hecha'?!!s.done:gestEstado==='vencida'?!!late:(!s.done&&!late); }
 function gestPersonOk(s){ return !gestPerson||gestInv(s,gestPerson); }
-function gestPass(x){ return (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.some(id=>gestInv(x.s,id))); }
+function gestPass(x){ return gestEstadoOk(x.s) && (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.some(id=>gestInv(x.s,id))); }
 function openGestFilterForm(id){ const f=id?gestFilters().find(x=>x.id===id):null; qm={kind:'gestFilter',fid:id||null,f:f||{name:'',clients:[],people:[],scope:gestScope}}; render(); }
 function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){alert('Ponle un nombre a la vista.');return;}
   const clients=[...document.querySelectorAll('.gf-cl:checked')].map(x=>x.value), people=[...document.querySelectorAll('.gf-pe:checked')].map(x=>x.value);
@@ -1229,6 +1232,7 @@ function viewGestion(){
       <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button>${gestSub==='min'?`<button class="${gestScope==='todo'?'on':''}" onclick="setGestScope('todo')">Todo</button>`:''}</div>
       <label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="setGestProject(this.value)">${projOpts}</select></label>
       <label class="filt"><span class="glabel">Persona</span><select class="filter-val" onchange="setGestPerson(this.value)">${persOpts}</select></label>
+      <label class="filt"><span class="glabel">Estado</span><select class="filter-val" onchange="setGestEstado(this.value)"><option value="">Todos</option><option value="hecha" ${gestEstado==='hecha'?'selected':''}>✓ Realizadas</option><option value="vencida" ${gestEstado==='vencida'?'selected':''}>⚠️ Vencidas y pendientes</option><option value="plan" ${gestEstado==='plan'?'selected':''}>Planeadas / en curso</option></select></label>
       <div class="kb-month"><button onclick="gestShift(-1)" title="Anterior">‹</button><span class="kb-month-lbl">${gestRangeLabel(R)}</span><button onclick="gestShift(1)" title="Siguiente">›</button></div>
       <button class="btn sm" style="margin-left:auto" onclick="openKbTask()">+ Tarea</button>
     </div>
