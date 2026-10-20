@@ -1094,3 +1094,12 @@
   .tp-pick input:checked+.tp-sw{border-color:#223c36;box-shadow:0 0 0 2px #fff,0 0 0 4px #223c36}
 
   .mk-ok{color:#1f7a44;font-weight:800}.mk-late{font-size:.72rem}.tp-sep{color:#c3cbc6}.gc-chip.gc-done{opacity:.62}.gc-chip.gc-done b:not(.mk-ok){text-decoration:line-through}
+
+  /* Agenda: tarjetas claras con sombra para que resalte el puntito/franja de color del tipo */
+  .ag-block{background:#fff;color:#223c36;box-shadow:0 2px 8px rgba(34,60,54,.22),0 0 0 1px rgba(34,60,54,.06)}
+  .ag-block .ag-bl-sub,.ag-block .ag-bl-mt{color:#5b6b64;opacity:1}
+  .ag-block .tp-dot{width:11px;height:11px;margin-right:5px;box-shadow:0 0 0 2px #fff,0 1px 3px rgba(0,0,0,.3)}
+  .ag-block:hover{filter:none;box-shadow:0 4px 14px rgba(34,60,54,.32),0 0 0 1px rgba(34,60,54,.1)}
+  .ag-block.part{background:#f1f2ee !important;background-image:repeating-linear-gradient(135deg,rgba(34,60,54,.06) 0 8px,transparent 8px 16px) !important;border:2px dashed #b3bcb7;box-shadow:0 1px 4px rgba(34,60,54,.15)}
+  .ag-block.sel{outline:3px solid #fff;box-shadow:0 0 0 5px var(--green),0 4px 14px rgba(0,0,0,.3)}
+  .ag-block.done{opacity:.6}
