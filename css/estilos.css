@@ -1103,3 +1103,11 @@
   .ag-block.part{background:#f1f2ee !important;background-image:repeating-linear-gradient(135deg,rgba(34,60,54,.06) 0 8px,transparent 8px 16px) !important;border:2px dashed #b3bcb7;box-shadow:0 1px 4px rgba(34,60,54,.15)}
   .ag-block.sel{outline:3px solid #fff;box-shadow:0 0 0 5px var(--green),0 4px 14px rgba(0,0,0,.3)}
   .ag-block.done{opacity:.6}
+
+  /* Asignaciones: encabezado (personas) y primera columna (proyectos) fijos al desplazarse */
+  .ga-scroll{overflow:auto;max-height:calc(100vh - 250px)}
+  .ga-tbl thead th{position:sticky;top:0;z-index:3;background:#fafaf7;box-shadow:0 1px 0 #e7e6de}
+  .ga-tbl td.ga-proj,.ga-tbl th.ga-proj-h{position:sticky;left:0;z-index:2;background:#fff;box-shadow:1px 0 0 #e7e6de;min-width:170px}
+  .ga-tbl th.ga-proj-h{z-index:4;background:#fafaf7}
+  .ga-tbl td.ga-proj{display:table-cell}.ga-projin{display:flex;align-items:flex-start;gap:8px}
+  .ga-chip.ga-part{background:#f1f2ee;border:1px dashed #b3bcb7}
