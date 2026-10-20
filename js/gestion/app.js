@@ -426,7 +426,20 @@ function pendingTeam(){ const out=[]; store.d.tasks.forEach(t=>{ if(!store.proje
 function ackTeam(tid,sid){ const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sub) return; const ack=Object.assign({},(sub.isSeries?seriesTpl(sub):sub).teamAck||{}); ack[currentUser]=new Date().toISOString();
   if(sub.isSeries){ const sr=Object.assign({},sub.series); sr.tpl=Object.assign({},sr.tpl,{teamAck:ack}); store.updateSubtask(tid,sid,{series:sr}); } else store.updateSubtask(tid,sid,{teamAck:ack}); logEvent(tid,'Vio y atendió su participación en «'+sub.name+'»'); render(); }
 function subInvolves(s,pid){ return s.personId===pid||(s.team||[]).includes(pid)||(s.invitados||[]).includes(pid); }
-function subMissing(s){ const x=s.isSeries?seriesTpl(s):s; const date=s.isSeries?(s.series||{}).startDate:s.date; const m=[]; if(!x.personId) m.push('responsable'); if(!date) m.push('fecha'); if(!x.time) m.push('hora'); if(!x.durMin) m.push('estimación de tiempo'); return m; }
+function subIsParent(t,s){ return !!(t&&s&&!s.parentId&&!s.isSeries&&!s.seriesId&&subKids(t,s.id).length); }
+function subMissing(s,t){ const x=s.isSeries?seriesTpl(s):s; const date=s.isSeries?(s.series||{}).startDate:s.date; const m=[]; const par=subIsParent(t,s); if(!x.personId) m.push('responsable'); if(!date&&!par) m.push('fecha'); if(!x.time&&!par) m.push('hora'); if(!x.durMin&&!par) m.push('estimación de tiempo'); return m; }
+/* ---- reglas de una subtarea que tiene sub-subtareas: toma la fecha de la más lejana, no lleva hora ni tiempo estimado, y se palomea sola cuando todas sus hijas están hechas ---- */
+function parentSyncTask(t,loud){ let ch=false; const nowIso=new Date().toISOString();
+  (t.subtasks||[]).forEach(m=>{ if(m.parentId||m.isSeries||m.seriesId) return; const kids=subKids(t,m.id); if(!kids.length) return;
+    const ds=kids.map(k=>k.date).filter(Boolean).sort(); if(ds.length){ const md=ds[ds.length-1]; if(m.date!==md){ m.date=md; m.dateConflict=false; ch=true; } }
+    if(m.time){ m.time=''; ch=true; } if(m.durMin){ m.durMin=null; ch=true; }
+    const all=kids.every(k=>k.done);
+    if(all&&!m.done){ const last=kids.map(k=>k.doneAt).filter(Boolean).sort().pop(); m.done=true; m.doneAt=last||nowIso; m.timeSpent=kids.reduce((a,k)=>a+(+k.timeSpent||0),0); ch=true; try{ store.releaseNext(t,m); if(m.repeatAfter) store.spawnNextSubtask(t,m); }catch(_){} if(loud&&typeof logEvent==='function') logEvent(t.id,'Se completó «'+m.name+'» sola: todas sus sub-subtareas están hechas'); }
+    else if(!all&&m.done){ m.done=false; m.doneAt=null; m.timeSpent=0; (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===m.id){ delete d.turno; delete d.turnoAck; } }); ch=true; if(loud&&typeof logEvent==='function') logEvent(t.id,'Se reabrió «'+m.name+'» porque una sub-subtarea quedó pendiente'); } });
+  return ch; }
+let __psyncBusy=false, __psyncFirst=true;
+function parentSyncAll(){ if(__psyncBusy||typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return; __psyncBusy=true; const loud=!__psyncFirst; __psyncFirst=false;
+  try{ store.d.tasks.forEach(t=>{ if(parentSyncTask(t,loud)&&typeof dbSaveTask==='function') dbSaveTask(t); }); }catch(e){ console.warn('parentSync',e); } __psyncBusy=false; }
 /* ===== Tareas cíclicas por calendario: cada periodo nace una tarea nueva con todas sus subtareas ===== */
 function cycleNextDue(t){ const c=t.repeatCal; if(!c||!c.freq||!t.dueDate) return ''; const n=Math.max(1,+c.interval||1);
   if(c.freq==='weekly') return addDaysISO(t.dueDate,7*n); if(c.freq==='days') return addDaysISO(t.dueDate,n);
@@ -541,7 +554,7 @@ function scrollRestore(list){ list.forEach(o=>{ const q=o.p.split('.'); let el=d
 function okDate(v){ if(!v) return v; const m=/^(\d{4})-(\d\d)-(\d\d)$/.exec(String(v)); if(!m) return ''; let y=+m[1]; if(y<100) y+=2000; if(y<2000||y>2100) return ''; return y+'-'+m[2]+'-'+m[3]; }
 function fixBadDates(){ if(window.__dfix||typeof store==='undefined'||!store.d||!(store.d.tasks||[]).length) return; window.__dfix=1; store.d.tasks.forEach(t=>{ let ch=false; (t.subtasks||[]).forEach(s=>{ if(s.date&&okDate(s.date)!==s.date){ s.date=okDate(s.date); ch=true; } (s.minutas||[]).forEach(m=>(m.lines||[]).forEach(l=>{ if(l.date&&okDate(l.date)!==l.date){ l.date=okDate(l.date); ch=true; } })); }); if(ch&&typeof dbSaveTask==='function') dbSaveTask(t); }); }
 function render(){
-  fixBadDates();
+  fixBadDates(); parentSyncAll();
   const sig=renderSig(); const keep=(sig===_rSig)&&!!document.getElementById('app').firstChild; const y=window.scrollY, snap=keep?scrollSnap():null; _rSig=sig;
   renderBase();
   if(keep){ scrollRestore(snap); if(window.scrollY!==y) window.scrollTo(0,y); requestAnimationFrame(()=>{ if(Math.abs(window.scrollY-y)>2) window.scrollTo(0,y); }); }
@@ -2340,7 +2353,7 @@ function taskBody(t,panel){
   const clientPeople2=c.people;
   const _ord=subOrder(t); const nCita=_ord.filter(x=>subHasCita(x.s)).length; const _ordF=subOnlyCita?_ord.filter(x=>x.depth===0?(subHasCita(x.s)||x.kids.some(subHasCita)):subHasCita(x.s)):_ord;
   const subs=_ordF.map(({s,depth,kids})=>{
-    const _t=s.isSeries?seriesTpl(s):s; const per=store.person(_t.personId); const timing=timingSub===t.id+':'+s.id; const miss=subMissing(s); const cliN=(_t.invitados||[]).length;
+    const _t=s.isSeries?seriesTpl(s):s; const per=store.person(_t.personId); const timing=timingSub===t.id+':'+s.id; const miss=subMissing(s,t); const cliN=(_t.invitados||[]).length;
     const canChk=canCheckSub(s); const locked=isColab()&&subTimeLocked(s); const chkClickable=canChk&&!locked&&!s.isSeries;
     const lockTag=(s.done&&isColab())?(subTimeLocked(s)?` <span class="sub-lock">🔒</span>`:(s.doneAt?` <span class="sub-editable" title="Editable hasta ${subEditUntil(s)}">✏️ ${subEditUntil(s)}</span>`:'')):'';
     const lateD=(!s.done&&s.date&&s.date<todayISO())?Math.round((new Date(todayISO()+'T00:00:00')-new Date(s.date+'T00:00:00'))/86400000):0;
@@ -3947,8 +3960,8 @@ function subEditModal(){
         <div class="rep-row" style="margin-top:8px"><span class="muted">Termina</span><select id="sm-end" onchange="smFreqChange()"><option value="never" ${(!sr.endType||sr.endType==='never')?'selected':''}>Nunca (se generan 8 semanas por adelantado)</option><option value="date" ${sr.endType==='date'?'selected':''}>En una fecha</option><option value="count" ${sr.endType==='count'?'selected':''}>Después de N veces</option><option value="deadline" ${sr.endType==='deadline'?'selected':''}>Al llegar al deadline de la tarea</option></select><input id="sm-until" type="date" value="${sr.until||''}" style="display:none"><input id="sm-count" type="number" min="1" placeholder="N" value="${sr.count||''}" style="display:none;width:80px"></div>
         <div class="hint">La <b>fecha</b> de arriba es el inicio de la serie. Cada repetición queda como una subtarea con el mismo responsable, hora y duración; si la borras, solo se omite esa. Al cambiar la regla se regeneran las repeticiones futuras que aún no están hechas.</div></div></div>`:'';
   const parentOpts=`<option value="">— Ninguna (nivel principal) —</option>`+(t.subtasks||[]).filter(m=>!subIsChild(t,m)&&m.id!==s.id).map(m=>`<option value="${m.id}" ${s.parentId===m.id?'selected':''}>${esc(m.name)}</option>`).join('');
-  const bad=(v)=>v?'':' sm-miss';
-  const repAllowed=!s0.parentId&&!s0.seriesId; const repMode=(s0.isSeries||sr.freq)?'cal':(s.repeatAfter?'after':'none'); const missN=subMissing(s0).length; const tab=subEd.tab||'datos';
+  const bad=(v)=>v?'':' sm-miss'; const isPar=subIsParent(t,s0);
+  const repAllowed=!s0.parentId&&!s0.seriesId; const repMode=(s0.isSeries||sr.freq)?'cal':(s.repeatAfter?'after':'none'); const missN=subMissing(s0,t).length; const tab=subEd.tab||'datos';
   const smTabsBar=`<div class="sm-tabs"><button type="button" class="sm-tab ${tab==='datos'?'on':''}" data-tab="datos" onclick="smTab('datos')">📝 Datos${missN?'<b class="sm-dot"></b>':''}</button><button type="button" class="sm-tab ${tab==='nuwek'?'on':''}" data-tab="nuwek" onclick="smTab('nuwek')">👥 Equipo Nuwek <i id="sm-n-nuwek"></i></button><button type="button" class="sm-tab ${tab==='cli'?'on':''}" data-tab="cli" onclick="smTab('cli')">🫱🏽‍🫲🏾 Cliente <i id="sm-n-cli"></i></button>${repAllowed?`<button type="button" class="sm-tab ${tab==='rep'?'on':''}" data-tab="rep" onclick="smTab('rep')">↻ Repetir <i id="sm-n-rep"></i></button>`:''}${!s0.isSeries?`<button type="button" class="sm-tab ${tab==='ses'?'on':''}" data-tab="ses" onclick="smTab('ses')">📅 Sesión</button>`:''}</div>`;
   return `<div class="modal active" style="z-index:120" onclick="if(event.target===this)closeSubEdit()"><div class="modal-card" style="max-width:640px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(t.name)}</div><h3 style="margin:8px 0 0">Editar ${s.parentId?'sub-subtarea':'subtarea'}</h3></div><button class="x" onclick="closeSubEdit()">×</button></div></div>
@@ -3958,9 +3971,10 @@ function subEditModal(){
         <div class="field"><label>Nombre</label><input id="sm-name" value="${esc(s.name)}"></div>
         <div class="sm-req-note">Obligatorios: responsable, fecha, hora y estimación de tiempo. Si falta alguno, el lápiz se queda en rojo.</div>
         <div class="field row"><div><label>Responsable *</label><select id="sm-person" class="${bad(s.personId).trim()}">${persOpts}</select></div>
-          <div><label>${s0.isSeries?'Inicio de la serie *':'Fecha *'}</label><input id="sm-date" type="date" value="${s.date||''}" class="${bad(s.date).trim()}" oninput="smDateChange()" ${dateLocked?`disabled title="${SUB_DATE_MSG}"`:''}></div></div>
-        <div class="field row"><div><label>Hora *</label><input id="sm-time" type="time" value="${s.time||''}" class="${bad(s.time).trim()}"></div>
-          <div><label>Cuánto tardará *</label><select id="sm-dur" class="${bad(s.durMin).trim()}">${durOpts}</select></div></div>
+          <div><label>${s0.isSeries?'Inicio de la serie *':(isPar?'Fecha (la de su sub-subtarea más lejana)':'Fecha *')}</label><input id="sm-date" type="date" value="${s.date||''}" class="${isPar?'':bad(s.date).trim()}" oninput="smDateChange()" ${isPar?'disabled title="Se calcula sola con la sub-subtarea más lejana"':(dateLocked?`disabled title="${SUB_DATE_MSG}"`:'')}></div></div>
+        <div class="field row"><div><label>${isPar?'Hora (no aplica)':'Hora *'}</label><input id="sm-time" type="time" value="${isPar?'':(s.time||'')}" class="${isPar?'':bad(s.time).trim()}" ${isPar?'disabled':''}></div>
+          <div><label>${isPar?'Tiempo estimado (no aplica)':'Cuánto tardará *'}</label><select id="sm-dur" class="${isPar?'':bad(s.durMin).trim()}" ${isPar?'disabled':''}>${durOpts}</select></div></div>
+        ${isPar?'<div class="hint" style="margin:-4px 0 10px">Esta subtarea tiene sub-subtareas: su fecha es la de la sub-subtarea más lejana, no lleva hora ni tiempo estimado, y se marca hecha sola cuando todas sus sub-subtareas estén hechas.</div>':''}
         <div class="field"><label>Color en los calendarios</label><div class="tp-pick"><label title="Según la actividad: con cliente = verde, con el equipo = azul, trabajo solo = amarillo"><input type="radio" name="sm-col" value="" ${!s0.color?'checked':''}><span class="tp-sw auto">Auto</span></label>${Object.keys(SUBCOL).map(k=>`<label title="${SUBCOL[k][1]}"><input type="radio" name="sm-col" value="${k}" ${s0.color===k?'checked':''}><span class="tp-sw" style="background:${SUBCOL[k][0]}"></span></label>`).join('')}</div><div class="hint">«Auto» pinta verde si es con cliente, azul si es con el equipo y amarillo si es trabajo solo. Rojo está pensado para vacaciones o incapacidades.</div></div>
         <div class="field"><label>Etapa</label><select id="sm-etapa" onchange="smEtapaChange(this.value)" ${dateLocked||!etapas.length?'disabled':''}>${etOpts}</select><div class="hint">La etapa sale de la fecha; al elegir otra, la fecha se mueve al inicio de esa etapa.</div></div>
         ${canParent?`<div class="field"><label>Dentro de</label><select id="sm-parent">${parentOpts}</select></div>`:''}
@@ -4000,7 +4014,7 @@ function saveSubModal(){
   const person=val('sm-person')||'';
   const team=[...document.querySelectorAll('.sm-team:checked')].map(i=>i.value).filter(id=>id!==person);
   const cli=[...document.querySelectorAll('.sm-cli:checked')].map(i=>i.value);
-  const patch={name,personId:person,date:val('sm-date')||t.dueDate||'',time:val('sm-time')||'',durMin:+val('sm-dur')||null,team,invitados:cli}; { const ce=document.querySelector('input[name="sm-col"]:checked'); if(ce) patch.color=SUBCOL[ce.value]?ce.value:undefined; }
+  const patch={name,personId:person,date:val('sm-date')||t.dueDate||'',time:val('sm-time')||'',durMin:+val('sm-dur')||null,team,invitados:cli}; if(subIsParent(t,s)){ delete patch.date; patch.time=''; patch.durMin=null; } { const ce=document.querySelector('input[name="sm-col"]:checked'); if(ce) patch.color=SUBCOL[ce.value]?ce.value:undefined; }
   const repMode=document.getElementById('sm-mode')?document.getElementById('sm-mode').value:null;
   if(document.getElementById('sm-rep')) patch.repeatAfter=(repMode==='after')?(Math.max(0,parseInt(val('sm-rep'),10)||0)||null):null;
   // a quién se le avisa: los que se agregaron ahora (por quién y cuándo); si alguien sale, se limpia su aviso
