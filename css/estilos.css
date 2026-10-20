@@ -1120,3 +1120,6 @@
   .gw-hours{position:relative}.gw-hr{font-size:.64rem;color:var(--muted);text-align:right;padding:2px 6px;border-top:1px solid #f0efe9;box-sizing:border-box}
   .gw-day{position:relative;border-left:1px solid #f0efe9}.gw-line{position:absolute;left:0;right:0;border-top:1px solid #f0efe9}
   .gw-blk{position:absolute;padding:1px;box-sizing:border-box;z-index:1}.gw-blk .gc-chip{height:100%;box-sizing:border-box;white-space:normal;overflow:hidden;line-height:1.15;box-shadow:0 1px 3px rgba(34,60,54,.18);background:#fff}
+
+  .gest-row1{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.gest-row1 .gest-tabs{margin-bottom:0}
+  .kb-ctl .btn.sm[onclick*="openKbTask"]{margin-left:auto}

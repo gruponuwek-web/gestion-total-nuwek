@@ -1222,14 +1222,16 @@ function viewGestion(){
   const persOpts='<option value="">Equipo Nuwek</option>'+store.activeStaff().map(u=>`<option value="${u.id}" ${gestPerson===u.id?'selected':''}>${u.name}</option>`).join('');
   const body = gestSub==='asig' ? gestAsignaciones(R) : gestSub==='citas' ? gestCitas() : gestSub==='min' ? gestMinutas() : gestCalendar(R);
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Vista de mando · ${gestSub==='asig'?'quién trabaja en qué':'calendario del equipo'}</div></div>
+    <div class="gest-row1">
     <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button><button class="${gestSub==='min'?'on':''}" onclick="setGestSub('min')">📝 Minutas</button></div>
+<div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button>${gestSub==='min'?`<button class="${gestScope==='todo'?'on':''}" onclick="setGestScope('todo')">Todo</button>`:''}</div>
+    </div>
     <div class="gf-bar"><span class="glabel">Vistas</span>
       <button class="gf-chip${gestFilterId?'':' on'}" onclick="clearGestFilter()">Todo</button>
       ${gestFilters().map(f=>`<button class="gf-chip${f.id===gestFilterId?' on':''}" onclick="applyGestFilter('${f.id}')">${esc(f.name)}${f.id===gestFilterId?` <span class="gf-ed" title="Editar vista" onclick="event.stopPropagation();openGestFilterForm('${f.id}')">✏️</span>`:''}</button>`).join('')}
       <button class="gf-chip gf-new" onclick="openGestFilterForm()">+ Nueva vista</button>
     </div>
     <div class="kb-ctl">
-      <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button>${gestSub==='min'?`<button class="${gestScope==='todo'?'on':''}" onclick="setGestScope('todo')">Todo</button>`:''}</div>
       <label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="setGestProject(this.value)">${projOpts}</select></label>
       <label class="filt"><span class="glabel">Persona</span><select class="filter-val" onchange="setGestPerson(this.value)">${persOpts}</select></label>
       <label class="filt"><span class="glabel">Estado</span><select class="filter-val" onchange="setGestEstado(this.value)"><option value="">Todos</option><option value="hecha" ${gestEstado==='hecha'?'selected':''}>✓ Realizadas</option><option value="vencida" ${gestEstado==='vencida'?'selected':''}>⚠️ Vencidas y pendientes</option><option value="plan" ${gestEstado==='plan'?'selected':''}>Planeadas / en curso</option></select></label>
