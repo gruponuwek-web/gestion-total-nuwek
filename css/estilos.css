@@ -1149,3 +1149,6 @@
   .gestor-tg{text-align:right;margin:0 0 6px;font-size:.74rem}.gestor-tg a{cursor:pointer;color:var(--muted);font-weight:600;text-decoration:underline dotted}.gestor-tg a:hover{color:var(--green)}
 
   .mn-addp.cli{border-color:#bcd8c7;background:#f1f8f3;color:#1f6b45}
+
+  .mn-st{display:inline-block;font-size:.66rem;font-weight:700;border-radius:10px;padding:2px 8px;margin-left:6px;white-space:nowrap;vertical-align:middle}
+  .mn-st.none{background:#eceae0;color:#6b7a73}.mn-st.rec{background:#fde8e8;color:#c0392b}.mn-st.ok{background:#e6f4ea;color:#1f7a44}.mn-st.warn{background:#fff3d6;color:#9a6a00}
