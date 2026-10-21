@@ -3789,8 +3789,6 @@ function mnUnlink(lid){ mnSave(m=>{ const l=m.lines.find(x=>x.id===lid); if(l) l
 function mnCreateSub(lid,tid){ if(!canSubDate()){ alert('Crear subtareas es de PM, Gerencia o Dirección. Deja el acuerdo ligado a una existente o pídeselo a alguien de ese nivel.'); return; }
   const g=mnGet(); const l=g&&g.m.lines.find(x=>x.id===lid); if(!l) return; const t=store.task(tid); if(!t) return;
   const st={name:l.txt,personId:l.resp||currentUser,date:l.date||'',time:'',durMin:null,invitados:[]}; store.addSubtask(tid,st); logEvent(tid,'Creó la subtarea «'+st.name+'» desde la minuta de «'+g.s.name+'»'); mnLinkTo(lid,tid,st.id); }
-function mnPickOpen(lid){ mnRev=mnRev||{}; const g=mnGet(); mnRev.pick={lid,pid:g?g.t.projectId:'',tid:g?g.t.id:'',sid:''}; mnRender(); }
-function mnPickSet(k,v){ const P=mnRev.pick; P[k]=v; if(k==='pid'){ P.tid=''; P.sid=''; } if(k==='tid') P.sid=''; mnRender(); }
 function mnReviewOpen(){ mnRev=mnRev||{}; mnRender(); }
 function mnReviewClose(){ mnRev=null; mnRender(); }
 function mnShareSet(v){ mnSave(m=>{ m.share=!!v; return m; }); }
@@ -3813,12 +3811,51 @@ function mnRoot(){ let r=document.getElementById('mn-root'); if(!r){ r=document.
 function mnLinkHtml(g,l){ const k=l.link; const tt=k&&store.task(k.tid); const ss=k&&k.sid&&tt&&(tt.subtasks||[]).find(x=>x.id===k.sid);
   const P=mnRev&&mnRev.pick&&mnRev.pick.lid===l.id?mnRev.pick:null;
   if(k&&tt) return `<div class="mn-lk ok">✔ Ligado a <b>${esc(tt.name)}</b>${ss?' › '+esc(ss.name):''} <a onclick="mnUnlink('${l.id}')">quitar</a></div>`;
-  if(P){ const projs=store.d.projects.slice().sort((a,b)=>(store.client(a.clientId).name+a.name).localeCompare(store.client(b.clientId).name+b.name)); const tasks=P.pid?store.tasksOf(P.pid):[]; const tk=P.tid&&store.task(P.tid); const subs=tk?(tk.subtasks||[]).filter(x=>!x.isSeries&&!x.seriesId):[];
-    return `<div class="mn-pick"><select onchange="mnPickSet('pid',this.value)"><option value="">Proyecto…</option>${projs.map(x=>`<option value="${x.id}" ${x.id===P.pid?'selected':''}>${esc(store.client(x.clientId).name)} · ${esc(x.name)}</option>`).join('')}</select>
-      <select onchange="mnPickSet('tid',this.value)"><option value="">Tarea…</option>${tasks.map(x=>`<option value="${x.id}" ${x.id===P.tid?'selected':''}>${esc(x.name)}</option>`).join('')}</select>
-      <select onchange="mnPickSet('sid',this.value)"><option value="">(toda la tarea)</option>${subs.map(x=>`<option value="${x.id}" ${x.id===P.sid?'selected':''}>${x.parentId?'↳ ':''}${esc(x.name)}</option>`).join('')}</select>
-      <div class="mn-btns"><button class="mn-b" ${P.tid?'':'disabled'} onclick="mnLinkTo('${l.id}','${P.tid}','${P.sid}')">Ligar</button><button class="mn-b ghost" ${P.tid?'':'disabled'} onclick="mnCreateSub('${l.id}','${P.tid}')">+ Crear subtarea aquí</button><button class="mn-b ghost" onclick="mnRev.pick=null;mnRender()">Cancelar</button></div></div>`; }
-  return `<div class="mn-btns"><button class="mn-b" onclick="mnLinkTo('${l.id}','${g.t.id}','${g.s.id}')">Ligar a esta cita</button><button class="mn-b ghost" onclick="mnCreateSub('${l.id}','${g.t.id}')">+ Subtarea nueva</button><button class="mn-b ghost" onclick="mnPickOpen('${l.id}')">Elegir otra…</button></div>`; }
+  if(P) return mnPickForm(g,l,P);
+  return `<div class="mn-btns"><button class="mn-b" onclick="mnPickOpen('${l.id}','same')">＋ Subtarea aquí</button><button class="mn-b ghost" onclick="mnPickOpen('${l.id}','other')">＋ En otra tarea o proyecto…</button></div>`; }
+function mnProjList(P){ const esc=mnEsc; const q=impNz(P.pq||''); const projs=store.d.projects.map(x=>({x,c:(store.client(x.clientId)||{}).name||''})).filter(o=>!q||impNz(o.c+' '+o.x.name).includes(q)).sort((a,b)=>(a.c+a.x.name).localeCompare(b.c+b.x.name,'es'));
+  return projs.slice(0,40).map(o=>`<div class="mn-li" onclick="mnPickSet('pid','${o.x.id}')"><b>${esc(o.c)}</b> · ${esc(o.x.name)}</div>`).join('')+(projs.length>40?`<div class="muted" style="padding:4px 8px;font-size:.72rem">+${projs.length-40} más: sigue escribiendo para acotar.</div>`:'')||'<div class="muted" style="padding:6px 8px">Sin coincidencias.</div>'; }
+function mnTaskList(P){ const esc=mnEsc; const q=impNz(P.tq||''); const tasks=store.tasksOf(P.pid).filter(t=>(!P.fid||t.frenteId===P.fid)&&(!P.eid||((store.etapaOfDate(P.pid,t.dueDate)||{}).id===P.eid))&&(!q||impNz(t.name).includes(q)));
+  return `<div class="mn-li new" onclick="mnPickSet('tid','new')">＋ Crear tarea nueva${P.tq?` «${esc(P.tq)}»`:''}</div>`+tasks.slice(0,40).map(t=>`<div class="mn-li" onclick="mnPickSet('tid','${t.id}')">${esc(t.name)}<span class="muted" style="font-size:.7rem"> · ${esc((kbFrente(t)||{}).name||'')}</span></div>`).join('')+(tasks.length>40?`<div class="muted" style="padding:4px 8px;font-size:.72rem">+${tasks.length-40} más: sigue escribiendo para acotar.</div>`:''); }
+function mnPickForm(g,l,P){ const esc=mnEsc; const same=P.scope==='same'; const pr=P.pid?store.project(P.pid):null; const cl=pr?(store.client(pr.clientId)||{}).name:'';
+  const frentes=P.pid?store.frentesOf(P.pid):[], etapas=P.pid?store.etapasOf(P.pid):[]; const tk=(P.tid&&P.tid!=='new')?store.task(P.tid):null; const subs=tk?(tk.subtasks||[]).filter(x=>!x.isSeries&&!x.seriesId):[];
+  let h=`<div class="mn-pick"><div class="mn-ph">${same?'＋ Subtarea en esta misma tarea':'＋ Subtarea en otra tarea o proyecto'}</div>`;
+  if(!same){
+    h+=pr?`<div class="mn-fl"><span class="muted">Proyecto</span> <b>${esc(cl)} · ${esc(pr.name)}</b> <a onclick="mnPickSet('pid','')">cambiar</a></div>`
+      :`<div class="mn-fl"><span class="muted">Proyecto</span></div><input id="mn-pq" placeholder="Escribe para buscar el proyecto…" value="${esc(P.pq||'')}" oninput="mnPickQ('pq',this.value)" autocomplete="off"><div id="mn-pl" class="mn-ls">${mnProjList(P)}</div>`;
+    if(pr){
+      h+=`<div class="mn-two"><label><span class="muted">Frente</span><select onchange="mnPickSet('fid',this.value)"><option value="">${P.tid==='new'?'Elige…':'Todos'}</option>${frentes.map(f=>`<option value="${f.id}" ${f.id===P.fid?'selected':''}>${esc(f.name)}</option>`).join('')}</select></label>
+        <label><span class="muted">Etapa</span><select onchange="mnPickSet('eid',this.value)"><option value="">${P.tid==='new'?'Elige…':'Todas'}</option>${etapas.map(e=>`<option value="${e.id}" ${e.id===P.eid?'selected':''}>${esc(e.name)}</option>`).join('')}</select></label></div>`;
+      if(!P.tid){ h+=`<div class="mn-fl"><span class="muted">Tarea</span></div><input id="mn-tq" placeholder="Escribe para buscar la tarea, o crea una nueva…" value="${esc(P.tq||'')}" oninput="mnPickQ('tq',this.value)" autocomplete="off"><div id="mn-tl" class="mn-ls">${mnTaskList(P)}</div>`; }
+      else if(P.tid==='new'){ h+=`<div class="mn-fl"><span class="muted">Tarea nueva</span> <a onclick="mnPickSet('tid','')">elegir una existente</a></div><input id="mn-nn" placeholder="Nombre de la tarea nueva" value="${esc(P.newName||P.tq||'')}" oninput="mnPick.newName=this.value" autocomplete="off">`; }
+      else if(tk){ h+=`<div class="mn-fl"><span class="muted">Tarea</span> <b>${esc(tk.name)}</b> <a onclick="mnPickSet('tid','')">cambiar</a></div>`; }
+    }
+  } else h+=`<div class="mn-fl"><span class="muted">Tarea</span> <b>${esc(g.t.name)}</b></div>`;
+  const ready=same||(pr&&P.tid);
+  if(ready){
+    if(tk&&subs.length) h+=`<div class="mn-fl" style="margin-top:6px"><span class="muted">o liga a una subtarea que ya existe</span></div><select onchange="mnPickSet('sid',this.value)"><option value="">— Crear una subtarea nueva —</option>${subs.map(x=>`<option value="${x.id}" ${x.id===P.sid?'selected':''}>${x.parentId?'↳ ':''}${esc(x.name)}</option>`).join('')}</select>`;
+    if(!P.sid){
+      h+=`<div class="mn-two" style="margin-top:6px"><label><span class="muted">Responsable *</span><select onchange="mnPickQ('resp',this.value)"><option value="">Elige…</option>${store.activeStaff().map(u=>`<option value="${u.id}" ${P.resp===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select></label>
+        <label><span class="muted">Fecha *</span><input type="date" value="${esc(P.date||'')}" onchange="mnPickQ('date',this.value)"></label></div>
+        <div class="mn-two"><label><span class="muted">Hora</span><input type="time" value="${esc(P.time||'')}" onchange="mnPickQ('time',this.value)"></label>
+        <label><span class="muted">Tiempo estimado</span><select onchange="mnPickQ('dur',this.value)"><option value="">— sin estimar —</option>${DUR_OPTS.map(m=>`<option value="${m}" ${String(P.dur)===String(m)?'selected':''}>${fmtDurShort(m)}</option>`).join('')}</select></label></div>
+        <div class="hint" style="font-size:.7rem">Si dejas hora o tiempo vacíos, el lápiz de la subtarea quedará en rojo hasta completarlos.</div>`; }
+  }
+  h+=`<div class="mn-btns" style="margin-top:8px"><button class="mn-b" ${ready?'':'disabled'} onclick="mnPickGo()">${P.sid?'Ligar':'Crear y ligar'}</button><button class="mn-b ghost" onclick="mnRev.pick=null;mnRender()">Cancelar</button></div></div>`;
+  return h; }
+let mnPick=null;
+function mnPickOpen(lid,scope){ mnRev=mnRev||{}; const g=mnGet(); const l=g&&g.m.lines.find(x=>x.id===lid); mnRev.pick={lid,scope:scope||'other',pid:scope==='same'?g.t.projectId:'',fid:'',eid:'',tid:scope==='same'?g.t.id:'',newName:'',sid:'',resp:(l&&l.resp)||currentUser,date:(l&&l.date)||'',time:'',dur:'',pq:'',tq:''}; mnPick=mnRev.pick; mnRender(); }
+function mnPickSet(k,v){ const P=mnRev.pick; P[k]=v; if(k==='pid'){ P.fid=''; P.eid=''; P.tid=''; P.sid=''; P.tq=''; P.newName=''; } if(k==='fid'||k==='eid'){ if(P.tid&&P.tid!=='new'){ P.tid=''; P.sid=''; } } if(k==='tid'){ P.sid=''; if(v==='new') P.newName=P.tq||''; } mnPick=P; mnRender(); }
+function mnPickQ(k,v){ const P=mnRev&&mnRev.pick; if(!P) return; P[k]=v; mnPick=P; if(k==='pq'){ const e=document.getElementById('mn-pl'); if(e) e.innerHTML=mnProjList(P); } if(k==='tq'){ const e=document.getElementById('mn-tl'); if(e) e.innerHTML=mnTaskList(P); } }
+function mnPickGo(){ const P=mnRev&&mnRev.pick; if(!P) return; const g=mnGet(); const l=g&&g.m.lines.find(x=>x.id===P.lid); if(!l) return;
+  if(P.sid){ mnLinkTo(P.lid,P.tid,P.sid); return; }
+  if(!canSubDate()){ alert('Crear subtareas es de PM, Gerencia o Dirección. Pídele a alguien de ese nivel que lo haga, o liga el acuerdo a una subtarea que ya exista.'); return; }
+  if(!P.resp){ alert('Elige quién será el responsable.'); return; } if(!P.date){ alert('Pon la fecha de la subtarea.'); return; }
+  let tid=P.tid;
+  if(tid==='new'){ const nm=(P.newName||'').trim(); if(!nm){ alert('Ponle nombre a la tarea nueva.'); return; } if(!P.fid){ alert('Elige el frente de la tarea nueva.'); return; } if(!P.eid){ alert('Elige la etapa de la tarea nueva.'); return; }
+    const pr=store.project(P.pid); const et=store.etapasOf(P.pid).find(e=>e.id===P.eid); const nt=store.addTask({projectId:P.pid,frenteId:P.fid,name:nm,subtitle:(store.client(pr.clientId)||{}).name||'',description:'',tags:[],workLink:'',deliverables:[],responsibleId:P.resp,status:'to-do',dueDate:(et&&et.end)||P.date,viaticos:0,subtasks:[]}); tid=nt.id; logEvent(tid,'Creó la tarea «'+nm+'» desde la minuta de «'+g.s.name+'»'); }
+  const t=store.task(tid); if(!t) return;
+  const st={name:l.txt,personId:P.resp,date:P.date,time:P.time||'',durMin:+P.dur||null,invitados:[]}; store.addSubtask(tid,st); logEvent(tid,'Creó la subtarea «'+st.name+'» desde la minuta de «'+g.s.name+'»'); mnLinkTo(P.lid,tid,st.id); }
 function mnPanelHtml(g){ const {t,s,m}=g; const rec=m.estado==='curso'; if(!mnCanEdit(m)) return mnPanelRO(g); const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const kind=m.kind==='cliente'?'Con cliente':'Interna';
   const planned=[]; if(s.personId) planned.push({id:s.personId,tipo:'n'}); (s.team||[]).forEach(id=>planned.push({id,tipo:'n'})); (s.invitados||[]).forEach(id=>planned.push({id,tipo:'c'}));
   const here=new Set(m.asist.map(a=>a.id)); const names=(id,tipo)=>tipo==='c'?(((c.people||[]).find(x=>x.id===id)||{}).name||'Cliente'):(store.person(id).name||'—');
@@ -3850,7 +3887,11 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
   if(mnPre&&!g&&mnOpen) h+=mnPrePanel();
   if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-panel">${mnPanelHtml(g)}</div>`;
     h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
-  r.innerHTML=h; mnGeoApply();
+  const sig=h.replace(/(<(?:span|div) class="mn-clk"[^>]*>)[^<]*/g,'$1');
+  if(r.dataset.sig===sig&&(r.children.length||!h)){ mnGeoApply(); return; }
+  const ae=document.activeElement; const kf=(ae&&ae.id&&r.contains(ae))?{id:ae.id,s:ae.selectionStart}:null; const pn0=r.querySelector('.mn-panel'); const ps0=pn0?pn0.scrollTop:0;
+  r.dataset.sig=sig; r.innerHTML=h; mnGeoApply();
+  { const pn=r.querySelector('.mn-panel'); if(pn) pn.scrollTop=ps0; if(kf){ const e=document.getElementById(kf.id); if(e){ try{ e.focus({preventScroll:true}); if(kf.s!=null) e.setSelectionRange(kf.s,kf.s); }catch(_){} } } }
   const ni=document.getElementById('mn-in'); if(ni&&keep){ ni.value=keep.v; if(keep.f){ ni.focus(); try{ ni.setSelectionRange(keep.s,keep.s); }catch(_){} } } const nl=document.querySelector('.mn-lines'); if(nl) nl.scrollTop=lt; }
 setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ if(e.dataset.end) return; e.textContent=mnClockTxt(Date.now()-new Date(e.dataset.start)); }); },1000);
 /* ---- Resumen imprimible, permisos y acceso por código desde el link de la sesión ---- */
