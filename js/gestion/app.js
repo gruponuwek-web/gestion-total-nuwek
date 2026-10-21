@@ -3759,6 +3759,7 @@ function mnPrePanel(){ const t=store.task(mnPre.tid); const s=t&&(t.subtasks||[]
     <div class="mn-body"><button class="mn-play" onclick="mnStart('${t.id}','${s.id}')">▶ Iniciar minuta</button><div class="mn-sec">Minutas de esta cita</div>${ms.map(m=>`<div class="mn-lkrow"><span>${esc(dLabel(m.start.slice(0,10)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="muted" style="padding:4px 0">Aún no hay minutas de esta cita.</div>'}</div></div>`; }
 function mnView(tid,sid,mid){ mnPre=null; mnV={tid,sid,mid}; mnOpen=true; mnRev=null; mnRender(); }
 function mnToggle(){ mnOpen=!mnOpen; mnRender(); }
+function mnGoCita(tid,sid){ mnPrompt=null; mnRender(); visitSession(tid,sid); }
 function mnStopNow(silent){ const g=mnGet(); if(!g) return; mnSyncLinks(g.t.id,g.m.links); mnSave(m=>Object.assign(m,{end:new Date().toISOString(),estado:'cerrada'})); try{ localStorage.removeItem(MN_KEY); }catch(_){} logEvent(g.t.id,'Cerró la minuta de «'+g.s.name+'»'); if(!silent){ mnRev={}; mnOpen=true; mnRender(); } }
 function mnClose(){ mnRev=null; mnV=null; mnOpen=false; try{ localStorage.removeItem(MN_KEY); }catch(_){} mnRender(); }
 function mnAsistToggle(id,tipo,name){ mnSave(m=>{ const i=m.asist.findIndex(a=>a.id===id); if(i>=0) m.asist.splice(i,1); else m.asist.push({id,name,tipo,at:new Date().toISOString()}); return m; }); }
@@ -3845,7 +3846,7 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
   const g=mnGet(); if(mnV&&!g) mnV=null;
   const inEl=document.getElementById('mn-in'); const keep=inEl?{v:inEl.value,f:document.activeElement===inEl,s:inEl.selectionStart}:null; const ls=document.querySelector('.mn-lines'); const lt=ls?ls.scrollTop:0;
   let h='';
-  if(mnPrompt&&!g){ h+=`<div class="mn-prompt"><b>📝 Es hora de «${esc(mnPrompt.title)}»</b><div class="muted">¿Iniciamos la minuta?</div><div class="mn-btns"><button class="mn-b" onclick="mnStart('${mnPrompt.tid}','${mnPrompt.sid}')">▶ Iniciar minuta</button><button class="mn-b ghost" onclick="mnPrompt=null;mnRender()">Ahora no</button></div></div>`; }
+  if(mnPrompt&&!g){ h+=`<div class="mn-prompt"><b>📝 Es hora de «${esc(mnPrompt.title)}»</b><div class="muted">Abre la cita y desde ahí decides cuándo iniciar la minuta.</div><div class="mn-btns"><button class="mn-b" onclick="mnGoCita('${mnPrompt.tid}','${mnPrompt.sid}')">📅 Ir a la cita</button><button class="mn-b ghost" onclick="mnPrompt=null;mnRender()">Ahora no</button></div></div>`; }
   if(mnPre&&!g&&mnOpen) h+=mnPrePanel();
   if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-panel">${mnPanelHtml(g)}</div>`;
     h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
