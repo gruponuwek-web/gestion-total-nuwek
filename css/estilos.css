@@ -1132,3 +1132,18 @@
   .mn-pick input:not([type=checkbox]),.mn-pick select{width:100%;box-sizing:border-box;border:1.5px solid #e1e0d6;border-radius:7px;padding:6px 8px;font:inherit;font-size:.8rem;background:#fff}
   .mn-two{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:4px}.mn-two label{display:flex;flex-direction:column;gap:2px;font-size:.7rem}
   .mn-ls{max-height:150px;overflow:auto;border:1px solid #ecebe3;border-radius:7px;margin-top:4px;background:#fff}.mn-li{padding:6px 8px;cursor:pointer;font-size:.78rem;border-bottom:1px solid #f4f3ee}.mn-li:hover{background:#eef6f1}.mn-li.new{color:var(--green);font-weight:700}
+
+  /* Minuta flotante: el botón es la raíz y NO se mueve al abrir o cerrar el cuadrito */
+  #mn-root.fab{display:block}
+  #mn-root.fab .mn-fab{position:relative}
+  #mn-root.fab .mn-pw{position:absolute;left:0;bottom:calc(100% + 10px);width:min(420px,calc(100vw - 32px));max-height:72vh;display:flex;z-index:2}
+  #mn-root.fab.below .mn-pw{bottom:auto;top:calc(100% + 10px)}
+  #mn-root.fab.right .mn-pw{left:auto;right:0}
+  #mn-root .mn-pw .mn-panel{flex:1;width:100%;max-height:none;min-width:0;min-height:0;resize:none;box-sizing:border-box}
+  .mn-rz{position:absolute;right:0;top:0;width:22px;height:22px;z-index:5;cursor:nesw-resize;touch-action:none;background:linear-gradient(225deg,rgba(34,60,54,.35) 0 2px,transparent 2px 5px,rgba(34,60,54,.35) 5px 7px,transparent 7px);border-top-right-radius:14px}
+  #mn-root.fab.below .mn-rz{top:auto;bottom:0;cursor:nwse-resize;border-top-right-radius:0;border-bottom-right-radius:14px;background:linear-gradient(135deg,transparent 0 11px,rgba(34,60,54,.35) 11px 13px,transparent 13px 16px,rgba(34,60,54,.35) 16px 18px,transparent 18px)}
+  #mn-root.fab.right .mn-rz{right:auto;left:0;border-top-right-radius:0;border-top-left-radius:14px;transform:scaleX(-1)}
+  #mn-root.fab.below.right .mn-rz{border-bottom-left-radius:14px;border-top-left-radius:0}
+  .mn-tl{color:#fff;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,.6)}.mn-tl:hover{border-bottom-style:solid}
+
+  .gestor-tg{text-align:right;margin:0 0 6px;font-size:.74rem}.gestor-tg a{cursor:pointer;color:var(--muted);font-weight:600;text-decoration:underline dotted}.gestor-tg a:hover{color:var(--green)}

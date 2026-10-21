@@ -1512,6 +1512,8 @@ function tcDragLeave(ev){ const cell=ev.currentTarget; if(!cell.contains(ev.rela
 function tcDrop(ev){ if(!tcDrag) return; ev.preventDefault(); const cell=ev.currentTarget; const b=tcBefore(cell,ev.clientY); const d=tcDrag; tcDragEnd();
   store.moveTaskTo(d.tid,cell.dataset.fr,d.eid,cell.dataset.et,b?b.dataset.tid:null); render(); }
 
+let gestorHideDone=(()=>{ try{ return localStorage.getItem('gestorHideDone')==='1'; }catch(_){ return false; } })();
+function toggleGestorDone(){ gestorHideDone=!gestorHideDone; try{ localStorage.setItem('gestorHideDone',gestorHideDone?'1':'0'); }catch(_){} render(); }
 function tabGestor(p){
   const colab=isColab();
   const frentes=store.frentesOf(p.id), etapas=store.etapasOf(p.id), tasks=store.tasksOf(p.id);
@@ -1520,7 +1522,7 @@ function tabGestor(p){
   const head=`<tr><th class="corner">Frente ╲ Etapa</th>${etapas.map(e=>`<th><div class="et-hd"><div><div class="et-nm">${e.name}</div><span class="sub">${dLabel(e.start)}–${dLabel(e.end)}</span></div>${etOps(e)}</div></th>`).join('')}</tr>`;
   const rows=frentes.map(f=>{
     const cells=etapas.map(e=>{
-      const chips=tasks.filter(t=>t.frenteId===f.id && taskEtapaIds(t).has(e.id)).sort((a,b)=>(a.ord||0)-(b.ord||0)).map(t=>{
+      const chips=tasks.filter(t=>t.frenteId===f.id && taskEtapaIds(t).has(e.id) && !(gestorHideDone&&t.status==='done')).sort((a,b)=>(a.ord||0)-(b.ord||0)).map(t=>{
         const done=workSubs(t).filter(s=>s.done).length, tot=workSubs(t).length;
         const bad=(t.subtasks||[]).some(x=>x.dateConflict&&!x.done);
         const isDone=t.status==='done';
@@ -1533,7 +1535,9 @@ function tabGestor(p){
     const frOps=colab?'':`<span class="fr-ops"><button title="Subir" onclick="moveFrente('${p.id}','${f.id}',-1)">↑</button><button title="Bajar" onclick="moveFrente('${p.id}','${f.id}',1)">↓</button><button title="Renombrar" onclick="openFrenteEdit('${f.id}','${p.id}')">✏️</button><button title="Eliminar" onclick="delFrente('${f.id}','${p.id}')">🗑️</button></span>`;
     return `<tr><td class="frente-h" style="background:${f.color}"><div class="fr-hd"><span class="fr-nm">${f.name}</span>${frOps}</div></td>${cells}</tr>`;
   }).join('');
-  return `<div class="gantt-wrap"><table class="gantt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
+  const nDone=tasks.filter(t=>t.status==='done').length;
+  const tg=nDone?`<div class="gestor-tg"><a onclick="toggleGestorDone()">${gestorHideDone?'👁 Mostrar realizadas':'🙈 Ocultar realizadas'} (${nDone})</a></div>`:'';
+  return `${tg}<div class="gantt-wrap"><table class="gantt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
     <div class="hint" style="margin-top:10px">Filas = Frentes · Columnas = Etapas · cada tarjeta es una tarea (clic para abrir). La etapa se deduce de la fecha de las subtareas.</div>`;
 }
 
@@ -2822,7 +2826,8 @@ function resetLoginBg(){ if(confirm('¿Restaurar el fondo por defecto?')){ store
 function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMentions=[];subView='list';render();}
 
 /* init: cargar Personal desde Supabase y luego arrancar */
-let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null; let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){} history.replaceState(null,'',location.pathname+location.search); return id; }catch(_){ return null; } })();
+let shareSubHint=null;
+let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null; let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){} const pr=id.split('/'); id=pr[0]; shareSubHint=pr[1]||null; history.replaceState(null,'',location.pathname+location.search); return id; }catch(_){ return null; } })();
 async function boot(){
   try{
     if(typeof dbLoadPersonal==='function'){
@@ -3793,17 +3798,24 @@ function mnReviewOpen(){ mnRev=mnRev||{}; mnRender(); }
 function mnReviewClose(){ mnRev=null; mnRender(); }
 function mnShareSet(v){ mnSave(m=>{ m.share=!!v; return m; }); }
 /* panel flotante */
-let mnGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekMinutaGeo')||'null')||{}; }catch(_){ return {}; } })();
-function mnGeoSave(){ try{ localStorage.setItem('nuwekMinutaGeo',JSON.stringify(mnGeo)); }catch(_){} }
+let mnGeo=(()=>{ try{ const g=JSON.parse(localStorage.getItem('nuwekMinutaGeo2')||'null'); if(g) return g; const o=JSON.parse(localStorage.getItem('nuwekMinutaGeo')||'null')||{}; return o.w?{w:o.w,h:o.h}:{}; }catch(_){ return {}; } })();
+function mnGeoSave(){ try{ localStorage.setItem('nuwekMinutaGeo2',JSON.stringify(mnGeo)); }catch(_){} }
+/* El botón (raíz) manda: queda donde lo dejes. El cuadrito se abre pegado a él, hacia arriba (o hacia abajo si arriba no cabe). */
+function mnPlace(){ const r=document.getElementById('mn-root'); if(!r) return; const pw=r.querySelector('.mn-pw'); r.classList.remove('below','right'); if(!pw) return;
+  pw.style.maxHeight=''; const fr=r.getBoundingClientRect(); const ph=pw.offsetHeight, pwid=pw.offsetWidth; const above=fr.top-18, below=window.innerHeight-fr.bottom-18;
+  if(ph>above&&below>above){ r.classList.add('below'); } if(fr.left+pwid>window.innerWidth-8) r.classList.add('right');
+  const avail=r.classList.contains('below')?below:above; if(pw.offsetHeight>avail){ pw.style.height=Math.max(160,avail)+'px'; } }
 function mnGeoApply(){ const r=document.getElementById('mn-root'); if(!r) return;
-  if(mnGeo.x!=null){ const x=Math.max(0,Math.min(mnGeo.x,window.innerWidth-90)), y=Math.max(0,Math.min(mnGeo.y,window.innerHeight-60)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.bottom='auto'; }
-  const pn=r.querySelector('.mn-panel'); if(pn&&mnGeo.w){ pn.style.width=Math.min(mnGeo.w,window.innerWidth-16)+'px'; pn.style.maxHeight='none'; if(mnGeo.h) pn.style.height=Math.min(mnGeo.h,window.innerHeight-16)+'px'; } }
-(function(){ if(window.__mnDrag) return; window.__mnDrag=1; let d=null;
-  document.addEventListener('pointerdown',e=>{ const pn=document.querySelector('#mn-root .mn-panel'); if(pn&&e.target===pn){ const b=pn.getBoundingClientRect(); window.__mnRz=(e.clientX>b.right-26&&e.clientY>b.bottom-26); } const h=e.target.closest&&e.target.closest('#mn-root .mn-h,#mn-root .mn-fab'); if(!h||e.target.closest('button.mn-x,.mn-hr button,.mn-hr a')) return; const r=document.getElementById('mn-root'); const b=r.getBoundingClientRect(); d={h,sx:e.clientX,sy:e.clientY,ox:b.left,oy:b.top,moved:false}; });
-  document.addEventListener('pointermove',e=>{ if(!d) return; const dx=e.clientX-d.sx, dy=e.clientY-d.sy; if(!d.moved&&Math.abs(dx)+Math.abs(dy)<6) return; d.moved=true; e.preventDefault(); mnGeo.x=d.ox+dx; mnGeo.y=d.oy+dy; mnGeoApply(); },{passive:false});
-  document.addEventListener('pointerup',e=>{ const rs=document.querySelector('#mn-root .mn-panel'); if(d&&d.moved){ if(d.h.classList.contains('mn-fab')) window.__mnNoClick=Date.now(); mnGeo.x=Math.max(0,Math.min(mnGeo.x,window.innerWidth-90)); mnGeo.y=Math.max(0,Math.min(mnGeo.y,window.innerHeight-60)); mnGeoSave(); }
-    else if(rs&&window.__mnRz){ mnGeo.w=rs.offsetWidth; mnGeo.h=rs.offsetHeight; mnGeoSave(); }
-    window.__mnRz=false; d=null; });
+  if(mnGeo.x!=null){ const fb=r.querySelector('.mn-fab'); const fw=fb?fb.offsetWidth:90, fh=fb?fb.offsetHeight:44; const x=Math.max(0,Math.min(mnGeo.x,window.innerWidth-fw)), y=Math.max(0,Math.min(mnGeo.y,window.innerHeight-fh)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.bottom='auto'; }
+  const pw=r.querySelector('.mn-pw'); if(pw){ if(mnGeo.w) pw.style.width=Math.min(mnGeo.w,window.innerWidth-16)+'px'; if(mnGeo.h){ pw.style.height=Math.min(mnGeo.h,window.innerHeight-16)+'px'; } }
+  mnPlace(); }
+window.addEventListener('resize',()=>{ try{ mnGeoApply(); }catch(_){} });
+(function(){ if(window.__mnDrag) return; window.__mnDrag=1; let d=null, rz=null;
+  document.addEventListener('pointerdown',e=>{ const zr=e.target.closest&&e.target.closest('#mn-root .mn-rz'); if(zr){ const r=document.getElementById('mn-root'), pw=r.querySelector('.mn-pw'); const b=pw.getBoundingClientRect(); rz={sx:e.clientX,sy:e.clientY,w:b.width,h:b.height,dx:r.classList.contains('right')?-1:1,dy:r.classList.contains('below')?1:-1}; e.preventDefault(); return; }
+    const h=e.target.closest&&e.target.closest('#mn-root .mn-h,#mn-root .mn-fab'); if(!h||e.target.closest('button.mn-x,.mn-hr button,.mn-hr a,a.mn-tl')) return; const r=document.getElementById('mn-root'); const b=r.getBoundingClientRect(); d={h,sx:e.clientX,sy:e.clientY,ox:b.left,oy:b.top,moved:false}; });
+  document.addEventListener('pointermove',e=>{ if(rz){ const r=document.getElementById('mn-root'), pw=r&&r.querySelector('.mn-pw'); if(!pw) return; e.preventDefault(); const w=Math.max(300,Math.min(rz.w+rz.dx*(e.clientX-rz.sx),window.innerWidth-16)), hh=Math.max(200,Math.min(rz.h+rz.dy*(e.clientY-rz.sy),window.innerHeight-16)); pw.style.maxHeight='none'; pw.style.width=w+'px'; pw.style.height=hh+'px'; mnGeo.w=w; mnGeo.h=hh; return; }
+    if(!d) return; const dx=e.clientX-d.sx, dy=e.clientY-d.sy; if(!d.moved&&Math.abs(dx)+Math.abs(dy)<6) return; d.moved=true; e.preventDefault(); mnGeo.x=d.ox+dx; mnGeo.y=d.oy+dy; mnGeoApply(); },{passive:false});
+  document.addEventListener('pointerup',e=>{ if(rz){ rz=null; mnGeoSave(); mnPlace(); return; } if(d&&d.moved){ if(d.h.classList.contains('mn-fab')) window.__mnNoClick=Date.now(); mnGeoApply(); mnGeoSave(); } d=null; });
   document.addEventListener('click',e=>{ if(window.__mnNoClick&&Date.now()-window.__mnNoClick<400&&e.target.closest&&e.target.closest('.mn-fab')){ e.stopPropagation(); e.preventDefault(); } },true);
 })();
 function mnGeoReset(){ mnGeo={}; mnGeoSave(); const r=document.getElementById('mn-root'); if(r){ r.style.left=r.style.top=r.style.bottom=''; } mnRender(); }
@@ -3863,7 +3875,7 @@ function mnPanelHtml(g){ const {t,s,m}=g; const rec=m.estado==='curso'; if(!mnCa
   const staffOpts=store.activeStaff().filter(u=>!chips.some(x=>x.id===u.id)).map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
   const acts=m.lines.filter(l=>l.kind==='a'); const unl=acts.filter(l=>!l.link).length;
   const dur=(m.end?new Date(m.end):new Date())-new Date(m.start);
-  const head=`<div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${kind} · ${esc(c.name)} · ${esc(t.name)}</div></div><div class="mn-hr"><div class="mn-clk" data-start="${m.start}" data-end="${m.end||''}">${mnClockTxt(dur)}</div>${rec?'<button class="mn-stop" title="Detener y revisar" onclick="mnStopNow()">■ Stop</button>':'<span class="mn-fin">terminada</span>'}<button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div>`;
+  const head=`<div class="mn-h"><div><div class="mn-t"><a class="mn-tl" href="${taskShareUrl(t.id)}/${s.id}" target="_blank" rel="noopener" title="Abrir la tarea en el Gestor (otra pestaña)">${esc(s.name)} ↗</a></div><div class="mn-m">${kind} · ${esc(c.name)} · ${esc(t.name)}</div></div><div class="mn-hr"><div class="mn-clk" data-start="${m.start}" data-end="${m.end||''}">${mnClockTxt(dur)}</div>${rec?'<button class="mn-stop" title="Detener y revisar" onclick="mnStopNow()">■ Stop</button>':'<span class="mn-fin">terminada</span>'}<button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div>`;
   if(mnRev){ return head+`<div class="mn-body"><div class="mn-sec">Revisión de acuerdos <span class="muted">· ${acts.length} actividad(es), ${unl} sin ligar</span></div>
     ${acts.map(l=>`<div class="mn-rv"><div class="mn-rt">○ ${esc(l.txt)} <span class="muted">${l.resp?'· '+esc(store.person(l.resp).name):''}${l.date?' · '+esc(dLabel(l.date)):''}</span></div>
       <div class="mn-opt"><select onchange="mnLineResp('${l.id}',this.value)"><option value="">Responsable…</option>${store.activeStaff().map(u=>`<option value="${u.id}" ${l.resp===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select><input type="date" value="${l.date||''}" onchange="mnLineDate('${l.id}',this.value)"></div>${mnLinkHtml(g,l)}</div>`).join('')||'<div class="muted" style="padding:8px">No marcaste actividades en esta minuta.</div>'}
@@ -3878,15 +3890,16 @@ function mnPanelHtml(g){ const {t,s,m}=g; const rec=m.estado==='curso'; if(!mnCa
     <div class="mn-foot"><a onclick="mnLinksOpen=!mnLinksOpen;mnRender()">🔗 Enlaces (${m.links.length})</a><a onclick="mnReviewOpen()">Revisar acuerdos${unl?` (${unl} sin ligar)`:''}</a><a onclick="mnClose()">Cerrar panel</a></div>
     ${mnLinksOpen?`<div class="mn-sec">Enlaces</div>${m.links.map((x,i)=>`<div class="mn-lkrow"><a href="${esc(x.u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(x.t)}</a><a class="mn-del" onclick="mnLinkDel(${i})">✕</a></div>`).join('')}<div class="mn-add"><input id="mn-lt" placeholder="Título"><input id="mn-lu" placeholder="https://…" onkeydown="if(event.key==='Enter')mnLinkAdd()"><button class="mn-b" onclick="mnLinkAdd()">＋</button></div>`:''}</div>`; }
 function mnPanelRO(g){ const esc=mnEsc; const {t,s,m}=g; const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''};
-  return `<div class="mn-h"><div><div class="mn-t">${esc(s.name)}</div><div class="mn-m">${m.kind==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · solo lectura</div></div><div class="mn-hr"><button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div><div class="mn-body">${mnSumBody(g)}<div class="mn-btns" style="margin-top:8px"><button class="mn-b" onclick="mnSumOpen('${t.id}','${s.id}','${m.id}')">Ver resumen / imprimir</button></div><div class="muted" style="font-size:.74rem;margin-top:6px">Tu perfil no puede editar una minuta cerrada.</div></div>`; }
+  return `<div class="mn-h"><div><div class="mn-t"><a class="mn-tl" href="${taskShareUrl(t.id)}/${s.id}" target="_blank" rel="noopener" title="Abrir la tarea en el Gestor (otra pestaña)">${esc(s.name)} ↗</a></div><div class="mn-m">${m.kind==='cliente'?'Con cliente':'Interna'} · ${esc(c.name)} · solo lectura</div></div><div class="mn-hr"><button class="mn-x" title="Minimizar" onclick="mnToggle()">–</button></div></div><div class="mn-body">${mnSumBody(g)}<div class="mn-btns" style="margin-top:8px"><button class="mn-b" onclick="mnSumOpen('${t.id}','${s.id}','${m.id}')">Ver resumen / imprimir</button></div><div class="muted" style="font-size:.74rem;margin-top:6px">Tu perfil no puede editar una minuta cerrada.</div></div>`; }
 function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); if(r) r.innerHTML=''; return; } const r=mnRoot(); if(!mnV){ try{ const o=JSON.parse(localStorage.getItem(MN_KEY)||'null'); if(o) mnV=o; }catch(_){} }
   const g=mnGet(); if(mnV&&!g) mnV=null;
   const inEl=document.getElementById('mn-in'); const keep=inEl?{v:inEl.value,f:document.activeElement===inEl,s:inEl.selectionStart}:null; const ls=document.querySelector('.mn-lines'); const lt=ls?ls.scrollTop:0;
   let h='';
   if(mnPrompt&&!g){ h+=`<div class="mn-prompt"><b>📝 Es hora de «${esc(mnPrompt.title)}»</b><div class="muted">Abre la cita y desde ahí decides cuándo iniciar la minuta.</div><div class="mn-btns"><button class="mn-b" onclick="mnGoCita('${mnPrompt.tid}','${mnPrompt.sid}')">📅 Ir a la cita</button><button class="mn-b ghost" onclick="mnPrompt=null;mnRender()">Ahora no</button></div></div>`; }
   if(mnPre&&!g&&mnOpen) h+=mnPrePanel();
-  if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-panel">${mnPanelHtml(g)}</div>`;
+  if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-pw"><div class="mn-panel">${mnPanelHtml(g)}</div><div class="mn-rz" title="Arrastra para cambiar el tamaño"></div></div>`;
     h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
+  r.classList.toggle('fab',!!g);
   const sig=h.replace(/(<(?:span|div) class="mn-clk"[^>]*>)[^<]*/g,'$1');
   if(r.dataset.sig===sig&&(r.children.length||!h)){ mnGeoApply(); return; }
   const ae=document.activeElement; const kf=(ae&&ae.id&&r.contains(ae))?{id:ae.id,s:ae.selectionStart}:null; const pn0=r.querySelector('.mn-panel'); const ps0=pn0?pn0.scrollTop:0;
@@ -4610,12 +4623,13 @@ function copyTaskLink(id){ const url=taskShareUrl(id);
 function shareToast(msg){ const t=document.createElement('div'); t.className='nf-toast'; t.textContent=msg; notifRoot().appendChild(t); setTimeout(()=>t.remove(),4500); }
 function takeShareHash(){   // lee el id del hash y quita el link de la barra de direcciones
   const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null;
-  let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){}
+  let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){} const pr=id.split('/'); id=pr[0]; shareSubHint=pr[1]||null;
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
   return id; }
 function openSharedTask(id){ const t=store.task(id); if(!t){ alert('Esa tarea ya no existe.'); return; }
   const p=store.project(t.projectId); if(p){ selClient=p.clientId; selProject=p.id; }
-  view='proyecto'; selTab='gestor'; modalTask=id; timingSub=null; editingTask=null; editingSub=null; opSelTask=null; }
+  view='proyecto'; selTab='gestor'; modalTask=id; timingSub=null; editingTask=null; editingSub=null; opSelTask=null;
+  if(shareSubHint){ const sh=shareSubHint; shareSubHint=null; if((t.subtasks||[]).some(x=>x.id===sh)){ hiClear(); hiSub={tid:id,ids:[sh]}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000); setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${sh}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },300); } } }
 function handleShareLink(id){ if(!id) return; if(session){ openSharedTask(id); render(); } else { publicTaskId=id; afterLoginTask=id; render(); } }
 function goLoginFromShare(){ publicTaskId=null; render(); }
 function viewPublicTask(){
