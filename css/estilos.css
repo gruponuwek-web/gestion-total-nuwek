@@ -1147,3 +1147,5 @@
   .mn-tl{color:#fff;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,.6)}.mn-tl:hover{border-bottom-style:solid}
 
   .gestor-tg{text-align:right;margin:0 0 6px;font-size:.74rem}.gestor-tg a{cursor:pointer;color:var(--muted);font-weight:600;text-decoration:underline dotted}.gestor-tg a:hover{color:var(--green)}
+
+  .mn-addp.cli{border-color:#bcd8c7;background:#f1f8f3;color:#1f6b45}
