@@ -820,10 +820,14 @@ function clientTabsHtml(c){
   const body=clientTab==='citas'?citasHistorialHtml(c):clientTab==='finanzas'?finanzasHtml(c):clientTab==='proximas'?`<div class="sec-title"><h2>🧭 Próximas subtareas</h2></div>${clientNextHtml(c)}`:clientTab==='notas'?clientNotasStaffHtml(c):`<div class="sec-title"><h2>📊 Scorecard</h2></div>${clientScoreHtml(c)}`;
   return bar+`<div class="client-tab-body">${body}</div>`; }
 
+let peopleOpen={};
+function togglePeople(cid){ peopleOpen[cid]=!peopleOpen[cid]; render(); }
 function viewCliente(){
   const c=store.client(selClient); if(!c) return '';
   const resp=store.person(c.generalResponsibleId);
-  const people=c.people.map(p=>`<span class="chip tag-chip">${avatar(p,true)} ${p.portal?`<span title="Tiene acceso al portal (${esc(p.portal.user)})">🔑</span> `:''}${p.name}${p.role?' · '+p.role:''} <button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span>`).join('') || '<span class="muted" style="font-size:.85rem">Sin contactos aún</span>';
+  const PEOPLE_LIM=8; const pOpen=!!peopleOpen[c.id]; const pList=pOpen?c.people:c.people.slice(0,PEOPLE_LIM);
+  const people=pList.map(p=>`<span class="chip tag-chip">${avatar(p,true)} ${p.portal?`<span title="Tiene acceso al portal (${esc(p.portal.user)})">🔑</span> `:''}${p.name}${p.role?' · '+p.role:''} <button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span>`).join('') || '<span class="muted" style="font-size:.85rem">Sin contactos aún</span>';
+  const peopleMore=c.people.length>PEOPLE_LIM?`<button class="btn ghost sm" onclick="togglePeople('${c.id}')">${pOpen?'▴ Ver menos':'▾ Ver más ('+(c.people.length-PEOPLE_LIM)+')'}</button>`:'';
   const projs=store.projectsOf(c.id).map(p=>{
     const sv=store.service(p.serviceId); const health=projectHealth(p.id);
     return `<div class="card click" onclick="openProject('${p.id}')">
@@ -846,7 +850,7 @@ function viewCliente(){
         <dt>Web</dt><dd>${c.web||'—'}</dd>
         <dt>Redes</dt><dd>${[['IG',c.ig],['FB',c.fb],['YouTube',c.youtube],['TikTok',c.tiktok],['LinkedIn',c.linkedin],['Otro',c.otro]].filter(r=>r[1]).map(r=>`${r[0]}: ${r[1]}`).join(' · ')||'—'}</dd>
         <dt>Responsable Nuwek</dt><dd>${c.generalResponsibleId?`${avatar(resp,true)} ${resp.name}`:'—'}</dd>
-        <dt>Su gente</dt><dd><div class="chiplist" style="align-items:center">${people} <button class="btn ghost sm" onclick="openContactForm('${c.id}')">+ Contacto</button></div></dd>
+        <dt>Su gente</dt><dd><div class="chiplist" style="align-items:center">${people} ${peopleMore} <button class="btn ghost sm" onclick="openContactForm('${c.id}')">+ Contacto</button></div></dd>
       </dl>
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
