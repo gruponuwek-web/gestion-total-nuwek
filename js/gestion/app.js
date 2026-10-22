@@ -48,7 +48,7 @@ class Store{
     this.save();
   }
   /* La copia en el navegador es solo un respaldo rápido (la verdad está en Supabase). Si ya no cabe (límite ~5 MB), se guarda una versión ligera o se omite: nunca debe tumbar el portal. */
-  save(){ lastLocalWrite=Date.now(); this.d.v=DV;
+  save(){ lastLocalWrite=Date.now(); this.d.v=DV; if(typeof gcalPushSoon==='function') gcalPushSoon();   // tus cambios llegan a tu Google Calendar en unos segundos
     try{ localStorage.setItem('nuwekPortal', JSON.stringify(this.d)); return; }catch(_){}
     try{ const lite=Object.assign({},this.d,{log:[],comments:(this.d.comments||[]).map(c=>Object.assign({},c,{attachments:(c.attachments||[]).map(a=>({name:a.name,type:a.type}))}))}); localStorage.setItem('nuwekPortal', JSON.stringify(lite)); return; }catch(_){}
     try{ localStorage.removeItem('nuwekPortal'); }catch(_){} }
@@ -341,7 +341,7 @@ let currentUser='u_car', perfWindow='mes', perfMonth=todayISO().slice(0,7), opFi
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
 let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
-let agPerson='u_car', agStart=todayISO(), agSel=null, agListDrag=null;
+let agPerson='u_car', agStart=mondayOf(todayISO()), agSel=null, agListDrag=null;   // la semana empieza en lunes (antes «hoy» y al recargar salía mié–dom)
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 /* ===== Secciones tipo acordeón (Vencidas, Hoy, …) — se recuerda cuáles dejaste cerradas ===== */
 function accClosed(){ try{ return JSON.parse(localStorage.getItem('accClosed')||'{}'); }catch(_){ return {}; } }
@@ -731,7 +731,7 @@ function restoreSession(){
       if(n.opSelTask&&store.task(n.opSelTask)) opSelTask=n.opSelTask;
       if(n.gestSub) gestSub=n.gestSub; if(n.gestScope) gestScope=n.gestScope; }
     return true; }catch(_){ return false; } }
-function logout(){ session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
+function logout(){ if(typeof gcalForget==='function') gcalForget(false); session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
 function shellOp(body){
   return `
     <div class="topbar"><div class="topbar-in">
@@ -1363,14 +1363,14 @@ function agCalendar(days,pid){
       const top=(startMin-H0*60)/60*rowH; const dur=+it.s.durMin||30; const height=Math.max(dur/60*rowH,20); const f=kbFrente(it.t); const c=store.client(store.project(it.t.projectId).clientId);
       const sel=agSel&&agSel.sid===it.s.id;
       const canDrag=canEdit&&!it.part;
-      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" style="top:${top}px;height:${height}px;border-left:6px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${tipoDot(it.s,it.t)}${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':(it.s.date&&it.s.date<todayISO()?'⚠️ ':'')}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · <span style="color:${f.color};font-weight:700">${f.name}</span></div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}</div>`;
+      return `<div class="ag-block${sel?' sel':''}${it.s.done?' done':''}${it.part?' part':''}" data-tid="${it.t.id}" data-sid="${it.s.id}" ${canDrag&&typeof gcalColorMenu==='function'?`oncontextmenu="gcalColorMenu(event,'p','${it.t.id}','${it.s.id}')"`:''} style="top:${top}px;height:${height}px;border-left:6px solid ${tipoCol(it.s,it.t)}" title="${esc(it.s.name)} · ${c.name} · ${f.name} · ${it.s.time} · ${fmtDurShort(dur)}" ${canDrag?`onpointerdown="agBlockDown(event)"`:`onclick="openAgItem('${it.t.id}','${it.s.id}')"`}><div class="ag-bl-nm">${tipoDot(it.s,it.t)}${it.part?'🫱🏽‍🫲🏾 ':''}${urgMark(it.s.urgent||it.t.urgent)}${it.s.done?'✓ ':(it.s.date&&it.s.date<todayISO()?'⚠️ ':'')}${esc(it.s.name)}</div><div class="ag-bl-sub">${c.name} · <span style="color:${f.color};font-weight:700">${f.name}</span></div><div class="ag-bl-mt">${it.s.time} · ${fmtDurShort(dur)}</div>${canDrag?'<div class="ag-rs" title="Arrastra para cambiar la duración" onpointerdown="agResizeDown(event)"></div>':''}${canDrag&&typeof GCAL_CBTN==='function'?GCAL_CBTN('p',it.t.id,it.s.id):''}${typeof gcalSubMeet==='function'&&gcalSubMeet(it.s)?GCAL_JOIN_MINI(gcalSubMeet(it.s)):''}</div>`;
     }).join('');
     if(off.length) anyOff=true;
     const lines=[]; for(let k=0;k<slots;k++) lines.push(`<div class="ag-line" style="top:${k*rowH}px"></div>`);
     const load=subs.filter(x=>!x.part).reduce((a,it)=>a+(+it.s.durMin||30),0);
     const isDl=si&&si.t.dueDate===day;
     const dl=isDl?`<div class="ag-dl-lbl" title="Fecha límite de «${esc(si.t.name)}»">🏁 Deadline · ${esc(si.t.name)}</div>`:'';
-    return {day,html:(offFoot)=>`<div class="ag-day${isDl?' deadline':''}"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}${isDl?'<span class="ag-dl-flag">🏁</span>':''}</div><div class="ag-day-body" data-day="${day}" style="height:${slots*rowH}px" ondragover="agListOver(event)" ondragleave="agListLeave(event)" ondrop="agListDrop(event)">${lines.join('')}${dl}${blocks||''}</div>${offFoot?`<div class="ag-off">${off.length?off.map(it=>`<div class="ag-off-it" onclick="openAgItem('${it.t.id}','${it.s.id}')" title="Fuera del horario 7:00–21:00">⏰ ${it.s.time} · ${esc(it.s.name)}</div>`).join(''):''}</div>`:''}</div>`};
+    return {day,html:(offFoot)=>`<div class="ag-day${isDl?' deadline':''}"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}${isDl?'<span class="ag-dl-flag">🏁</span>':''}</div><div class="ag-day-body" data-day="${day}" style="height:${slots*rowH}px" ondragover="agListOver(event)" ondragleave="agListLeave(event)" ondrop="agListDrop(event)">${lines.join('')}${dl}${blocks||''}${typeof gcalHourBlocks==='function'?gcalHourBlocks(day,pid,H0,H1,rowH):''}</div>${offFoot?`<div class="ag-off">${off.length?off.map(it=>`<div class="ag-off-it" onclick="openAgItem('${it.t.id}','${it.s.id}')" title="Fuera del horario 7:00–21:00">⏰ ${it.s.time} · ${esc(it.s.name)}</div>`).join(''):''}</div>`:''}</div>`};
   });
   const dayCols=cols.map(c=>c.html(anyOff)).join('');
   const hoursCol=`<div class="ag-hours"><div class="ag-hours-sp"></div>${hourLabels.join('')}</div>`;
@@ -1399,7 +1399,7 @@ document.addEventListener('pointerdown',agPopHide,true);
 /* ---- arrastrar / redimensionar bloques ---- */
 function agSnap(min){ return Math.round(min/15)*15; }
 function agBlockDown(ev){
-  if(ev.button!==0 || ev.target.classList.contains('ag-rs')) return;
+  if(ev.button!==0 || ev.target.classList.contains('ag-rs') || ev.target.closest('.ag-cbtn')) return;
   const el=ev.currentTarget; const tid=el.dataset.tid, sid=el.dataset.sid; const x0=ev.clientX, y0=ev.clientY; let moved=false;
   const step=AG.rowH/4; const onMove=e=>{ if(!moved && Math.abs(e.clientX-x0)+Math.abs(e.clientY-y0)<5) return; moved=true; el.classList.add('dragging'); el.style.transform=`translate(${e.clientX-x0}px,${Math.round((e.clientY-y0)/step)*step}px)`; el.style.zIndex=20; };
   const onUp=e=>{ document.removeEventListener('pointermove',onMove); document.removeEventListener('pointerup',onUp);
@@ -1469,7 +1469,7 @@ function viewAgenda(){
     ${tipoLegend()}
     <div class="ag-split">
       <div class="ag-left"><div class="op-list">${list}</div></div>
-      <div class="ag-right">${agCalendar(days,agPerson)}</div>
+      <div class="ag-right">${typeof gcalAgenda==='function'?gcalAgenda(agPerson,days):agCalendar(days,agPerson)}</div>
     </div>`;
 }
 
@@ -4407,7 +4407,7 @@ function smSesionPane(s0,t,c){
   return `<div class="sm-pane" data-pane="ses" style="display:none">
     <div class="field"><label>Objetivo de la reunión</label><textarea id="sm-obj" rows="3" style="width:100%;padding:9px;border:2px solid var(--line);border-radius:8px;font-family:inherit">${esc(ses.objetivo)}</textarea></div>
     <div class="field"><label>Lugar</label><select id="sm-ltipo" onchange="smLugarChange()"><option value="meet" ${ses.lugar.tipo==='presencial'?'':'selected'}>Videollamada (Meet, Zoom, Teams…)</option><option value="presencial" ${ses.lugar.tipo==='presencial'?'selected':''}>Presencial</option></select>
-      <div id="sm-l-meet" style="margin-top:8px"><input id="sm-llink" placeholder="https://meet.google.com/…" value="${esc(ses.lugar.link)}"></div>
+      <div id="sm-l-meet" style="margin-top:8px"><input id="sm-llink" placeholder="https://meet.google.com/…" value="${esc(ses.lugar.link)}">${typeof gcalMeetBtnHtml==='function'?gcalMeetBtnHtml(t.id,s0.id):''}</div>
       <div id="sm-l-pres" style="margin-top:8px;display:none"><input id="sm-ldir" placeholder="Dirección (calle, número, colonia, ciudad)" value="${esc(ses.lugar.direccion||c.location||'')}"><div class="hint">Con esta dirección se arma el mapa de la página del cliente. Si la dejas vacía se usa la ubicación de la ficha del cliente.</div></div></div>
     <div class="field"><label>Temario (quién presenta cada tema)</label><div id="sm-tem">${rows}</div><button type="button" class="btn ghost sm" style="margin-top:6px" onclick="smTemAdd()">＋ Agregar tema</button></div>
     <div class="field"><label>Respuesta del cliente</label>${resp}</div>
@@ -4502,7 +4502,7 @@ function clientLogin(){
   const a=cpFails[u]||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; cpLoginErr='Demasiados intentos. Espera 5 minutos.'; } else cpLoginErr='Usuario o código incorrecto.'; cpFails[u]=a; render(); }
 function saveClientSession(){ try{ if(clientSess) localStorage.setItem('nuwekClient',JSON.stringify(Object.assign({},clientSess,{exp:Date.now()+SESSION_TTL_MS}))); }catch(_){} }
 function restoreClientSession(){ try{ const o=JSON.parse(localStorage.getItem('nuwekClient')||'null'); if(!o||Date.now()>o.exp){ localStorage.removeItem('nuwekClient'); return; } clientSess={cid:o.cid,pid:o.pid}; if(!cpCtx()){ clientSess=null; localStorage.removeItem('nuwekClient'); return; } const s=sessionStorage.getItem('nuwekCpView'); if(s) cpView=s; else cpView=cpCtx().isAdmin?'inicio':'tareas'; }catch(_){} }
-function clientLogout(){ clientSess=null; cpChg=null; cpChgShown=false; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
+function clientLogout(){ if(typeof gcalForget==='function') gcalForget(false); clientSess=null; cpChg=null; cpChgShown=false; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
 function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||c.activo===false||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
 function setCpView(v){ cpView=v; try{ sessionStorage.setItem('nuwekCpView',v); }catch(_){} render(); window.scrollTo(0,0); }
 function cpSecs(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas']]; }
@@ -4574,7 +4574,7 @@ function cpTareas(ctx){ const mine=cpMySubs(ctx); const today=todayISO(); const 
   const g=(t,arr)=>arr.length?`<div class="sec-title"><h2 style="font-size:1.05rem">${t} <span class="muted" style="font-size:.8rem">${arr.length}</span></h2></div><div class="cita-list">${arr.map(x=>cpSubRow(x,ctx)).join('')}</div>`:'';
   return `<div class="muted" style="margin-bottom:10px">Las actividades en las que participas${ctx.isAdmin?'':' (solo ves lo tuyo)'}.</div>`+(mine.length?g('🔴 Atrasadas',pend.filter(x=>x.s.date&&x.s.date<today))+g('🟡 Hoy',pend.filter(x=>x.s.date===today))+g('🗓️ Próximas',pend.filter(x=>x.s.date&&x.s.date>today))+g('⚪ Sin fecha',pend.filter(x=>!x.s.date))+g('✅ Hechas recientemente',hechas):'<div class="muted">Por ahora no tienes actividades asignadas. 🎉</div>'); }
 /* ---- Citas ---- */
-function cpCitas(ctx){ return citasHistorialHtml(ctx.c,{filter:x=>ctx.isAdmin||(x.s.invitados||[]).includes(ctx.me.id)}); }
+function cpCitas(ctx){ return (typeof gcalClientCitas==='function'?gcalClientCitas(ctx):'')+citasHistorialHtml(ctx.c,{filter:x=>ctx.isAdmin||(x.s.invitados||[]).includes(ctx.me.id)}); }
 /* ---- Gantt ---- */
 function cpGantt(ctx){ const projs=cpProjects(ctx).filter(p=>store.tasksOf(p.id).length); if(!projs.length) return '<div class="muted">Aún no hay tareas para mostrar.</div>'; if(!projs.some(p=>p.id===cpProj)) cpProj=projs[0].id; const p=store.project(cpProj);
   const sel=projs.length>1?`<label class="filt"><span class="glabel">Proyecto</span><select class="filter-val" onchange="cpProj=this.value;render()">${projs.map(x=>`<option value="${x.id}" ${x.id===cpProj?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`:`<h3 style="margin:0">${esc(p.name)}</h3>`;
