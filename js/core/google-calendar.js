@@ -37,7 +37,11 @@ function gcalConnected(){ gcalSync(); return !!(gcal.token&&gcal.exp>Date.now())
 /* vinculada pero con el permiso de Google vencido: se muestra «Reconectar» (un clic, sin pantalla de permisos) */
 function gcalNeedsReconnect(){ gcalSync(); return gcal.linked&&!gcalConnected(); }
 function gcalCanWrite(){ return /calendar\.events|auth\/calendar(\s|$)/.test(gcal.scope||''); }
-function gcalRefreshUI(){ render(); if(nextOpen) nextRender(); }
+/* [AGENDA · ARRASTRAR 2026-10-23] si llegan eventos de Google mientras arrastras una actividad, se espera a que la sueltes
+   (redibujar a media arrastrada dejaba a Chrome «arrastrando» y sin responder a los clics) */
+function gcalRefreshUI(){ const busy=(typeof agListDrag!=='undefined'&&agListDrag)||document.querySelector('.ag-block.dragging,.ag-block.resizing');
+  if(busy){ clearTimeout(gcalRefreshUI.t); gcalRefreshUI.t=setTimeout(gcalRefreshUI,400); return; }
+  render(); if(nextOpen) nextRender(); }
 
 /* pide el permiso a Google; then() corre cuando ya hay token válido */
 function gcalConnect(then){
@@ -281,10 +285,13 @@ function gcalEv(e,mini){
    Vista estilo Google Calendar con las actividades del PORTAL de la persona elegida en «Persona»
    (así ves el calendario de tus compañeros). Si eres tú y tienes Google conectado, se suman tus
    eventos de Google (los que el portal mandó a Google no se repiten: ya salen como actividad).
-   Pestañas: Semana (la semana de ‹ ›) · Próximos (3 días con algo) · Por horas (la cuadrícula de
+   Pestañas (en este orden): Por horas (la cuadrícula de lunes a sábado) · Semana (la semana de ‹ ›) · Próximos (3 días con algo).
+   Por horas: la cuadrícula de
    siempre, donde se arrastra para cambiar hora y se estira para cambiar duración). */
-let agCalView=(()=>{ try{ const v=localStorage.getItem('nuwekAgView'); return ['sem','prox','horas'].includes(v)?v:'sem'; }catch(_){ return 'sem'; } })();
-function agSetCalView(v){ agCalView=v; try{ localStorage.setItem('nuwekAgView',v); }catch(_){} render(); }
+/* [AGENDA · ORDEN DE PESTAÑAS 2026-10-23] Por horas · Semana · Próximos; abre en «Por horas».
+   Se usa una llave nueva (nuwekAgView2) para que todos empiecen en «Por horas» aunque antes eligieran otra. */
+let agCalView=(()=>{ try{ const v=localStorage.getItem('nuwekAgView2'); return ['sem','prox','horas'].includes(v)?v:'horas'; }catch(_){ return 'horas'; } })();
+function agSetCalView(v){ agCalView=v; try{ localStorage.setItem('nuwekAgView2',v); }catch(_){} render(); }
 
 /* actividades del portal de la persona: pendientes con fecha (responsable o en el equipo, como en la lista de Agenda) */
 function gcalPortalItems(pid){
@@ -327,7 +334,13 @@ function gcalAgenda(pid,days){
   const note=self&&on&&!gcalCanWrite()?`<div class="gcw-push warn">Para que tus actividades también aparezcan en tu Google Calendar falta un permiso. <button onclick="event.stopPropagation();gcalGrantWrite()">Dar permiso</button></div>`
     :self&&gcal.push&&gcal.push.msg?`<div class="gcw-push${gcal.push.ok?' ok':''}">${gcalEsc(gcal.push.msg)}</div>`:'';
   const tab=(k,l)=>`<button class="${agCalView===k?'on':''}" onclick="agSetCalView('${k}')">${l}</button>`;
-  const bar=`<div class="gcw-bar"><div class="gcw-seg">${tab('sem','Semana')}${tab('prox','Próximos')}${tab('horas','Por horas')}</div>${on?`<a class="gcw-link" href="https://calendar.google.com/calendar/r/agenda${auth}" target="_blank" rel="noopener">Ver agenda de Google ${GCAL_IC.ext}</a>`:''}</div>`;
+
+  /* [AGENDA · ORDEN DE PESTAÑAS 2026-10-23] primero «Por horas», luego «Semana» y al final «Próximos» */
+  /* [AGENDA · FLECHAS EN EL CALENDARIO 2026-10-23] ‹ Hoy › dentro de la tarjeta (antes solo estaban arriba y al bajar
+     no se veían) + «↩ Volver» cuando abrir una actividad te llevó a otra semana */
+  const back=typeof agBack!=='undefined'&&agBack?`<button class="gcw-back" onclick="agGoBack()" title="Regresar a la semana donde estabas">↩ Volver a ${agRangeLabel([0,1,2,3,4,5].map(i=>addDaysISO(agBack,i)))}</button>`:'';
+  const nav=agCalView==='prox'?'':`<div class="gcw-nav"><button onclick="agShift(-7)" title="Semana anterior">‹</button><span>${agRangeLabel(days)}</span><button onclick="agShift(7)" title="Semana siguiente">›</button></div><button class="gcw-today" onclick="agToday()">Hoy</button>`;
+  const bar=`<div class="gcw-bar"><div class="gcw-seg">${tab('horas','Por horas')}${tab('sem','Semana')}${tab('prox','Próximos')}</div>${nav}${back}${on?`<a class="gcw-link" href="https://calendar.google.com/calendar/r/agenda${auth}" target="_blank" rel="noopener">Ver agenda de Google ${GCAL_IC.ext}</a>`:''}</div>`;
   if(agCalView==='horas') return `<div class="gcw gcw-agenda">${head}${err}${note}${bar}${agCalendar(days,pid)}</div>`;
   const portal=gcalPortalItems(pid), goog=on?gcalOwnGoogle():[];
   const card=(iso,max)=>{ const d=new Date(iso+'T00:00:00'), h=gcalDayHead(d), L=gcalDayList(iso,portal,goog), more=L.length-max;

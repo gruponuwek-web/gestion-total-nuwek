@@ -1342,14 +1342,18 @@ function personSubtasks(pid,onlyPending){ const out=[]; store.d.tasks.forEach(t=
 function mondayOf(iso){ const wd=isoWeekday(iso); const diff=wd===0?-6:(1-wd); return addDaysISO(iso,diff); }
 function openAgenda(){ agPerson=currentUser; agStart=mondayOf(todayISO()); view='op_agenda'; modalTask=null; opSelTask=null; render(); }
 function setAgPerson(p){ agPerson=p; render(); }
-function agShift(d){ agStart=addDaysISO(agStart,d); render(); }
-function agToday(){ agStart=mondayOf(todayISO()); render(); }
+/* [AGENDA · VOLVER A LA SEMANA 2026-10-23] al abrir una actividad de otra semana se recuerda dónde estabas (agBack)
+   para ofrecer «↩ Volver»; moverte con ‹ › u Hoy lo olvida */
+let agBack=null;
+function agShift(d){ agBack=null; agStart=addDaysISO(agStart,d); render(); }
+function agToday(){ agBack=null; agStart=mondayOf(todayISO()); render(); }
+function agGoBack(){ if(agBack){ agStart=agBack; agBack=null; render(); } }
 function agRangeLabel(days){ const dn=i=>+days[i].split('-')[2]; const last=days.length-1; const ab=MESES[(+days[last].split('-')[1])-1].slice(0,3).toLowerCase(); return `${dn(0)}–${dn(last)} ${ab}`; }
 const AG={H0:7,H1:21,rowH:46};
 function agCanEdit(){ return agPerson===currentUser || !isColab(); }
 function agSelInfo(){ if(!agSel) return null; const t=store.task(agSel.tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===agSel.sid); return (t&&sub)?{t,s:sub}:null; }
-function openAgItem(tid,sid){ agSel={tid,sid}; const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(sub&&sub.date) agStart=mondayOf(sub.date); openTaskHi(tid,sid); }
-function agGoDeadline(){ const si=agSelInfo(); if(si&&si.t.dueDate){ agStart=mondayOf(si.t.dueDate); render(); } }
+function openAgItem(tid,sid){ agSel={tid,sid}; const t=store.task(tid); const sub=t&&(t.subtasks||[]).find(x=>x.id===sid); if(sub&&sub.date){ const w=mondayOf(sub.date); if(w!==agStart){ agBack=agBack||agStart; agStart=w; } } openTaskHi(tid,sid); }   // [AGENDA · VOLVER A LA SEMANA]
+function agGoDeadline(){ const si=agSelInfo(); if(si&&si.t.dueDate){ const w=mondayOf(si.t.dueDate); if(w!==agStart){ agBack=agBack||agStart; agStart=w; } render(); } }   // [AGENDA · VOLVER A LA SEMANA]
 function agCalendar(days,pid){
   const {H0,H1,rowH}=AG, slots=H1-H0;
   const WD=['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -1434,17 +1438,23 @@ function agListDrop(ev){ if(!agListDrag) return; ev.preventDefault(); const body
   const t=store.task(d.tid); const sub=t.subtasks.find(x=>x.id===d.sid); const dur=+sub.durMin||30;
   const r=body.getBoundingClientRect(); let min=AG.H0*60+agSnap((ev.clientY-r.top)/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
   const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
-  if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
-  depApply(d.tid,d.sid,{date:body.dataset.day,time},()=>{ logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+body.dataset.day+' '+time); agSel=d; render(); }); }
+  /* [AGENDA · ARRASTRAR DESDE LA LISTA 2026-10-23] el redibujado espera a que Chrome termine el arrastre.
+     Antes se redibujaba dentro del «soltar» y se borraba el elemento que se estaba arrastrando: Chrome se quedaba
+     «arrastrando» y se tragaba los siguientes clics (‹ › y Hoy dejaban de responder). */
+  const day=body.dataset.day;
+  setTimeout(()=>{
+    if(day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
+    depApply(d.tid,d.sid,{date:day,time},()=>{ logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+day+' '+time); agSel=d; render(); });
+  },60); }
 function agNotes(days){ let h=''; const si=agSelInfo();
   if(si&&si.t.dueDate&&!days.includes(si.t.dueDate)) h+=`<button class="ag-note dl" onclick="agGoDeadline()" title="Ir a la semana del deadline">🏁 Deadline de «${esc(si.t.name)}»: ${dLabel(si.t.dueDate)} ${si.t.dueDate<days[0]?'←':'→'}</button>`;
-  const wk=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(x=>{ if(x.personId===agPerson&&x.date&&x.time&&!x.done&&[0,6].includes(isoWeekday(x.date))&&x.date>=addDaysISO(days[0],-1)&&x.date<=addDaysISO(days[4],2)) wk.push(x); }));
-  const wkIn=wk.filter(x=>x.date>=days[0]&&x.date<=addDaysISO(days[4],2)); if(wkIn.length) h+=`<span class="ag-note" title="${esc(wkIn.map(x=>x.name).join(' · '))}">🗓️ ${wkIn.length} subtarea${wkIn.length>1?'s':''} en fin de semana</span>`;
+  const wk=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(x=>{ if(x.personId===agPerson&&x.date&&x.time&&!x.done&&[0].includes(isoWeekday(x.date))&&x.date>=addDaysISO(days[0],-1)&&x.date<=addDaysISO(days[days.length-1],1)) wk.push(x); }));   // [AGENDA · LUNES A SÁBADO] el sábado ya se ve; solo se avisa del domingo
+  const wkIn=wk.filter(x=>x.date>=days[0]&&x.date<=addDaysISO(days[days.length-1],1)); if(wkIn.length) h+=`<span class="ag-note" title="${esc(wkIn.map(x=>x.name).join(' · '))}">🗓️ ${wkIn.length} subtarea${wkIn.length>1?'s':''} en domingo</span>`;
   return h; }
 function viewAgenda(){
   const per=store.person(agPerson);
   const persOpts=store.activeStaff().map(u=>`<option value="${u.id}" ${agPerson===u.id?'selected':''}>${u.name}</option>`).join('');
-  const days=[0,1,2,3,4].map(i=>addDaysISO(agStart,i));
+  const days=[0,1,2,3,4,5].map(i=>addDaysISO(agStart,i));   // [AGENDA · LUNES A SÁBADO 2026-10-23] antes eran 5 días (lun–vie)
   const items=personSubtasks(agPerson,true).concat(participationSubs(agPerson));
   const today=todayISO(); const wkStr=addDaysISO(today,7);
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
@@ -2832,50 +2842,63 @@ function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMe
 /* init: cargar Personal desde Supabase y luego arrancar */
 let shareSubHint=null;
 let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/(.+)$/); if(!m) return null; let id=m[1]; try{ id=decodeURIComponent(id); }catch(_){} const pr=id.split('/'); id=pr[0]; shareSubHint=pr[1]||null; history.replaceState(null,'',location.pathname+location.search); return id; }catch(_){ return null; } })();
+/* [CARGA RÁPIDA 2026-10-23] Antes: 12 consultas a Supabase una tras otra y la página en blanco hasta tener TODAS
+   (si una se atoraba, el sitio no abría). Ahora:
+   1) todas se piden al mismo tiempo;
+   2) la pantalla de entrada (equipo o clientes) aparece en cuanto llega lo mínimo, sin esperar tareas ni pagos;
+   3) lo secundario (comentarios, historial, etiquetas, pagos) ya no bloquea: se aplica cuando llega y,
+      si se atora, la sincronización automática lo trae después;
+   4) mientras tanto se ve «Cargando portal…» en lugar de la página en blanco.
+   Los datos que se guardan y su orden son los mismos de antes. */
+let bootDone=false;
+function bootLoading(){ const app=document.getElementById('app'); if(app&&!app.firstChild) app.innerHTML='<div class="boot-loading"><span class="boot-spin"></span>Cargando portal…</div>'; }
+function bootError(e){
+  console.error('Error cargando datos desde Supabase:', e);
+  const app=document.getElementById('app');
+  if(app) app.innerHTML='<div style="padding:48px;max-width:520px;margin:40px auto;font-family:Inter,sans-serif;color:#223c36;text-align:center"><h2>No se pudo conectar con la base de datos</h2><p style="color:#6b7d76">Revisa tu conexión a internet y recarga la página. Si el problema sigue, avísame. (Detalle técnico en la consola del navegador.)</p><p><button class="btn" onclick="location.reload()">Volver a intentar</button></p></div>';
+}
 async function boot(){
-  try{
-    if(typeof dbLoadPersonal==='function'){
-      const rows = await dbLoadPersonal();
-      store.d.staff = rows;      // el equipo viene de Supabase
-      store.save();               // cache local
-    }
-    if(typeof dbLoadClientes==='function'){
-      const cli = await dbLoadClientes();
-      store.d.clients = cli;      // los clientes vienen de Supabase
-      store.save();
-    }
-    if(typeof dbLoadServicios==='function'){
-      const svs = await dbLoadServicios();
-      store.d.services = svs;     // los servicios vienen de Supabase
-      store.save();
-    }
-    if(typeof dbLoadProyectos==='function'){
-      const pr = await dbLoadProyectos();
-      store.d.projects = pr.projects;   // proyectos
-      store.d.frentes  = pr.frentes;    // frentes
-      store.d.etapas   = pr.etapas;     // etapas
-      store.save();
-    }
-    if(typeof dbLoadTareas==='function'){
-      const tk = await dbLoadTareas();
-      store.d.tasks = tk;               // tareas (con subtareas dentro)
-      store.save();
-    }
-    if(typeof dbLoadComentarios==='function'){ store.d.comments = await dbLoadComentarios(); store.save(); }
-    if(typeof dbLoadLog==='function'){ store.d.log = await dbLoadLog(); store.save(); }
-    if(typeof dbLoadTags==='function'){ store.d.tags = await dbLoadTags(); store.save(); }
-    try{ const pf=await dbLoadPerfiles(); if(pf){ const loc=store.d.perfiles||[]; const falta=loc.filter(l=>!pf.some(x=>x.id===l.id)); if(falta.length){ perfDirty=true; store.d.perfiles=pf.concat(falta); } else store.d.perfiles=pf; perfVer++; store.save(); } }catch(_){}
-    if(typeof dbLoadPagos==='function'){ store.d.payments = await dbLoadPagos(); store.save(); }
-  }catch(e){
-    console.error('Error cargando Personal desde Supabase:', e);
-    const app=document.getElementById('app');
-    if(app) app.innerHTML='<div style="padding:48px;max-width:520px;margin:40px auto;font-family:Inter,sans-serif;color:#223c36;text-align:center"><h2>No se pudo conectar con la base de datos</h2><p style="color:#6b7d76">Revisa tu conexión a internet y recarga la página. Si el problema sigue, avísame. (Detalle técnico en la consola del navegador.)</p></div>';
-    return;
+  const call=f=>typeof f==='function'?Promise.resolve().then(f):Promise.resolve(undefined);
+  /* ¿hay que esperar los datos completos antes de mostrar algo? (sesión guardada o link compartido) */
+  const hasSess=(()=>{ try{ const o=JSON.parse(localStorage.getItem(window.CLIENT_ONLY?'nuwekClient':'nuwekSession')||'null'); return !!(o&&Date.now()<o.exp); }catch(_){ return false; } })();
+  const early=!hasSess&&!shareSesionAtLoad&&!shareTaskIdAtLoad;
+  bootLoading();
+  /* 1) todo se pide a la vez */
+  const pStaff=call(typeof dbLoadPersonal==='function'&&dbLoadPersonal);
+  const pCli=call(typeof dbLoadClientes==='function'&&dbLoadClientes);
+  const pSvs=call(typeof dbLoadServicios==='function'&&dbLoadServicios);
+  const pPr=call(typeof dbLoadProyectos==='function'&&dbLoadProyectos);
+  const pTk=call(typeof dbLoadTareas==='function'&&dbLoadTareas);
+  const pPf=call(typeof dbLoadPerfiles==='function'&&dbLoadPerfiles).catch(()=>null);
+  const pCm=call(typeof dbLoadComentarios==='function'&&dbLoadComentarios);
+  const pLg=call(typeof dbLoadLog==='function'&&dbLoadLog);
+  const pTg=call(typeof dbLoadTags==='function'&&dbLoadTags);
+  const pPg=call(typeof dbLoadPagos==='function'&&dbLoadPagos);
+  /* 2) pantalla de entrada temprana: clientes no necesita datos para dibujarse; el equipo, solo sus fotos */
+  if(early){
+    if(window.CLIENT_ONLY) render();
+    else pStaff.then(rows=>{ if(rows!==undefined) store.d.staff=rows; if(!bootDone&&!session) render(); }).catch(()=>{});
   }
+  /* lo esencial (equipo, clientes, servicios, proyectos, tareas y perfiles de permisos) se espera completo */
+  try{
+    const lim=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Supabase tardó más de 30 s en responder')),30000));
+    const [rows,cli,svs,pr,tk,pf]=await Promise.race([Promise.all([pStaff,pCli,pSvs,pPr,pTk,pPf]),lim]);
+    if(rows!==undefined) store.d.staff = rows;        // el equipo viene de Supabase
+    if(cli!==undefined) store.d.clients = cli;        // los clientes vienen de Supabase
+    if(svs!==undefined) store.d.services = svs;       // los servicios vienen de Supabase
+    if(pr!==undefined){ store.d.projects = pr.projects; store.d.frentes = pr.frentes; store.d.etapas = pr.etapas; }
+    if(tk!==undefined) store.d.tasks = tk;            // tareas (con subtareas dentro)
+    if(pf){ const loc=store.d.perfiles||[]; const falta=loc.filter(l=>!pf.some(x=>x.id===l.id)); if(falta.length){ perfDirty=true; store.d.perfiles=pf.concat(falta); } else store.d.perfiles=pf; perfVer++; }
+    store.save();               // cache local
+  }catch(e){ bootError(e); return; }
+  /* 3) lo secundario se aplica cuando llega (si falla, la sincronización automática lo vuelve a pedir) */
+  const late=(p,k)=>p.then(v=>{ if(v===undefined) return; store.d[k]=v; store.save(); if(bootDone&&(session||clientSess)){ syncDirty=true; syncFlush(); } }).catch(e=>console.warn('Se cargará después:',k,e&&e.message||e));
+  late(pCm,'comments'); late(pLg,'log'); late(pTg,'tags'); late(pPg,'payments');
   if(!window.CLIENT_ONLY) restoreSession(); if(!session) restoreClientSession();
   if(session){ runAllCycles(); runAllSeries(); }
   if(shareSesionAtLoad){ publicSes=shareSesionAtLoad; shareSesionAtLoad=null; }
   if(shareTaskIdAtLoad){ const sid=shareTaskIdAtLoad; shareTaskIdAtLoad=null; if(session){ openSharedTask(sid); } else { publicTaskId=sid; afterLoginTask=sid; } }
+  bootDone=true;
   render();
   startSync();
 }

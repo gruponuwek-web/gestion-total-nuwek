@@ -965,7 +965,8 @@
   .gcw-nw b{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:4px;background:var(--yellow);color:var(--green);font-size:.6rem;font-weight:800}
   /* calendario de Agenda (gcalAgenda) */
   .gcw.gcw-agenda{margin:0}
-  .gcw-days.week5{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  /* [AGENDA · LUNES A SÁBADO 2026-10-23] vista «Semana» con 6 columnas (antes 5) */
+  .gcw-days.week5{grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
   .gcw-days.week5 .gcw-day{padding:10px 10px 12px}
   .gcw-days.week5 .gcw-ev{flex-direction:column;gap:2px;padding:6px 0 6px 9px}
   .gcw-days.week5 .gcw-t{flex-direction:row;gap:6px;align-items:baseline;min-width:0;padding-right:0;border-right:0}
@@ -1300,3 +1301,18 @@
   .mn-st.none{background:#eceae0;color:#6b7a73}.mn-st.rec{background:#fde8e8;color:#c0392b}.mn-st.ok{background:#e6f4ea;color:#1f7a44}.mn-st.warn{background:#fff3d6;color:#9a6a00}
 
   .filter-val{background:#fff;font-family:inherit;font-size:.9rem;color:var(--ink,#223c36);box-sizing:border-box;outline:none}.filter-val:focus{border-color:var(--green)}
+  /* [CARGA RÁPIDA 2026-10-23] aviso mientras llegan los datos (antes la página quedaba en blanco) */
+  .boot-loading{min-height:100vh;display:flex;align-items:center;justify-content:center;gap:12px;color:#5b6b65;font-family:Inter,sans-serif;font-size:.95rem}
+  .boot-spin{width:20px;height:20px;border-radius:50%;border:2.5px solid #cfdcd5;border-top-color:#2f5d3a;animation:bootSpin .8s linear infinite}
+  @keyframes bootSpin{to{transform:rotate(360deg)}}
+  /* [AGENDA · FLECHAS EN EL CALENDARIO 2026-10-23] ‹ semana › Hoy y «↩ Volver» dentro de la tarjeta */
+  .gcw-bar{justify-content:flex-start}
+  .gcw-bar .gcw-link{margin-left:auto}
+  .gcw-nav{display:inline-flex;align-items:center;gap:2px;background:#fff;border:1px solid #e3e8e2;border-radius:10px;padding:2px}
+  .gcw-nav button{border:0;background:#f1f4f0;width:30px;height:28px;border-radius:8px;cursor:pointer;font-size:1rem;color:#1f3a31;font-family:inherit}
+  .gcw-nav button:hover{background:#dcebe0}
+  .gcw-nav span{min-width:92px;text-align:center;font-weight:600;font-size:.82rem;color:#1b2b25}
+  .gcw-today{border:1px solid #e3e8e2;background:#fff;border-radius:10px;padding:6px 12px;font-weight:600;font-size:.8rem;cursor:pointer;font-family:inherit;color:#1f3a31}
+  .gcw-today:hover{background:#f1f4f0}
+  .gcw-back{border:0;background:#fff4d6;color:#7a5600;border-radius:10px;padding:6px 12px;font-weight:600;font-size:.8rem;cursor:pointer;font-family:inherit}
+  .gcw-back:hover{background:#ffeab0}
