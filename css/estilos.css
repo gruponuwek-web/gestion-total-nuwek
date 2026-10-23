@@ -1025,6 +1025,21 @@
   .gcw-off{color:var(--muted);font-weight:500;font-size:.8rem}
   .gcw-sync.spin svg{animation:gcwSpin .9s linear infinite}
   @keyframes gcwSpin{to{transform:rotate(360deg)}}
+  /* [GOOGLE · EN VIVO 2026-10-23] indicador que reemplaza «Sincronizar ahora» */
+  .gcw-live{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted);white-space:nowrap}
+  .gcw-live::before{content:'';width:7px;height:7px;border-radius:50%;background:#34a853}
+  .gcw-live.busy::before{background:#f4b400;animation:gcwPulse .9s ease-in-out infinite}
+  @keyframes gcwPulse{50%{opacity:.3}}
+  .gc-live{font-size:.68rem;color:#34a853;align-self:center;white-space:nowrap}
+  /* [AGENDA · SIN HORA 2026-10-23] franja de Por horas con lo que tiene día pero no hora */
+  .ag-ad-lbl{box-sizing:border-box;border-bottom:1px solid var(--line);font-size:.6rem;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:center;text-align:center;line-height:1.1;background:#fbfaf6}
+  .ag-ad-row{box-sizing:border-box;border-bottom:1px solid var(--line);padding:4px 3px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;background:#fbfaf6}
+  .ag-ad{flex:none;height:22px;box-sizing:border-box;line-height:20px;font-size:.66rem;font-weight:600;color:#33433d;background:#fff;border:1px solid var(--line);border-left:4px solid #8a9a93;border-radius:5px;padding:0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+  .ag-ad[draggable="true"]{cursor:grab}
+  .ag-ad:hover{background:#f3f5f2}
+  .ag-ad.part{opacity:.8;font-style:italic}
+  .ag-ad.gg{background:#eef4fe;color:#1a4fa0}
+  .ag-ad.saving{opacity:.55}
   .gcw-sep{width:1px;height:20px;background:var(--line)}
   .gcw-main{display:inline-flex;align-items:center;gap:8px;background:#1f3a31;color:#fff;border:0;border-radius:10px;padding:9px 16px;font-weight:600;font-size:.86rem;cursor:pointer;font-family:inherit;text-decoration:none;white-space:nowrap;box-shadow:0 4px 12px -4px rgba(31,58,49,.5);transition:background .15s,transform .15s}
   .gcw-main:hover{background:#2a4b40;transform:translateY(-1px)}

@@ -98,6 +98,11 @@ async function cargar(){
 
 /* Vuelve a traer todo (por si alguien mas movio algo) */
 async function recargar(){
+  /* [REVISION 2026-10-23] primero se manda lo pendiente y se espera a que termine (si no, se perdia o se borraba de mas) */
+  if (typeof EvaSync !== 'undefined'){
+    await EvaSync.guardarYa();
+    for (var i = 0; i < 50 && EvaSync.sincronizando; i++) await new Promise(function(r){ setTimeout(r, 100); });
+  }
   await cargar();
   if (typeof render === 'function') render();
 }

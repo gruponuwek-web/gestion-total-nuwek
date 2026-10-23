@@ -3,8 +3,8 @@
    - La conexión queda guardada en este navegador POR PERSONA: al salir y volver a entrar sigue vinculada.
      Google da permisos de ~1 h; cuando vencen basta un clic en «Reconectar» (sin volver a dar permisos).
      Solo «Desconectar» la quita.
-   - «Sincronizar ahora» manda tus actividades del portal (las tuyas o donde estás en el equipo, con fecha,
-     sin terminar) a tu Google Calendar y luego trae tus eventos. Solo toca los eventos que creó el portal
+   - Todo se sincroniza solo (ya no hay botón): tus actividades del portal (las tuyas o donde estás en el equipo, con fecha,
+     sin terminar) salen a tu Google Calendar al cambiarlas, y tus eventos de Google se revisan cada 20 s. Solo toca los eventos que creó el portal
      (marcados por dentro con nuwek=1); si una actividad se termina, se mueve o deja de ser tuya, se actualiza o se quita.
    Requisito en Google Cloud Console → Credenciales → este CLIENT_ID: agregar en "Orígenes de JavaScript autorizados"
    el dominio donde está publicado el portal (y http://localhost:8080 para pruebas). */
@@ -39,9 +39,12 @@ function gcalNeedsReconnect(){ gcalSync(); return gcal.linked&&!gcalConnected();
 function gcalCanWrite(){ return /calendar\.events|auth\/calendar(\s|$)/.test(gcal.scope||''); }
 /* [AGENDA · ARRASTRAR 2026-10-23] si llegan eventos de Google mientras arrastras una actividad, se espera a que la sueltes
    (redibujar a media arrastrada dejaba a Chrome «arrastrando» y sin responder a los clics) */
-function gcalRefreshUI(){ const busy=(typeof agListDrag!=='undefined'&&agListDrag)||document.querySelector('.ag-block.dragging,.ag-block.resizing');
-  if(busy){ clearTimeout(gcalRefreshUI.t); gcalRefreshUI.t=setTimeout(gcalRefreshUI,400); return; }
-  render(); if(nextOpen) nextRender(); }
+/* [GOOGLE · EN VIVO 2026-10-23] tampoco se redibuja mientras escribes o tienes una ventana abierta (lo mismo que espera
+   la sincronización del portal); se conserva el scroll para que la actualización automática no te mueva de lugar */
+function gcalRefreshUI(){ const busy=(typeof agListDrag!=='undefined'&&agListDrag)||document.querySelector('.ag-block.dragging,.ag-block.resizing')||(typeof syncIsBusy==='function'&&syncIsBusy());
+  if(busy){ clearTimeout(gcalRefreshUI.t); gcalRefreshUI.t=setTimeout(gcalRefreshUI,1500); return; }
+  clearTimeout(gcalRefreshUI.t);
+  if(typeof renderKeepScroll==='function') renderKeepScroll(); else render(); if(typeof nextOpen!=='undefined'&&nextOpen) nextRender(); }
 
 /* pide el permiso a Google; then() corre cuando ya hay token válido */
 function gcalConnect(then){
@@ -108,23 +111,42 @@ async function gcalFetch(url,opt){
     const rate=r.status===429||(r.status===403&&/rateLimit|userRateLimit|quotaExceeded|RESOURCE_EXHAUSTED/i.test(why));
     if((rate||r.status>=500)&&i<3){ await new Promise(z=>setTimeout(z,800*2**i)); continue; }
     const kind=r.status===401?'exp':/accessNotConfigured|SERVICE_DISABLED/i.test(why+' '+info.message)?'api':/insufficient|SCOPE_INSUFFICIENT/i.test(why)?'scope':rate?'rate':(r.status===404||r.status===410)?'gone':r.status===403?'forbidden':'http';
-    const e=new Error(GCAL_MSG[kind]||('Google respondió con un error ('+r.status+').')); e.kind=kind; e.status=r.status; throw e;
+    const e=new Error(GCAL_MSG[kind]||('Google respondió con un error ('+r.status+').')); e.kind=kind; e.status=r.status; e.detail=info.message; throw e;
   }
 }
 
-/* trae los próximos eventos (máx. cada 5 min salvo que se pida forzar) */
-function gcalLoad(force){
+/* trae los próximos eventos (máx. cada 5 min salvo que se pida forzar).
+   silent=true lo usa la revisión en vivo: solo redibuja si algo cambió en tu Google Calendar */
+const gcalSig=list=>(list||[]).map(e=>e.id+'@'+(e.updated||'')).join('|');
+function gcalLoad(force,silent){
   if(!gcalConnected()||gcal.loading) return;
   if(!force&&gcal.events&&Date.now()-gcal.at<5*60000) return;
-  if(!force&&gcal.err&&!gcal.events) return;  // tras un error no se reintenta solo en cada render; queda el botón
+  if(!force&&gcal.err&&!gcal.events) return;  // tras un error no se reintenta solo en cada render
   const uid=gcal.uid, now=new Date(), since=new Date(now.getTime()-7*86400000), until=new Date(now.getTime()+60*86400000);
   const q=new URLSearchParams({timeMin:since.toISOString(),timeMax:until.toISOString(),singleEvents:'true',orderBy:'startTime',maxResults:'250'});
-  gcal.loading=true; gcal.err='';
+  const err0=gcal.err; let changed=false;
+  gcal.loading=true; if(!silent) gcal.err='';
   gcalFetch(GCAL_API+'?'+q)
-    .then(d=>{ d=d||{}; if(gcal.uid!==uid) return; gcal.events=(d.items||[]).filter(e=>e.status!=='cancelled'); gcal.cal=d.summary||gcal.cal; if(gcal.cal&&gcal.cal!==gcal.email){ gcal.email=gcal.cal; gcalStore(); } gcal.at=Date.now(); })
-    .catch(e=>{ if(gcal.uid!==uid) return; gcal.at=Date.now(); if(e.kind==='exp'){ gcalExpired(); return; } if(e.kind==='scope'){ gcal.scope=''; gcalStore(); } gcal.err=e.kind?e.message:'No se pudieron traer tus eventos de Google.'; })
-    .finally(()=>{ if(gcal.uid===uid) gcal.loading=false; gcalRefreshUI(); });
+    .then(d=>{ d=d||{}; if(gcal.uid!==uid) return; const evs=(d.items||[]).filter(e=>e.status!=='cancelled');
+      /* un evento que estás moviendo/coloreando y aún no confirma Google se queda como lo dejaste */
+      if(gcal.events&&gcal.events.some(e=>e._saving)) return;
+      changed=gcal.events===null||gcalSig(evs)!==gcalSig(gcal.events); gcal.events=evs; gcal.err='';
+      gcal.cal=d.summary||gcal.cal; if(gcal.cal&&gcal.cal!==gcal.email){ gcal.email=gcal.cal; gcalStore(); } gcal.at=Date.now(); })
+    .catch(e=>{ if(gcal.uid!==uid) return; gcal.at=Date.now(); changed=true; if(e.kind==='exp'){ gcalExpired(); return; } if(e.kind==='scope'){ gcal.scope=''; gcalStore(); }
+      if(silent&&e.kind==='net'){ changed=false; return; }   // un corte breve de internet no se anuncia; se reintenta solo
+      gcal.err=e.kind?e.message:'No se pudieron traer tus eventos de Google.'; })
+    .finally(()=>{ if(gcal.uid===uid) gcal.loading=false; if(!silent||changed||gcal.err!==err0) gcalRefreshUI(); });
 }
+/* [GOOGLE · EN VIVO 2026-10-23] sin botón de «Sincronizar ahora»: mientras la pestaña está a la vista se revisa tu
+   Google Calendar cada GCAL_LIVE_MS (y al volver a la pestaña); lo que crees, muevas o borres en Google aparece solo.
+   Lo que cambias en el portal sale a Google en ~1.5 s (gcalPushSoon desde store.save). */
+const GCAL_LIVE_MS=20000;
+function gcalLiveTick(minGap){
+  if(document.hidden||!gcalWho()||!gcalConnected()||gcal.loading) return;
+  if(Date.now()-(gcal.at||0)<minGap) return;
+  gcalLoad(true,true);
+}
+setInterval(()=>gcalLiveTick(GCAL_LIVE_MS-1000),5000);
 
 /* ---------- Mandar MIS actividades del portal a Google Calendar ---------- */
 function gcalLocalISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -166,6 +188,13 @@ function gcalActBody(a){
   const tipo=typeof subTipo==='function'?subTipo(a.s,a.t):'';
   return Object.assign({summary:a.s.name||'(Sin nombre)',description:desc,location:meet||undefined,colorId:(typeof GCAL_SUB2G!=='undefined'&&GCAL_SUB2G[tipo])||'2',extendedProperties:{private:priv}},when);
 }
+/* [GOOGLE · ERROR 400 2026-10-23] al ACTUALIZAR, Google mezcla lo nuevo con lo que ya tenía el evento: si una actividad
+   «todo el día» recibe hora (o al revés) quedaba con date y dateTime a la vez y Google respondía 400.
+   Se manda en null el campo que ya no aplica para que lo borre. */
+function gcalPatchWhen(b){
+  const fix=x=>x&&(x.dateTime?Object.assign({date:null},x):Object.assign({dateTime:null,timeZone:null},x));
+  return Object.assign({},b,{start:fix(b.start),end:fix(b.end)});
+}
 /* misma hora/título/descripción → no hace falta tocar el evento */
 function gcalSame(ev,b){
   const st=x=>x?(x.date||((x.dateTime||'').slice(0,16))):'';
@@ -183,14 +212,17 @@ async function gcalPushMine(){
     const mine={}; let pageToken='';
     do{ const q=new URLSearchParams({privateExtendedProperty:'nuwek=1',timeMin:t0.toISOString(),timeMax:lim.toISOString(),singleEvents:'true',maxResults:'250',showDeleted:'false'}); if(pageToken) q.set('pageToken',pageToken);
       const d=await call(GCAL_API+'?'+q); (d&&d.items||[]).forEach(ev=>{ const sid=ev.extendedProperties&&ev.extendedProperties.private&&ev.extendedProperties.private.sid; if(sid&&ev.status!=='cancelled') mine[sid]=ev; }); pageToken=d&&d.nextPageToken||''; }while(pageToken);
-    let nu=0, up=0, del=0; const keep=new Set();
+    let nu=0, up=0, del=0, bad=0; const keep=new Set();
+    /* [GOOGLE · ERROR 400 2026-10-23] una actividad que Google rechaza no detiene a las demás: se cuenta, se anota en la
+       consola y se sigue (antes un solo rechazo dejaba «Google respondió con un error (400)» y no se enviaba nada más) */
+    const one=async fn=>{ try{ await fn(); }catch(e){ if(e.kind&&e.kind!=='http'&&e.kind!=='gone') throw e; bad++; console.warn('Google Calendar no aceptó una actividad:',e.message,e.detail||''); } };
     for(const a of gcalMyActs()){ if(gcal.uid!==uid) return; const b=gcalActBody(a); keep.add(a.key); const ev=mine[a.key];
-      if(!ev){ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; }
-      else if(!gcalSame(ev,b)){ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(b)}); if(r&&r.gone){ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; } else up++; } }
+      if(!ev) await one(async()=>{ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; });
+      else if(!gcalSame(ev,b)) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; } else up++; }); }
     /* terminadas, movidas fuera del rango o que ya no son tuyas: se quitan de tu calendario */
-    for(const sid in mine){ if(keep.has(sid)) continue; if(gcal.uid!==uid) return; await call(GCAL_API+'/'+encodeURIComponent(mine[sid].id),{method:'DELETE'}); del++; }
-    const parts=[nu&&nu+' nueva'+(nu>1?'s':''),up&&up+' actualizada'+(up>1?'s':''),del&&del+' quitada'+(del>1?'s':'')].filter(Boolean);
-    gcal.push={running:false,ok:true,at:Date.now(),msg:parts.length?'✓ Tus actividades: '+parts.join(' · '):'✓ Tus actividades ya estaban al día'};
+    for(const sid in mine){ if(keep.has(sid)) continue; if(gcal.uid!==uid) return; await one(async()=>{ await call(GCAL_API+'/'+encodeURIComponent(mine[sid].id),{method:'DELETE'}); del++; }); }
+    const parts=[nu&&nu+' nueva'+(nu>1?'s':''),up&&up+' actualizada'+(up>1?'s':''),del&&del+' quitada'+(del>1?'s':''),bad&&bad+' que Google no aceptó'].filter(Boolean);
+    gcal.push={running:false,ok:true,at:Date.now(),msg:parts.length?'✓ Tus actividades: '+parts.join(' · '):(gcal.push&&gcal.push.ok&&gcal.push.msg)||'✓ Tus actividades están al día en Google'};
   }catch(e){
     if(gcal.uid!==uid) return;
     if(e.kind==='exp'){ gcalExpired(); gcal.push={running:false,msg:GCAL_MSG.exp}; }
@@ -199,7 +231,7 @@ async function gcalPushMine(){
   }
   gcalRefreshUI();
 }
-/* «Sincronizar ahora»: manda tus actividades (si hay permiso de escritura) y luego trae tus eventos */
+/* sincronización completa (al conectar o dar permiso): manda tus actividades (si hay permiso de escritura) y luego trae tus eventos */
 function gcalSyncNow(){
   if(gcal.push&&gcal.push.running) return;
   gcalWithToken(async()=>{ if(gcalCanWrite()) await gcalPushMine(); else gcal.push={running:false,msg:'Para ver aquí tus actividades del portal en Google, presiona «Dar permiso».'}; gcalLoad(true); });
@@ -236,7 +268,7 @@ function gcalBlock(mode){
   gcalLoad(false);
   const t0=new Date(); t0.setHours(0,0,0,0); const lim=t0.getTime()+GCAL_DAYS*86400000;
   const evs=(gcal.events||[]).filter(e=>{ const st=gcalStart(e).getTime(), en=e.end&&(e.end.dateTime||e.end.date)?new Date(e.end.dateTime||e.end.date+'T00:00:00').getTime():st; return en>Date.now()&&st<lim; }), list=evs.slice(0,max);   // solo lo que viene (la Agenda trae también la semana pasada)
-  const acts=`<span class="gc-acts"><button title="Sincronizar: manda tus actividades y trae tus eventos" onclick="event.stopPropagation();gcalSyncNow()">${gcal.loading||(gcal.push&&gcal.push.running)?'…':'↻'}</button><button title="Desconectar" onclick="event.stopPropagation();gcalDisconnect()">✕</button></span>`;
+  const acts=`<span class="gc-acts"><span class="gc-live" title="Se actualiza solo">● En vivo</span><button title="Desconectar" onclick="event.stopPropagation();gcalDisconnect()">✕</button></span>`;
   const acc=gcal.cal?`<span class="gc-acc">${gcalEsc(gcal.cal)}</span>`:'';
   if(!list.length){
     const st=gcal.events===null?(gcal.loading?'Cargando tus eventos…':''):`✓ Sin eventos en los próximos ${GCAL_DAYS} días`;
@@ -317,13 +349,13 @@ function gcalDayList(iso,portal,goog){
 function gcalAgenda(pid,days){
   const self=pid===session, per=store.person(pid)||{name:'—'};
   const on=self&&gcalConnected(); if(on) gcalLoad(false);
-  if(on&&gcalCanWrite()&&!(gcal.push&&gcal.push.running)&&Date.now()-(gcal.autoAt||0)>10*60000){ gcal.autoAt=Date.now(); setTimeout(()=>{ gcalPushMine().then(()=>gcalLoad(true)); },0); }
+  if(on&&gcalCanWrite()&&!(gcal.push&&gcal.push.running)&&Date.now()-(gcal.autoAt||0)>10*60000){ gcal.autoAt=Date.now(); setTimeout(()=>{ gcalPushMine().then(()=>gcalLoad(true,true)); },0); }
   const auth=gcal.cal?'?authuser='+encodeURIComponent(gcal.cal):'';
   /* encabezado: el estado de Google solo tiene sentido en tu propio calendario */
   let right='', pill='';
   if(self){
     if(on){ pill=`<span class="gcw-pill">Google conectado</span>${gcal.cal?`<span class="gcw-acc">${gcalEsc(gcal.cal)}</span>`:''}`;
-      right=`<button class="gcw-sync${gcal.loading||(gcal.push&&gcal.push.running)?' spin':''}" onclick="event.stopPropagation();gcalSyncNow()" title="Manda tus actividades a tu Google Calendar y trae tus eventos">${GCAL_IC.sync} Sincronizar ahora</button><span class="gcw-sep"></span><button class="gcw-off" onclick="event.stopPropagation();gcalDisconnect()">Desconectar</button><a class="gcw-main" href="https://calendar.google.com/calendar/r${auth}" target="_blank" rel="noopener">${GCAL_IC.cal} Abrir Google Calendar</a>`; }
+      right=`${GCAL_LIVE()}<span class="gcw-sep"></span><button class="gcw-off" onclick="event.stopPropagation();gcalDisconnect()">Desconectar</button><a class="gcw-main" href="https://calendar.google.com/calendar/r${auth}" target="_blank" rel="noopener">${GCAL_IC.cal} Abrir Google Calendar</a>`; }
     else if(gcalNeedsReconnect()){ pill=`<span class="gcw-pill warn">Google vinculado</span>`;
       right=`<button class="gcw-off" onclick="event.stopPropagation();gcalDisconnect()">Desconectar</button><button class="gcw-main" onclick="event.stopPropagation();gcalConnect()">${GCAL_IC.sync} Reconectar Google</button>`; }
     else { pill=`<span class="gcw-pill off">Google sin conectar</span>`;
@@ -399,7 +431,8 @@ function gcalMoveEvent(e,day,hm,dur){
   if(!gcalCanWrite()){ alert('Para mover eventos en tu Google Calendar falta un permiso.\n\nUsa «Dar permiso» en tu calendario de Agenda.'); render(); return; }
   const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'America/Mexico_City';
   const ns=new Date(day+'T'+hm+':00'), ne=new Date(ns.getTime()+dur*60000);
-  const body={start:{dateTime:day+'T'+hm+':00',timeZone:tz},end:{dateTime:gcalLocalISO(ne)+'T'+gcalHM(ne)+':00',timeZone:tz}};
+  /* date:null: si era de «todo el día», al ponerle hora deja de serlo (PATCH mezcla y si no quedaría con las dos) */
+  const body={start:{date:null,dateTime:day+'T'+hm+':00',timeZone:tz},end:{date:null,dateTime:gcalLocalISO(ne)+'T'+gcalHM(ne)+':00',timeZone:tz}};
   const prev={start:e.start,end:e.end};
   e.start={dateTime:ns.toISOString(),timeZone:tz}; e.end={dateTime:ne.toISOString(),timeZone:tz}; e._saving=true; render();
   gcalWithToken(async()=>{
@@ -416,11 +449,26 @@ function gcalMoveEvent(e,day,hm,dur){
 function gcalPushSoon(){
   const who=gcalWho(); if(!who) return;   // store.save() corre al crear la app, antes de que exista «session» (gcalWho lo cuida)
   if(!gcal.uid||gcal.uid!==who||!gcalConnected()||!gcalCanWrite()) return;
-  clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{ if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; } gcalPushMine().then(()=>gcalLoad(true)); },4000);
+  clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{ if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; } gcalPushMine().then(()=>gcalLoad(true,true)); },1500);
 }
 
 /* al volver a esta pestaña (por ejemplo, después de crear un evento en Google) se traen tus eventos otra vez */
-document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&gcalWho()&&gcalConnected()&&Date.now()-(gcal.at||0)>15000) gcalLoad(true); });
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gcalLiveTick(3000); });
+window.addEventListener('focus',()=>gcalLiveTick(3000));
+/* indicador en lugar del botón «Sincronizar ahora» */
+function GCAL_LIVE(){ const busy=gcal.loading||(gcal.push&&gcal.push.running);
+  return `<span class="gcw-live${busy?' busy':''}" title="Se sincroniza solo: lo que cambias aquí sale a Google en segundos y lo de Google aparece aquí cada ${GCAL_LIVE_MS/1000} s">${busy?'Sincronizando…':'Sincronización automática'}</span>`; }
+
+/* [AGENDA · SIN HORA 2026-10-23] eventos de Google de todo el día (o de varios días) en la franja «Sin hora» de Por horas.
+   Arrástralos a una hora para darles horario: se guarda en tu Google Calendar. */
+function gcalAllDayChips(day,pid){
+  if(pid!==session||!gcalConnected()) return [];
+  return gcalOwnGoogle().filter(e=>!e.start.dateTime&&e.start.date<=day&&(e.end&&e.end.date?e.end.date>day:e.start.date===day)).map(e=>{
+    const mv=gcalCanMove(e)&&gcalCanWrite(), col=e.colorId?gcalColorOf(e):'#4285F4', link=/^https:\/\//.test(e.htmlLink||'')?e.htmlLink:'';
+    return `<div class="ag-ad gg${e._saving?' saving':''}" style="border-left-color:${col}" ${mv?`draggable="true" ondragstart="gcalAdStart(event,'${gcalEsc(e.id)}')" ondragend="agListEnd()"`:''} ${link?`onclick="window.open('${gcalEsc(link)}','_blank','noopener')"`:''} title="${gcalEsc((e.summary||'(Sin título)')+' · Google Calendar · todo el día'+(mv?' · arrastra a una hora para darle horario':''))}">${gcalEsc(e.summary||'(Sin título)')}</div>`;
+  });
+}
+function gcalAdStart(ev,gid){ agListDrag={gid}; ev.dataTransfer.effectAllowed='move'; try{ ev.dataTransfer.setData('text/plain',gid); }catch(_){} }
 
 /* ================== Colores de los eventos ==================
    Botón 🎨 (o clic derecho) en un evento del calendario de Agenda:
@@ -572,11 +620,11 @@ function gcalCitaEv(x){
 function gcalClientCitas(ctx){
   if(!ctx) return '';
   const on=gcalConnected(); if(on) gcalLoad(false);
-  if(on&&gcalCanWrite()&&!(gcal.push&&gcal.push.running)&&Date.now()-(gcal.autoAt||0)>10*60000){ gcal.autoAt=Date.now(); setTimeout(()=>{ gcalPushMine().then(()=>gcalLoad(true)); },0); }
+  if(on&&gcalCanWrite()&&!(gcal.push&&gcal.push.running)&&Date.now()-(gcal.autoAt||0)>10*60000){ gcal.autoAt=Date.now(); setTimeout(()=>{ gcalPushMine().then(()=>gcalLoad(true,true)); },0); }
   const auth=gcal.cal?'?authuser='+encodeURIComponent(gcal.cal):'';
   let pill, right;
   if(on){ pill=`<span class="gcw-pill">Google conectado</span>${gcal.cal?`<span class="gcw-acc">${gcalEsc(gcal.cal)}</span>`:''}`;
-    right=`<button class="gcw-sync${gcal.loading||(gcal.push&&gcal.push.running)?' spin':''}" onclick="gcalSyncNow()" title="Agrega tus citas a tu Google Calendar y trae tus eventos">${GCAL_IC.sync} Sincronizar</button><span class="gcw-sep"></span><button class="gcw-off" onclick="gcalDisconnect()">Desconectar</button><a class="gcw-main" href="https://calendar.google.com/calendar/r${auth}" target="_blank" rel="noopener">${GCAL_IC.cal} Abrir Google Calendar</a>`; }
+    right=`${GCAL_LIVE()}<span class="gcw-sep"></span><button class="gcw-off" onclick="gcalDisconnect()">Desconectar</button><a class="gcw-main" href="https://calendar.google.com/calendar/r${auth}" target="_blank" rel="noopener">${GCAL_IC.cal} Abrir Google Calendar</a>`; }
   else if(gcalNeedsReconnect()){ pill=`<span class="gcw-pill warn">Google vinculado</span>`; right=`<button class="gcw-off" onclick="gcalDisconnect()">Desconectar</button><button class="gcw-main" onclick="gcalConnect()">${GCAL_IC.sync} Reconectar Google</button>`; }
   else { pill=`<span class="gcw-pill off">Google sin conectar</span><span class="gcw-note">Conéctalo y tus citas con Nuwek aparecen solas en tu Google Calendar</span>`; right=`<button class="gcw-main" onclick="gcalConnect()">${GCAL_IC.cal} Conectar Google Calendar</button>`; }
   const head=`<div class="gcw-h">${GCAL_LOGO}<span class="gcw-ttl">Mis citas</span>${pill}<span class="gcw-r">${right}</span></div>`;
