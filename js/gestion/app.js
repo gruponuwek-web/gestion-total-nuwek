@@ -51,7 +51,7 @@ class Store{
     this.save();
   }
   /* La copia en el navegador es solo un respaldo rápido (la verdad está en Supabase). Si ya no cabe (límite ~5 MB), se guarda una versión ligera o se omite: nunca debe tumbar el portal. */
-  save(){ lastLocalWrite=Date.now(); this.d.v=DV; if(typeof gcalPushSoon==='function') gcalPushSoon();   // tus cambios llegan a tu Google Calendar en unos segundos
+  save(){ lastLocalWrite=Date.now(); this.d.v=DV; if(typeof gcalPushSoon==='function') gcalPushSoon(); if(typeof notionPushSoon==='function') notionPushSoon();   // tus cambios llegan a tu Google Calendar en unos segundos
     try{ localStorage.setItem('nuwekPortal', JSON.stringify(this.d)); return; }catch(_){}
     try{ const lite=Object.assign({},this.d,{log:[],comments:(this.d.comments||[]).map(c=>Object.assign({},c,{attachments:(c.attachments||[]).map(a=>({name:a.name,type:a.type}))}))}); localStorage.setItem('nuwekPortal', JSON.stringify(lite)); return; }catch(_){}
     try{ localStorage.removeItem('nuwekPortal'); }catch(_){} }
@@ -701,6 +701,8 @@ function pinPush(d){
 function pinSubmit(){
   const u=store.person(loginUser); if(!u) return;
   if((u.password||'')===loginPin){
+    if(typeof gcalServerLogin==='function') gcalServerLogin({kind:'staff',uid:u.id,pin:loginPin});   // [GOOGLE · SIN DESCONEXIONES] pase de este navegador
+    if(typeof notionLogin==='function') notionLogin(u.id,loginPin);   // [NOTION] pase de este navegador para el puente de Apps Script
     session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; agPerson=u.id;
     view=(role==='colab')?'op_pendientes':'clientes';
     selProject=null; modalTask=null; opSelTask=null;
@@ -736,7 +738,7 @@ function restoreSession(){
       if(n.opSelTask&&store.task(n.opSelTask)) opSelTask=n.opSelTask;
       if(n.gestSub) gestSub=n.gestSub; if(n.gestScope) gestScope=n.gestScope; }
     return true; }catch(_){ return false; } }
-function logout(){ if(typeof gcalForget==='function') gcalForget(false); session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
+function logout(){ if(typeof gcalForget==='function') gcalForget(false); if(typeof notionForget==='function') notionForget(); session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
 function shellOp(body){
   return `
     <div class="topbar"><div class="topbar-in">
@@ -4019,7 +4021,7 @@ function mnWatch(){ if(!session||document.hidden||mnPrompt||mnActive()) return; 
 setInterval(mnWatch,30000);
 /* bloque dentro de la subtarea (pestaña Sesión) */
 function mnBlock(t,s){ const ms=(s.minutas||[]).slice().sort((a,b)=>a.start<b.start?1:-1); const act=ms.find(m=>m.estado==='curso'); const k=citaKind(s)||(subHasCita(s)?'cliente':null);
-  return `<div class="field"><label>📝 Minutas de esta cita ${k?`<span class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</span>`:''}</label>${ms.map(m=>`<div class="dep-row"><span>${esc(dLabel(mnDay(m.start)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a style="cursor:pointer;color:var(--green)" onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="hint">Aún no hay minutas de esta cita.</div>'}<button type="button" class="btn sm" style="margin-top:6px" onclick="mnStart('${t.id}','${s.id}')">${act?'▶ Continuar minuta':'▶ Iniciar minuta'}</button></div>`; }
+  return `<div class="field"><label>📝 Minutas de esta cita ${k?`<span class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</span>`:''}</label>${ms.map(m=>`<div class="dep-row"><span>${esc(dLabel(mnDay(m.start)))} · ${m.end?mnClockTxt(new Date(m.end)-new Date(m.start)):'en curso'} · ${m.lines.filter(l=>l.kind==='n').length} nota(s) · ${m.lines.filter(l=>l.kind==='a').length} actividad(es)</span><a style="cursor:pointer;color:var(--green)" onclick="mnView('${t.id}','${s.id}','${m.id}')">abrir</a></div>`).join('')||'<div class="hint">Aún no hay minutas de esta cita.</div>'}${typeof notionMinutaHtml==='function'?notionMinutaHtml(citaRootS(s),true):''}<button type="button" class="btn sm" style="margin-top:6px" onclick="mnStart('${t.id}','${s.id}')">${act?'▶ Continuar minuta':'▶ Iniciar minuta'}</button></div>`; }
 /* Gestión → Minutas */
 function mnAll(){ const out=[]; store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; (t.subtasks||[]).forEach(s=>(s.minutas||[]).forEach(m=>out.push({t,s,m,p,c:store.client(p.clientId)||{name:''}}))); }); return out.sort((a,b)=>a.m.start<b.m.start?1:-1); }
 let mnFilK='', mnFilQ='';
@@ -4364,7 +4366,7 @@ function toggleCitaFilter(){ subOnlyCita=!subOnlyCita; render(); }
 function citaCard(it,showClient,cp){ const {s,t,p,c,est}=it; const link=s.shareToken?'':'';
   return `<div class="cita-row" style="border-left:4px solid ${est.c}"><div class="cita-when"><b>${s.date?dLabel(s.date):'sin fecha'}</b><span>${s.time||''}</span></div>
     <div class="cita-main"><div class="cita-nm">${esc(s.name)}</div><div class="muted" style="font-size:.76rem">${showClient?esc(c.name)+' · ':''}${esc(p.name)} · ${esc(t.name)}</div>
-      ${citaUnidas(s).length?`<div class="cita-prop">🔗 Incluye: ${citaUnidas(s).map(u=>`<span>${esc(u.s.name)}</span>`).join('')}</div>`:''}${est.razon?`<div class="cita-razon">«${esc(est.razon)}»</div>`:''}${est.prop.length?`<div class="cita-prop">Propone: ${est.prop.map(x=>`<span>${esc(fmtPropuesta(x))}</span>`).join('')}</div>`:''}</div>
+      ${citaUnidas(s).length?`<div class="cita-prop">🔗 Incluye: ${citaUnidas(s).map(u=>`<span>${esc(u.s.name)}</span>`).join('')}</div>`:''}${est.razon?`<div class="cita-razon">«${esc(est.razon)}»</div>`:''}${est.prop.length?`<div class="cita-prop">Propone: ${est.prop.map(x=>`<span>${esc(fmtPropuesta(x))}</span>`).join('')}</div>`:''}${!cp&&typeof notionMinutaHtml==='function'?notionMinutaHtml(s):''}</div>
     <div class="cita-side"><span class="cita-st" style="background:${est.bg};color:${est.c}">${est.t}</span>${cp?`<div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end"><button class="btn sm" onclick="openCpSesion('${t.id}','${s.id}')">Ver y responder</button></div>`:`<div style="display:flex;gap:5px;margin-top:6px;justify-content:flex-end"><button class="btn ghost sm" title="Abrir la tarea" onclick="openTaskHi('${t.id}','${s.id}')">Abrir</button><button class="btn ghost sm" title="Editar la sesión (objetivo, lugar, temario)" onclick="editCita('${t.id}','${s.id}')">✏️</button><button class="btn ghost sm" title="Ver la página que ve el cliente" onclick="visitSession('${t.id}','${s.id}')">👁</button><button class="btn ghost sm" title="Copiar link de la sesión" onclick="copySessionLink('${t.id}','${s.id}')">🔗</button></div>`}</div></div>`; }
 let citaSel=null;
 function selectCitaGrp(k){ citaSel=(citaSel===k?null:k); render(); }
@@ -4378,7 +4380,7 @@ function citasHistorialHtml(c,cp){
   const fichas=groups.map(([k,l,col,arr])=>`<div class="lib-side-it${citaSel===k?' on':''}" onclick="selectCitaGrp('${k}')"><span class="lib-side-nm"><i class="cita-dot" style="background:${col}"></i>${l}</span><span class="lib-side-n">${arr.length}</span></div>`).join('');
   const det=cur?`<div class="lib-det-h"><h3>${cur[1]} · ${cur[3].length}</h3></div><div class="lib-det-b">${cur[3].map(x=>citaCard(x,false,!!cp)).join('')||'<div class="muted" style="padding:10px">No hay citas en este estado.</div>'}</div>`
     :`<div class="muted" style="padding:22px;text-align:center">Elige una ficha para ver las citas con su estado.${cp?'':'<br><span style="font-size:.78rem">Se crean al agregar participantes del cliente (🫱🏽‍🫲🏾) a una subtarea.</span>'}</div>`;
-  return `${cp?'':'<div class="sec-title"><h2>📅 Citas</h2></div>'}${all.length?`<div class="lib-split"><div class="lib-side">${fichas}</div><div class="lib-det">${det}</div></div>`:(cp?'<div class="muted">Aún no hay citas programadas.</div>':'<div class="muted">Este cliente aún no tiene citas. Se crean al agregar participantes del cliente (🫱🏽‍🫲🏾) a una subtarea.</div>')}`; }
+  return `${cp?'':'<div class="sec-title"><h2>📅 Citas'+(typeof notionChip==='function'?notionChip():'')+'</h2></div>'}${all.length?`<div class="lib-split"><div class="lib-side">${fichas}</div><div class="lib-det">${det}</div></div>`:(cp?'<div class="muted">Aún no hay citas programadas.</div>':'<div class="muted">Este cliente aún no tiene citas. Se crean al agregar participantes del cliente (🫱🏽‍🫲🏾) a una subtarea.</div>')}`; }
 
 /* ================== FINANZAS POR CLIENTE (solo Dirección): programado · facturado · cobrado parcialmente · cobrado · conciliado ================== */
 const PAY_ST={programado:{t:'Programado',c:'#6b7a73',bg:'#eef0ec'},facturado:{t:'Facturado',c:'#2f5fa8',bg:'#eaf1fb'},parcial:{t:'Cobrado parcialmente',c:'#9a7a00',bg:'#fff7e0'},cobrado:{t:'Cobrado',c:'#1f7a44',bg:'#e8f6ee'},conciliado:{t:'Conciliado',c:'#5b4fc9',bg:'#efecfb'}};
@@ -4540,7 +4542,7 @@ function clientLoginScreen(){
 function clientLogin(){
   const u=normU(val('cl-user')), code=(val('cl-code')||'').trim(); const lock=cpFails[u]; if(lock&&lock.until&&Date.now()<lock.until){ cpLoginErr='Demasiados intentos. Espera unos minutos.'; render(); return; }
   const f=findPortalUser(u);
-  if(f&&f.p.portal.activo!==false&&String(f.p.portal.code)===code){ clientSess={cid:f.c.id,pid:f.p.id}; saveClientSession(); cpView=f.p.portal.rol==='admin'?'inicio':'tareas'; cpTaskId=null; citaSel=null; finSel=null; cpProj=''; cpFails[u]=null; cpLoginErr=''; showClientLogin=false; render(); return; }
+  if(f&&f.p.portal.activo!==false&&String(f.p.portal.code)===code){ clientSess={cid:f.c.id,pid:f.p.id}; saveClientSession(); if(typeof gcalServerLogin==='function') gcalServerLogin({kind:'cli',cid:f.c.id,pid:f.p.id,code}); cpView=f.p.portal.rol==='admin'?'inicio':'tareas'; cpTaskId=null; citaSel=null; finSel=null; cpProj=''; cpFails[u]=null; cpLoginErr=''; showClientLogin=false; render(); return; }
   const a=cpFails[u]||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; cpLoginErr='Demasiados intentos. Espera 5 minutos.'; } else cpLoginErr='Usuario o código incorrecto.'; cpFails[u]=a; render(); }
 function saveClientSession(){ try{ if(clientSess) localStorage.setItem('nuwekClient',JSON.stringify(Object.assign({},clientSess,{exp:Date.now()+SESSION_TTL_MS}))); }catch(_){} }
 function restoreClientSession(){ try{ const o=JSON.parse(localStorage.getItem('nuwekClient')||'null'); if(!o||Date.now()>o.exp){ localStorage.removeItem('nuwekClient'); return; } clientSess={cid:o.cid,pid:o.pid}; if(!cpCtx()){ clientSess=null; localStorage.removeItem('nuwekClient'); return; } const s=sessionStorage.getItem('nuwekCpView'); if(s) cpView=s; else cpView=cpCtx().isAdmin?'inicio':'tareas'; }catch(_){} }
