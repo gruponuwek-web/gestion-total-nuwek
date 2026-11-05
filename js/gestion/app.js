@@ -3013,7 +3013,8 @@ function nextItems(){
     if(s.done||s.isSeries||!s.date) return; if(!(s.personId===me||(s.team||[]).includes(me))) return;
     const hasT=!!s.time; const at=new Date(s.date+'T'+(s.time||'23:59')+':00').getTime(); if(isNaN(at)||at<now-(hasT?0:0)) return;
     out.push({s,t,p,at,hasT,part:s.personId!==me}); }); });
-  return out.sort((a,b)=>a.at-b.at).slice(0,14); }
+  const lim=addDaysISO(todayISO(),1);   // solo hoy y mañana
+  return out.filter(x=>x.s.date<=lim).sort((a,b)=>a.at-b.at).slice(0,14); }
 function nextWhen(it){ const now=new Date(); const d=new Date(it.at); const mins=Math.round((it.at-now.getTime())/60000); const today=todayISO(), tm=addDaysISO(today,1);
   if(it.hasT&&mins<60) return {t:mins<=1?'¡ahora!':'en '+mins+' min',soon:true};
   if(it.s.date===today) return {t:it.hasT?'hoy · '+it.s.time:'hoy',soon:it.hasT&&mins<180};
@@ -3024,7 +3025,7 @@ function nextBtnUpdate(){ const b=document.getElementById('next-btn'); if(!b||!s
 function nextPopHtml(){ const its=nextItems();
   const rows=its.map(it=>{ const w=nextWhen(it); const cita=subHasCita(it.s); const f=kbFrente(it.t);
     return `<div class="nx-it${w.soon?' soon':''}${nxSel===it.s.id?' sel':''}" onclick="goNext('${it.t.id}','${it.s.id}')"><div class="nx-when">${w.t}</div><div class="nx-tx"><div class="nx-nm">${cita?'📅 ':''}${it.part?'🫱🏽‍🫲🏾 ':''}${esc(it.s.name)}</div><div class="nx-sub">${esc(it.p.name)} · ${esc(it.t.name)} · <span style="color:${f.color};font-weight:600">${esc(f.name)}</span></div></div></div>`; }).join('');
-  return `<div class="nx-h">⏰ Lo que sigue <span class="muted">${its.length?its.length+' próxima'+(its.length>1?'s':''):''}</span></div><div class="nx-list">${rows||'<div class="nf-empty">🎉 No tienes actividades próximas programadas</div>'}</div>`; }
+  return `<div class="nx-h">⏰ Lo que sigue <span class="muted">${its.length?its.length+' próxima'+(its.length>1?'s':''):''}</span></div><div class="nx-list">${rows||'<div class="nf-empty">🎉 No tienes actividades para hoy ni mañana</div>'}</div>`; }
 function toggleNext(ev){ ev&&ev.stopPropagation(); nextOpen=!nextOpen; nextRender(); }
 function nextRender(){ let pop=document.getElementById('next-pop'); if(!nextOpen||!session){ if(pop) pop.remove(); return; }
   if(!pop){ pop=document.createElement('div'); pop.id='next-pop'; document.body.appendChild(pop); }
