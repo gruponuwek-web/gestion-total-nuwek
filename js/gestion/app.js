@@ -3233,7 +3233,7 @@ function copyDo(){ const S=copyS; if(!S||!canCopy()) return; const blk=copyBlock
     Object.assign(nt,{id:uid('t_'),projectId:S.destPid,frenteId:frFor(t),subtitle:dc.name,status:'to-do',responsibleId:S.resp?(t.responsibleId||''):'',nextId:null,repeatOf:undefined,
       dueDate:S.mode==='none'?(et?et.end:''):mapD(t.dueDate)});
     delete nt.ord; delete nt.impCode;
-    nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x)); delete o.impCode;
+    nt.subtasks=subs.map(x=>{ const o=JSON.parse(JSON.stringify(x)); delete o.impCode; delete o.minutas; delete o.unida;   // la copia empieza limpia: sin minutas ni cita unida de la original
       Object.assign(o,{id:idMap[x.id],parentId:x.parentId&&idMap[x.parentId]?idMap[x.parentId]:undefined,dependsOn:x.dependsOn&&idMap[x.dependsOn]?idMap[x.dependsOn]:undefined,
         done:false,doneAt:null,timeSpent:0,personId:S.resp?(x.personId||''):'',team:S.resp?(x.team||[]):[],teamInfo:{},teamAck:{},time:'',nextId:null,dateConflict:false,repeatOf:undefined,seriesId:undefined,occDate:undefined,
         invitados:sameClient?(x.invitados||[]):[],date:mapD(x.date)});
@@ -3600,7 +3600,7 @@ function dupDo(){ const D=dupS; if(!D||!canCopy()) return; const t=store.task(D.
   const ds=group.map(x=>x.date).filter(Boolean).sort(); const ref=ds[0]; const base=(D.mode==='start'&&ref)?copyWdn(nextWork(D.date))-copyWdn(ref):0;
   const mapD=d=>D.mode==='same'?d:D.mode==='none'?'':(d?wFrom((copyWdn(d)+base)*(WK.e-WK.s)).d:'');
   const tok=()=>Math.random().toString(36).slice(2,8)+Math.random().toString(36).slice(2,8);
-  const copies=group.map(x=>{ const o=JSON.parse(JSON.stringify(x)); Object.assign(o,{id:idMap[x.id],name:x.id===s0.id?x.name+' (copia)':x.name,parentId:x.parentId?(idMap[x.parentId]||x.parentId):undefined,dependsOn:x.dependsOn?(idMap[x.dependsOn]||x.dependsOn):undefined,
+  const copies=group.map(x=>{ const o=JSON.parse(JSON.stringify(x)); delete o.minutas; delete o.unida; Object.assign(o,{id:idMap[x.id],name:x.id===s0.id?x.name+' (copia)':x.name,parentId:x.parentId?(idMap[x.parentId]||x.parentId):undefined,dependsOn:x.dependsOn?(idMap[x.dependsOn]||x.dependsOn):undefined,
       done:false,doneAt:null,timeSpent:0,time:'',nextId:null,dateConflict:false,repeatOf:undefined,impCode:undefined,date:mapD(x.date),
       personId:D.resp?(x.personId||''):'',team:D.resp?(x.team||[]):[],teamInfo:{},teamAck:{}});
     if(D.resp) (o.team||[]).forEach(id=>{ o.teamInfo[id]={by:currentUser,ts:now}; });
