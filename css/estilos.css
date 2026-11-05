@@ -1343,3 +1343,6 @@
   .mp-card{margin-bottom:12px;border-left:4px solid var(--green)}.mp-grp{border-top:1px solid #efeee7;padding:6px 0}.mp-h{font-size:.84rem;margin-bottom:2px}.mp-more{display:inline-block;margin-top:6px;cursor:pointer;color:var(--green);font-weight:700;font-size:.78rem}
 
 .ag-item .ag-it-hr{margin-top:3px;font-size:.78rem;font-weight:700;color:#2f6fd6}
+
+.ag-item .ag-it-dl{margin-left:6px;color:var(--muted,#6b7a76);font-weight:600}
+.ag-item .ag-it-ping{margin-top:3px;font-size:.78rem;font-weight:700;color:#b4531a}
