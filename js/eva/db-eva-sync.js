@@ -45,6 +45,13 @@ var EvaSync = {
   //  Guarda la foto inicial. Se llama justo despues de cargar.
   // ----------------------------------------------------------
   iniciar: function(datos){
+    // [REVISION 2026-10-23] al recargar se olvida lo del DB anterior: si un temporizador viejo comparaba ese DB
+    // contra la foto nueva, lo que otros crearon entretanto parecia "borrado" y se borraba de la base
+    if (this.pendiente) clearTimeout(this.pendiente);
+    this.pendiente = null;
+    this.hayCambiosNuevos = false;
+    this.datos = datos;
+    this.gen = (this.gen || 0) + 1;
     this.foto = this.tomarFoto(datos);
     console.log('Sincronizacion lista');
   },
@@ -72,7 +79,7 @@ var EvaSync = {
   },
 
   // ----------------------------------------------------------
-  //  El portal llama esto en vez de escribir en el navegador
+  //  El portal llama esto en vez de escribir en el navegador 
   // ----------------------------------------------------------
   marcarCambio: function(datos){
     var self = this;
@@ -80,7 +87,7 @@ var EvaSync = {
     this.hayCambiosNuevos = true;
     this.avisar('pendiente');
     if (this.pendiente) clearTimeout(this.pendiente);
-    this.pendiente = setTimeout(function(){ self.sincronizar(); }, this.espera);
+    this.pendiente = setTimeout(function(){ self.pendiente = null; self.sincronizar(); }, this.espera);
   },
 
   avisar: function(estado, detalle){
@@ -105,6 +112,10 @@ var EvaSync = {
     var datos = this.datos;
     var errores = [];
     var cambios = 0;
+    // [REVISION 2026-10-23] la foto nueva se arma con lo que SE MANDO (no releyendo datos al final): si editabas algo
+    // mientras se guardaba, esa edicion quedaba en la foto sin haberse enviado y nunca llegaba a la base
+    var fotoNueva = {};
+    var gen = this.gen;
 
     try {
       // --- tablas normales ---
@@ -120,6 +131,7 @@ var EvaSync = {
           if (antes[reg.id] !== txt) paraGuardar.push(reg);
         });
 
+        fotoNueva[t.col] = ahora;
         var paraBorrar = Object.keys(antes).filter(function(id){ return !(id in ahora); });
 
         if (paraGuardar.length){
@@ -147,6 +159,7 @@ var EvaSync = {
           if (antesSub[s.id] !== txt) subGuardar.push(appToDbSubtema(s, tema.id, i));
         });
       });
+      fotoNueva.__subtemas = ahoraSub;
       var subBorrar = Object.keys(antesSub).filter(function(id){ return !(id in ahoraSub); });
 
       if (subGuardar.length){
@@ -162,9 +175,10 @@ var EvaSync = {
 
       // --- artefactos: son texto suelto ---
       var artAhora = (datos.artefactos || []).slice().sort().join('|');
+      fotoNueva.__artefactos = artAhora;
       if (artAhora !== this.foto.__artefactos){
         var antesArt = (this.foto.__artefactos || '').split('|').filter(Boolean);
-        var ahoraArt = (datos.artefactos || []);
+        var ahoraArt = artAhora.split('|').filter(Boolean);
         var nuevos = ahoraArt.filter(function(a){ return antesArt.indexOf(a) < 0; });
         var quitados = antesArt.filter(function(a){ return ahoraArt.indexOf(a) < 0; });
         if (nuevos.length){
@@ -185,8 +199,8 @@ var EvaSync = {
         // vuelve a mandar lo que no se pudo guardar
         console.error('Fallas al sincronizar:', errores);
         this.avisar('error', errores.join('\n'));
-      } else {
-        this.foto = this.tomarFoto(datos);
+      } else if (gen === this.gen) {   // si se recargo mientras tanto, la foto ya es la de la carga nueva
+        this.foto = fotoNueva;
         this.avisar(cambios ? 'guardado' : 'sin-cambios', cambios);
         if (cambios) console.log('Sincronizados ' + cambios + ' registros');
       }

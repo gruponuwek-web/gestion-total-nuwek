@@ -60,15 +60,23 @@ async function dbDeletePayment(id){
 }
 
 // --- REEMPLAZAR todo el calendario de un proyecto (borra los suyos y guarda los nuevos) ---
+// [REVISIÓN 2026-10-23] antes se borraba todo primero y luego se guardaba: si el guardado fallaba (o se iba el internet
+// a la mitad) el proyecto se quedaba SIN calendario de cobranza. Ahora primero se guardan los nuevos y solo si salió bien
+// se quitan los que ya no están; si algo falla, se avisa y lo anterior sigue intacto.
 async function dbReplacePayments(projectId, payments){
   try{
-    await sb.from('pagos').delete().eq('proyecto_id', projectId);
-    if (payments && payments.length){
-      let rows = payments.map(appToDbPago);
+    const rowsIn = (payments || []).map(appToDbPago);
+    if (rowsIn.length){
+      let rows = rowsIn;
       let { error } = await sb.from('pagos').upsert(rows);
       if (error && /detalle/i.test(error.message||'')){ rows = rows.map(r => { const c = Object.assign({}, r); delete c.detalle; return c; }); ({ error } = await sb.from('pagos').upsert(rows)); }
-      if (error) console.error('Error guardando calendario de pagos:', error.message);
+      if (error){ console.error('Error guardando calendario de pagos:', error.message); alert('No se pudo guardar el calendario de pagos en la base de datos. El anterior se conserva.\n\n'+error.message); return false; }
     }
+    let del = sb.from('pagos').delete().eq('proyecto_id', projectId);
+    if (rowsIn.length) del = del.not('id', 'in', '(' + rowsIn.map(r => '"' + String(r.id).replace(/"/g,'') + '"').join(',') + ')');
+    const { error: delErr } = await del;
+    if (delErr) console.error('Error quitando pagos viejos:', delErr.message);
     console.log('💾 Calendario de pagos actualizado en Supabase');
-  }catch(e){ console.error('Red al reemplazar pagos:', e); }
+    return true;
+  }catch(e){ console.error('Red al reemplazar pagos:', e); alert('Sin conexión: no se pudo guardar el calendario de pagos. El anterior se conserva.'); return false; }
 }
