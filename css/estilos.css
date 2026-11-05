@@ -1336,3 +1336,6 @@
 
   .mn-ln.lv1{padding-left:22px}.mn-ln.lv1 .mn-mk{font-size:1rem;opacity:.8}.mn-ind{border:1.5px solid #e1e0d6;background:#fff;color:var(--muted);border-radius:8px;width:30px;cursor:pointer;font-weight:700}.mn-ind.on{background:var(--green);color:#fff;border-color:var(--green)}
   .sub-chip.mn-chip-min{background:#eef6f1;color:#1f6b45;font-weight:700}.sub-chip.mn-chip-min.rec{background:#fde8e8;color:#c0392b}
+
+  .mn-mk.ck{font-size:1.1rem}.mn-mk.ck.on{color:#1f7a44}.mn-rs{border:1px solid #e1e0d6;border-radius:6px;background:#fff;font:inherit;font-size:.68rem;padding:1px 2px;max-width:64px}.mn-pg{background:#e6f4ea;color:#1f7a44;border-radius:9px;font-size:.66rem;font-weight:700;padding:1px 7px;white-space:nowrap}.mn-rsn{background:#eef0ec;border-radius:9px;font-size:.66rem;padding:1px 7px;white-space:nowrap}
+  .mn-inh{margin:8px 0;border-top:1px dashed #cfe3d8;padding-top:2px}.mn-ck{cursor:default;font-size:1.05rem}.mn-ck.can{cursor:pointer;color:var(--green)}.mn-dn{opacity:.6;text-decoration:line-through}
