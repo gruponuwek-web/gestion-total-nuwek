@@ -820,7 +820,8 @@ function clientTabsHtml(c){
   const body=clientTab==='citas'?citasHistorialHtml(c):clientTab==='finanzas'?finanzasHtml(c):clientTab==='proximas'?`<div class="sec-title"><h2>🧭 Próximas subtareas</h2></div>${clientNextHtml(c)}`:clientTab==='notas'?clientNotasStaffHtml(c):`<div class="sec-title"><h2>📊 Scorecard</h2></div>${clientScoreHtml(c)}`;
   return bar+`<div class="client-tab-body">${body}</div>`; }
 
-let peopleOpen={}, cliPeople=null;
+let peopleOpen={}, cliPeople=null, clDetOpen={};
+function toggleClDet(cid){ clDetOpen[cid]=!clDetOpen[cid]; render(); }
 function openCliPeople(cid){ cliPeople={cid,q:''}; render(); setTimeout(()=>{ const e=document.getElementById('cpl-q'); if(e) e.focus(); },60); }
 function closeCliPeople(){ cliPeople=null; render(); }
 function cliPeopleQ(v){ if(!cliPeople) return; cliPeople.q=v; const e=document.getElementById('cpl-list'); if(e) e.innerHTML=cliPeopleRows(); }
@@ -854,14 +855,15 @@ function viewCliente(){
         <div><div class="pill green">Cliente</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}<h2 style="margin:8px 0 2px;font-size:1.5rem">${c.name}</h2><div class="muted">${c.razon||''}</div></div>
         <div style="display:flex;gap:8px">${can('clientes')?`<button class="btn ghost" onclick="openClientEdit('${c.id}')">✏️ Editar</button>`:''}${canManageProject()?`<button class="btn" onclick="startWizard('${c.id}')">+ Nuevo proyecto</button>`:''}</div>
       </div>
-      <dl class="kv" style="margin-top:16px">
+      <div class="cl-det-tg"><a onclick="toggleClDet('${c.id}')">${clDetOpen[c.id]?'▾ Ocultar datos del cliente':'▸ Datos del cliente'}<span class="muted"> · ${esc(c.location||'')||'RFC, ubicación, web, redes, responsable y contactos'}</span></a> <button class="btn ghost sm" style="margin-left:8px" onclick="openCliPeople('${c.id}')">👥 Contactos (${c.people.length})</button></div>
+      ${clDetOpen[c.id]?`<dl class="kv" style="margin-top:10px">
         <dt>RFC</dt><dd>${c.rfc||'—'}</dd>
         <dt>Ubicación</dt><dd>${c.location||'—'}</dd>
         <dt>Web</dt><dd>${c.web||'—'}</dd>
         <dt>Redes</dt><dd>${[['IG',c.ig],['FB',c.fb],['YouTube',c.youtube],['TikTok',c.tiktok],['LinkedIn',c.linkedin],['Otro',c.otro]].filter(r=>r[1]).map(r=>`${r[0]}: ${r[1]}`).join(' · ')||'—'}</dd>
         <dt>Responsable Nuwek</dt><dd>${c.generalResponsibleId?`${avatar(resp,true)} ${resp.name}`:'—'}</dd>
         <dt>Su gente</dt><dd><div class="chiplist" style="align-items:center"><button class="btn ghost sm" onclick="openCliPeople('${c.id}')">👥 Ver contactos (${c.people.length})</button><button class="btn ghost sm" onclick="openContactForm('${c.id}')">+ Contacto</button>${c.people.slice(0,5).map(p=>`<span title="${esc(p.name)}">${avatar(p,true)}</span>`).join('')}${c.people.length>5?`<span class="muted" style="font-size:.78rem">+${c.people.length-5}</span>`:''}</div></dd>
-      </dl>
+      </dl>`:''}
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
     <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>
