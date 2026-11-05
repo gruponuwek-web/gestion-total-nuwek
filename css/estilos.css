@@ -1339,3 +1339,5 @@
 
   .mn-mk.ck{font-size:1.1rem}.mn-mk.ck.on{color:#1f7a44}.mn-rs{border:1px solid #e1e0d6;border-radius:6px;background:#fff;font:inherit;font-size:.68rem;padding:1px 2px;max-width:64px}.mn-pg{background:#e6f4ea;color:#1f7a44;border-radius:9px;font-size:.66rem;font-weight:700;padding:1px 7px;white-space:nowrap}.mn-rsn{background:#eef0ec;border-radius:9px;font-size:.66rem;padding:1px 7px;white-space:nowrap}
   .mn-inh{margin:8px 0;border-top:1px dashed #cfe3d8;padding-top:2px}.mn-ck{cursor:default;font-size:1.05rem}.mn-ck.can{cursor:pointer;color:var(--green)}.mn-dn{opacity:.6;text-decoration:line-through}
+
+  .mp-card{margin-bottom:12px;border-left:4px solid var(--green)}.mp-grp{border-top:1px solid #efeee7;padding:6px 0}.mp-h{font-size:.84rem;margin-bottom:2px}.mp-more{display:inline-block;margin-top:6px;cursor:pointer;color:var(--green);font-weight:700;font-size:.78rem}
