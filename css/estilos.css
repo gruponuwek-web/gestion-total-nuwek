@@ -1347,6 +1347,6 @@
 .ag-item .ag-it-dl{margin-left:6px;color:var(--muted,#6b7a76);font-weight:600}
 .ag-item .ag-it-ping{margin-top:3px;font-size:.78rem;font-weight:700;color:#b4531a}
 
-.live-clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.95rem;letter-spacing:.02em;color:#f2dc6b;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;margin-right:2px;white-space:nowrap}
+.live-clock{font-variant-numeric:tabular-nums;font-weight:700;font-size:.95rem;letter-spacing:.02em;color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;margin-right:2px;white-space:nowrap}
 .nx-it.sel{background:#e3f0ff;box-shadow:inset 3px 0 0 #2f6fd6}
 @media(max-width:720px){.live-clock{font-size:.8rem;padding:4px 8px}}
