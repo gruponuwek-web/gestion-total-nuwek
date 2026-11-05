@@ -982,7 +982,7 @@ function peoplePicker(boxId,people,selected){selected=selected||[];return `<div 
 
 /* ================== PROYECTO HUB ================== */
 /* ================== PORTAL OPERATIVO ================== */
-function opTaskRow(t){
+function opTaskRow(t,e){   // e = {date,lead,n}: la entrada de esta sección (una tarea sale en cada sección donde tiene subtareas mías)
   const p=store.project(t.projectId); if(!p) return '';   // [REVISIÓN 2026-10-23] la tarea llegó antes que su proyecto (se sincroniza cada 15 s)
   const c=store.client(p.clientId);
   const fr=store.frentesOf(p.id).find(f=>f.id===t.frenteId)||{name:'',color:'#223c36'};
@@ -991,15 +991,15 @@ function opTaskRow(t){
   const isResp=t.responsibleId===currentUser;
   const unreadMention=store.commentsOf(t.id).some(cm=>(cm.mentions||[]).includes(currentUser) && !(cm.readBy||[]).includes(currentUser));
   const bits=[];
-  if(mineSub.length) bits.push(`🙋 ${mineSub.length} subt. mía(s)`); else if(isResp) bits.push('🎯 responsable');
+  if(mineSub.length) bits.push(`🙋 ${(e&&e.n)||mineSub.length} subt. mía(s)`); else if(isResp) bits.push('🎯 responsable');
   if(unreadMention) bits.push('👋 Te buscan');
   const mineTxt = bits.length?'· '+bits.join(' · '):'';
   return `<div class="op-row ${opSelTask===t.id?'sel':''}" onclick="selectOpTask('${t.id}')">
     <span class="badge s-${t.status}">${statusLabel[t.status]}</span>
     <div class="g"><div class="nm">${urgMark(taskHasUrgent(t))}${dk(t)}${t.name}</div>
       <div class="mt">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span> · ☑ ${doneS}/${totS} ${mineTxt}</div></div>
-    <div class="op-due">${(()=>{ const sd=mySubDate(t); const dl=t.dueDate?dLabel(t.dueDate):'—';
-      return sd?`<div class="op-due-sub${sd<todayISO()?' late':sd===todayISO()?' today':''}" title="Fecha de mi subtarea pendiente más próxima">☑ ${sd===todayISO()?'hoy':dLabel(sd)}</div>${(()=>{ const ls=myLeadSub(t); if(!ls||!ls.time) return ''; const m=toMin(ls.time), d=+ls.durMin||0, fin=(m!=null&&d)?String(Math.floor(((m+d)%1440)/60)).padStart(2,'0')+':'+String((m+d)%60).padStart(2,'0'):''; return `<div class="op-due-hr" title="Hora de mi subtarea (la que ordena esta lista)">🕒 ${ls.time}${fin?'–'+fin:''}</div>`; })()}<div class="op-due-dl" title="Fecha límite de la tarea">🏁 ${dl}</div>`:dl; })()}</div></div>`;
+    <div class="op-due">${(()=>{ const sd=e?(e.lead?e.date:''):mySubDate(t); const dl=t.dueDate?dLabel(t.dueDate):'—';
+      return sd?`<div class="op-due-sub${sd<todayISO()?' late':sd===todayISO()?' today':''}" title="Fecha de mi subtarea pendiente más próxima">☑ ${sd===todayISO()?'hoy':dLabel(sd)}</div>${(()=>{ const ls=e?e.lead:myLeadSub(t); if(!ls||!ls.time) return ''; const m=toMin(ls.time), d=+ls.durMin||0, fin=(m!=null&&d)?String(Math.floor(((m+d)%1440)/60)).padStart(2,'0')+':'+String((m+d)%60).padStart(2,'0'):''; return `<div class="op-due-hr" title="Hora de mi subtarea (la que ordena esta lista)">🕒 ${ls.time}${fin?'–'+fin:''}</div>`; })()}<div class="op-due-dl" title="Fecha límite de la tarea">🏁 ${dl}</div>`:dl; })()}</div></div>`;
 }
 function myPendingTasks(){
   let ts=store.d.tasks.filter(t=>store.project(t.projectId)&&personParticipates(t,currentUser));
@@ -1019,16 +1019,22 @@ function viewMisPendientes(){
   const wkStr=addDaysISO(todayISO(),7);   // [REVISIÓN 2026-10-23] antes en UTC: después de las 18:00 la semana tenía 8 días
   const ts=myPendingTasks();
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
-  ts.forEach(t=>{ const d=myKeyDate(t); if(!d) buckets.sinf.push(t); else if(d<today) buckets.venc.push(t); else if(d===today) buckets.hoy.push(t); else if(d<=wkStr) buckets.sem.push(t); else buckets.resto.push(t); });
-  Object.values(buckets).forEach(a=>a.sort((x,y)=>{ const kx=(myKeyDate(x)||'9')+' '+myKeyTime(x), ky=(myKeyDate(y)||'9')+' '+myKeyTime(y); return kx<ky?-1:kx>ky?1:0; }));   // más temprano arriba
-  const sec=(title,icon,arr)=> accSec('op',title,icon,arr,opTaskRow);
+  const put=e=>{ const d=e.date; if(!d) buckets.sinf.push(e); else if(d<today) buckets.venc.push(e); else if(d===today) buckets.hoy.push(e); else if(d<=wkStr) buckets.sem.push(e); else buckets.resto.push(e); };
+  // igual que la Agenda: una tarea sale en cada sección donde tenga subtareas mías pendientes (con la fecha y hora de la más próxima de esa sección)
+  ts.forEach(t=>{ const dated=(t.subtasks||[]).filter(x=>!x.done&&x.date&&subInvolves(x,currentUser));
+    if(!dated.length){ put({t,date:t.dueDate||'',lead:null,n:0}); return; }
+    const sk=d=>d<today?'v':d===today?'h':d<=wkStr?'s':'r'; const g={};
+    dated.forEach(x=>{ (g[sk(x.date)]=g[sk(x.date)]||[]).push(x); });
+    Object.values(g).forEach(arr=>{ arr.sort((a,b)=>((a.date+' '+(a.time||'99:99'))<(b.date+' '+(b.time||'99:99'))?-1:1)); put({t,date:arr[0].date,lead:arr[0],n:arr.length}); }); });
+  Object.values(buckets).forEach(a=>a.sort((x,y)=>{ const kx=(x.date||'9')+' '+((x.lead&&x.lead.time)||'99:99'), ky=(y.date||'9')+' '+((y.lead&&y.lead.time)||'99:99'); return kx<ky?-1:kx>ky?1:0; }));   // más temprano arriba
+  const sec=(title,icon,arr)=> accSec('op',title,icon,arr,e=>opTaskRow(e.t,e));
   const clientes=[...new Set(ts.length?store.d.tasks.map(t=>(store.project(t.projectId)||{}).clientId).filter(Boolean):[])];
   const cliOpts='<option value="">Todos los clientes</option>'+store.d.clients.map(c=>`<option value="${c.id}" ${opFilterClient===c.id?'selected':''}>${c.name}</option>`).join('');
   const list = (buckets.venc.length+buckets.hoy.length+buckets.sem.length+buckets.resto.length+buckets.sinf.length)
     ? sec('Vencidas','🔴',buckets.venc)+sec('Hoy','🟡',buckets.hoy)+sec('Esta semana','⚪',buckets.sem)+sec('Más adelante','🗓️',buckets.resto)+sec('Sin fecha','⚪',buckets.sinf)
     : '<div class="muted" style="padding:20px;text-align:center">🎉 Sin pendientes. ¡Bien ahí!</div>';
   return `<div class="op-hello"><h2>Hola, ${u.name.split(' ')[0]}.</h2>
-      <div class="muted">${buckets.venc.length+buckets.hoy.length+buckets.sem.length+buckets.resto.length+buckets.sinf.length} pendientes · ${buckets.hoy.length} hoy · <span style="color:var(--bad)">${buckets.venc.length} vencida${buckets.venc.length===1?'':'s'}</span></div></div>
+      <div class="muted">${ts.length} pendientes · ${buckets.hoy.length} hoy · <span style="color:var(--bad)">${buckets.venc.length} vencida${buckets.venc.length===1?'':'s'}</span></div></div>
     ${mnMisPuntosHtml()}
     <div class="op-ctl"><label class="filt"><span class="glabel">Cliente</span><select class="filter-val" onchange="setOpClient(this.value)">${cliOpts}</select></label></div>
     <div class="op-split">
