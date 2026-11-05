@@ -999,7 +999,7 @@ function opTaskRow(t){
     <div class="g"><div class="nm">${urgMark(taskHasUrgent(t))}${dk(t)}${t.name}</div>
       <div class="mt">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span> · ☑ ${doneS}/${totS} ${mineTxt}</div></div>
     <div class="op-due">${(()=>{ const sd=mySubDate(t); const dl=t.dueDate?dLabel(t.dueDate):'—';
-      return sd?`<div class="op-due-sub${sd<todayISO()?' late':sd===todayISO()?' today':''}" title="Fecha de mi subtarea pendiente más próxima">☑ ${sd===todayISO()?'hoy':dLabel(sd)}</div><div class="op-due-dl" title="Fecha límite de la tarea">🏁 ${dl}</div>`:dl; })()}</div></div>`;
+      return sd?`<div class="op-due-sub${sd<todayISO()?' late':sd===todayISO()?' today':''}" title="Fecha de mi subtarea pendiente más próxima">☑ ${sd===todayISO()?'hoy':dLabel(sd)}</div>${(()=>{ const ls=myLeadSub(t); if(!ls||!ls.time) return ''; const m=toMin(ls.time), d=+ls.durMin||0, fin=(m!=null&&d)?String(Math.floor(((m+d)%1440)/60)).padStart(2,'0')+':'+String((m+d)%60).padStart(2,'0'):''; return `<div class="op-due-hr" title="Hora de mi subtarea (la que ordena esta lista)">🕒 ${ls.time}${fin?'–'+fin:''}</div>`; })()}<div class="op-due-dl" title="Fecha límite de la tarea">🏁 ${dl}</div>`:dl; })()}</div></div>`;
 }
 function myPendingTasks(){
   let ts=store.d.tasks.filter(t=>store.project(t.projectId)&&personParticipates(t,currentUser));
@@ -1010,6 +1010,8 @@ function myPendingTasks(){
 function mySubDate(t){ const ds=(t.subtasks||[]).filter(s=>!s.done&&s.date&&subInvolves(s,currentUser)).map(s=>s.date).sort(); return ds[0]||''; }
 /* Hora de mi subtarea pendiente más próxima (la del día que manda); sin hora va al final de ese día */
 function myKeyTime(t){ const d=mySubDate(t); if(!d) return '99:99'; const hs=(t.subtasks||[]).filter(s=>!s.done&&s.date===d&&subInvolves(s,currentUser)).map(s=>s.time||'99:99').sort(); return hs[0]||'99:99'; }
+/* La subtarea mía que manda en la tarjeta: la pendiente más próxima (fecha y luego hora) */
+function myLeadSub(t){ const d=mySubDate(t); if(!d) return null; const l=(t.subtasks||[]).filter(s=>!s.done&&s.date===d&&subInvolves(s,currentUser)).sort((a,b)=>(a.time||'99:99')<(b.time||'99:99')?-1:(a.time||'99:99')>(b.time||'99:99')?1:0); return l[0]||null; }
 function myKeyDate(t){ return mySubDate(t)||t.dueDate||''; }
 function viewMisPendientes(){
   const u=store.person(currentUser);
