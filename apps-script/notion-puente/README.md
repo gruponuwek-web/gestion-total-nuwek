@@ -122,3 +122,22 @@ tabla (la persona debe ser miembro de ese espacio y abrir la reunión desde Noti
   Notion**; ahí se escribe `/meeting` → **Empezar a transcribir**.
 - El aviso propio de Notion Calendar («Unirse y tomar notas») sigue dependiendo de Notion Calendar: app abierta, cuenta de
   Google conectada, notificaciones activas y evento con link de Meet.
+
+## Google Calendar sin desconexiones (mismo puente)
+
+El portal conecta Google Calendar **una sola vez** por persona. El permiso permanente de Google se guarda aquí (propiedad
+`GTOKEN:<id>`), nunca en el navegador, y el portal pide un permiso nuevo de 1 h sin ventanas: al recargar, al salir y
+volver a entrar con tu código, o desde otra computadora. Solo «Desconectar» lo quita.
+
+Configuración (una vez):
+1. Google Cloud Console → APIs y servicios → Credenciales → cliente OAuth `750897224529-ubbga1c9…lcn.apps.googleusercontent.com`
+   → copiar **Secreto del cliente**.
+2. Apps Script → Configuración del proyecto → Propiedades del script → agregar `GOOGLE_CLIENT_SECRET` = ese secreto.
+3. Pantalla de consentimiento OAuth → **Publicar app** (estado «En producción»). En «Prueba», Google vence el permiso
+   permanente a los 7 días.
+4. Implementar → Administrar implementaciones → ✏️ → Versión: Nueva → Implementar (misma URL).
+5. ▶ `probarGoogle` en el editor: debe decir «Secreto del cliente OK».
+
+Acciones: `gtoken` (permiso nuevo de 1 h), `glink` (guarda el permiso permanente con el código de Google, redirect `postmessage`),
+`gunlink` (revoca y borra). Todas piden el pase. Sin `GOOGLE_CLIENT_SECRET`, el portal sigue con la conexión de 1 h de antes.
+Solo el equipo (portal con código); el portal de clientes sigue con la conexión de 1 h.

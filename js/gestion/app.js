@@ -2906,6 +2906,22 @@ let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/
    4) mientras tanto se ve «Cargando portal…» en lugar de la página en blanco.
    Los datos que se guardan y su orden son los mismos de antes. */
 let bootDone=false;
+/* [ARRANQUE INSTANTÁNEO 2026-11-05] con sesión guardada, el portal se dibuja AL MOMENTO con la copia de este navegador
+   (lo último que viste) mientras llegan los datos al día de Supabase (1-2 s). Mientras tanto:
+   - la pantalla queda en «solo ver» (no se puede hacer clic) y arriba sale «Actualizando…»;
+   - nada se escribe en la base (supabase-config.js omite las escrituras con window.__bootStale), ni sale a Google o Notion;
+   - los ciclos y series no corren.
+   Al llegar los datos, todo se redibuja con lo nuevo y queda como siempre. Sin copia o sin sesión, arranca como antes. */
+function bootStaleUI(st){
+  let el=document.getElementById('boot-stale');
+  document.body.classList.toggle('boot-stale',!!st);
+  if(!st){ if(el) el.remove(); return; }
+  if(!document.getElementById('boot-stale-css')){ const css=document.createElement('style'); css.id='boot-stale-css';
+    css.textContent='body.boot-stale #app,body.boot-stale #modal-root{pointer-events:none}#boot-stale{position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:10000;background:#223c36;color:#fff;border-radius:999px;padding:6px 14px;font:500 12.5px/1.3 Inter,Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.18);display:flex;align-items:center;gap:8px;pointer-events:auto}#boot-stale .boot-spin{width:12px;height:12px;border-width:2px}';
+    document.head.appendChild(css); }
+  if(!el){ el=document.createElement('div'); el.id='boot-stale'; document.body.appendChild(el); }
+  el.innerHTML=st==='err'?'Sin conexión con la base: ves lo último guardado en este navegador (solo ver). <a href="" style="color:#cfe8d8">Reintentar</a>':'<span class="boot-spin"></span>Actualizando…';
+}
 function bootLoading(){ const app=document.getElementById('app'); if(app&&!app.firstChild) app.innerHTML='<div class="boot-loading"><span class="boot-spin"></span>Cargando portal…</div>'; }
 function bootError(e){
   console.error('Error cargando datos desde Supabase:', e);
@@ -2917,7 +2933,15 @@ async function boot(){
   /* ¿hay que esperar los datos completos antes de mostrar algo? (sesión guardada o link compartido) */
   const hasSess=(()=>{ try{ const o=JSON.parse(localStorage.getItem(window.CLIENT_ONLY?'nuwekClient':'nuwekSession')||'null'); return !!(o&&Date.now()<o.exp); }catch(_){ return false; } })();
   const early=!hasSess&&!shareSesionAtLoad&&!shareTaskIdAtLoad;
-  bootLoading();
+  let stale=false;
+  if(hasSess&&!shareSesionAtLoad&&!shareTaskIdAtLoad&&(store.d.staff||[]).length&&(store.d.tasks||[]).length){
+    window.__bootStale=true;
+    try{ if(!window.CLIENT_ONLY) restoreSession(); if(!session) restoreClientSession();
+      if(session||clientSess){ render(); bootStaleUI(true); stale=true; } }
+    catch(e){ console.warn('Arranque con la copia local:',e); }
+    if(!stale){ window.__bootStale=false; const app=document.getElementById('app'); if(app) app.innerHTML=''; }
+  }
+  if(!stale) bootLoading();
   /* 1) todo se pide a la vez */
   const pStaff=call(typeof dbLoadPersonal==='function'&&dbLoadPersonal);
   const pCli=call(typeof dbLoadClientes==='function'&&dbLoadClientes);
@@ -2944,8 +2968,9 @@ async function boot(){
     if(pr!==undefined){ store.d.projects = pr.projects; store.d.frentes = pr.frentes; store.d.etapas = pr.etapas; }
     if(tk!==undefined) store.d.tasks = tk;            // tareas (con subtareas dentro)
     if(pf){ const loc=store.d.perfiles||[]; const falta=loc.filter(l=>!pf.some(x=>x.id===l.id)); if(falta.length){ perfDirty=true; store.d.perfiles=pf.concat(falta); } else store.d.perfiles=pf; perfVer++; }
+    if(stale){ window.__bootStale=false; bootStaleUI(false); window.__dfix=0; __psyncFirst=true; }   // ya con datos al día: se vuelve a revisar todo como en un arranque normal
     store.save();               // cache local
-  }catch(e){ bootError(e); return; }
+  }catch(e){ if(stale){ console.error('Error cargando datos desde Supabase:',e); bootStaleUI('err'); return; } bootError(e); return; }
   /* 3) lo secundario se aplica cuando llega (si falla, la sincronización automática lo vuelve a pedir) */
   const late=(p,k)=>p.then(v=>{ if(v===undefined) return; store.d[k]=v; store.save(); if(bootDone&&(session||clientSess)){ syncDirty=true; syncFlush(); } }).catch(e=>console.warn('Se cargará después:',k,e&&e.message||e));
   late(pCm,'comments'); late(pLg,'log'); late(pTg,'tags'); late(pPg,'payments');
@@ -3319,7 +3344,20 @@ function impInstructions(){ return [
   [''],['Al subir el archivo verás una vista previa donde puedes corregir todo antes de guardar.'] ]; }
 function impLists(cx){ const n=Math.max(cx.frentes.length,cx.staff.length,cx.inv.length,2); const rows=[['Frentes del proyecto','Responsables (Nuwek)','Invitados del cliente','Lugar de la sesión']];
   const lug=['videollamada','presencial']; for(let i=0;i<n;i++) rows.push([cx.frentes[i]||'',cx.staff[i]||'',cx.inv[i]||'',lug[i]||'']); return rows; }
-function impDownload(){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión a internet e inténtalo de nuevo.'); return; }
+/* [CARGA RÁPIDA · EXCEL 2026-11-05] la librería de Excel (~900 KB) ya no se descarga al abrir el portal: se pide unos
+   segundos después de que el portal ya está a la vista, o al momento de usarla (importar / exportar / plantilla). */
+const XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function xlsxLoad(){
+  if(typeof XLSX!=='undefined') return Promise.resolve(true);
+  if(!xlsxLoad.p) xlsxLoad.p=new Promise(res=>{ const el=document.createElement('script'); el.src=XLSX_URL; el.async=true;
+    el.onload=()=>res(typeof XLSX!=='undefined'); el.onerror=()=>{ xlsxLoad.p=null; el.remove(); res(false); }; document.head.appendChild(el); });
+  return xlsxLoad.p;
+}
+/* corre fn con Excel listo; si no está, lo descarga primero (y avisa si no hay internet) */
+function xlsxNeed(fn,msg){ if(typeof XLSX!=='undefined') return false;
+  xlsxLoad().then(ok=>{ if(ok) fn(); else alert(msg||'No se pudo cargar el generador de Excel. Revisa tu conexión a internet e inténtalo de nuevo.'); }); return true; }
+setTimeout(()=>{ const go=()=>xlsxLoad(); if(window.requestIdleCallback) requestIdleCallback(go,{timeout:15000}); else go(); },6000);
+function impDownload(){ if(xlsxNeed(()=>impDownload())) return;
   const cx=impCtx(); const wb=XLSX.utils.book_new();
   const ws=XLSX.utils.aoa_to_sheet([IMP_COLS,...impExampleRows(cx)]); ws['!cols']=IMP_COLS.map(k=>({wch:({nombre:44,descripcion:30,cita_objetivo:30,cita_link:32,cita_temario:30,cita_direccion:24}[k])||14}));
   XLSX.utils.book_append_sheet(wb,ws,'Importar');
@@ -3369,7 +3407,7 @@ function impDateNorm(v){ v=String(v==null?'':v).trim(); if(!v) return ''; let m=
 function impTimeNorm(v){ v=String(v==null?'':v).trim(); if(!v) return ''; const m=/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(am|pm|a\. m\.|p\. m\.)?/i.exec(v); if(!m) return v; let h=+m[1]; const ap=(m[3]||'').toLowerCase(); if(ap.startsWith('p')&&h<12) h+=12; if(ap.startsWith('a')&&h===12) h=0; return String(h).padStart(2,'0')+':'+m[2]; }
 const impYN=v=>{ const t=impNz(v); return ['si','s','yes','y','true','1','x'].includes(t)?'SI':'NO'; };
 const impLevel=v=>{ const t=impNz(v).replace(/ /g,''); return IMP_NIVEL[t]||''; };
-function impReadFile(inp){ const f=inp.files&&inp.files[0]; if(!f) return; if(typeof XLSX==='undefined'){ alert('No se pudo cargar el lector de Excel. Revisa tu conexión a internet.'); return; }
+function impReadFile(inp){ const f=inp.files&&inp.files[0]; if(!f) return; if(xlsxNeed(()=>impReadFile(inp),'No se pudo cargar el lector de Excel. Revisa tu conexión a internet.')) return;
   const csv=/\.csv$/i.test(f.name); const fr=new FileReader();
   fr.onload=()=>{ try{ const wb=XLSX.read(fr.result,{type:csv?'string':'array',cellDates:true}); const nm=wb.SheetNames.find(n=>impNz(n)==='importar')||wb.SheetNames[0]; const ws=wb.Sheets[nm];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,dateNF:'yyyy-mm-dd',defval:''}); impLoad(raw,f.name); }catch(e){ console.error(e); alert('No pude leer ese archivo. Revisa que sea un Excel (.xlsx) o un CSV.'); } inp.value=''; };
@@ -3441,7 +3479,7 @@ function impAcomodar(){ const by=impByCode(); let moved=0; for(let pass=0;pass<3
       const pe=wEnd({d:d.fecha,m:toMin(d.hora)==null?WK.s:toMin(d.hora)},+d.duracion_min||0); const si=wStart({d:r.fecha||pe.d,m:r.fecha?(toMin(r.hora)==null?WK.s:toMin(r.hora)):pe.m});
       if(!r.fecha||instCmp(si,pe)<0){ const st=wStart(pe); r.fecha=st.d; r.hora=fromMin(st.m); ch=true; moved++; } }); if(!ch) break; }
   impRender(); shareToast(moved?'⛓ Se acomodaron '+moved+' fila(s) según sus dependencias.':'No había nada que acomodar.'); }
-function impExport(){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión a internet.'); return; } impValidate();
+function impExport(){ if(xlsxNeed(()=>impExport())) return; impValidate();
   const rows=impS.rows.map(r=>IMP_COLS.map(k=>{ let v=r[k]; if(!v&&(k==='fecha'||k==='hora')&&impS.calc[r.n]) v=impS.calc[r.n][k]; if((k==='fecha_fija'||k==='urgente')&&v==='NO') v=''; return v==null?'':v; }));
   const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([IMP_COLS,...rows]); ws['!cols']=IMP_COLS.map(k=>({wch:({nombre:44,descripcion:30,cita_objetivo:30,cita_link:32,cita_temario:30,cita_direccion:24}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar');
   const base=(impS.file||'importacion').replace(/\.[^.]+$/,''); XLSX.writeFile(wb,base+'-corregido.xlsx'); }
@@ -3752,7 +3790,7 @@ function expRows(p){ const c=store.client(p.clientId)||{people:[]}; const nm=id=
   return rows; }
 function expGo(fmt){ const p=store.project(expS.pid); if(!p) return; const cols=[...IMP_COLS,...EXP_EXTRA]; const rows=expRows(p).map(r=>cols.map(k=>r[k]==null?'':r[k]));
   const c=store.client(p.clientId)||{name:''}; const base='Tareas-'+(c.name+'-'+p.name).replace(/[^\wÁÉÍÓÚáéíóúñÑ-]+/g,'-')+'-'+todayISO();
-  if(fmt==='xlsx'){ if(typeof XLSX==='undefined'){ alert('No se pudo cargar el generador de Excel. Revisa tu conexión.'); return; } const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([cols,...rows]); ws['!cols']=cols.map(k=>({wch:({nombre:46,descripcion:30,cita_objetivo:30,cita_link:30,cita_temario:30,links:30}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar'); XLSX.writeFile(wb,base+'.xlsx'); }
+  if(fmt==='xlsx'){ if(xlsxNeed(()=>expGo(fmt))) return; const wb=XLSX.utils.book_new(); const ws=XLSX.utils.aoa_to_sheet([cols,...rows]); ws['!cols']=cols.map(k=>({wch:({nombre:46,descripcion:30,cita_objetivo:30,cita_link:30,cita_temario:30,links:30}[k])||14})); XLSX.utils.book_append_sheet(wb,ws,'Importar'); XLSX.writeFile(wb,base+'.xlsx'); }
   else { const q=v=>{ v=String(v); return /[",\n\r;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }; const csv='﻿'+[cols,...rows].map(r=>r.map(q).join(',')).join('\r\n'); const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=base+'.csv'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); }
   shareToast('⬇ Se exportaron '+rows.length+' fila(s)'); expS=null; render(); }
 

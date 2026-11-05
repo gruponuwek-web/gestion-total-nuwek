@@ -15,6 +15,10 @@
 //   - minutas del portal: con «cita» pueden venir las minutas cerradas del portal (c.minutasPortal); cada una se escribe
 //     como subpágina «📝 Minuta · fecha [id]» dentro de la página de la cita. Al editarla en el portal, la subpágina se
 //     reemplaza (solo las que creó el portal, reconocidas por su [id]; lo demás de la página no se toca).
+//   - Google Calendar sin desconexiones (acciones gtoken / glink / gunlink): guarda por persona el permiso PERMANENTE de
+//     Google (refresh token) y entrega al portal un permiso nuevo de 1 h cuando lo pide, sin ventanas y en cualquier
+//     navegador. Necesita la propiedad GOOGLE_CLIENT_SECRET (secreto del cliente OAuth del portal en Google Cloud).
+//     Los permisos se guardan en las Propiedades del script como GTOKEN:<id de la persona> (solo editores del script los ven).
 // Las columnas se reconocen por su nombre (sin importar acentos ni mayúsculas) y por su tipo; las que no existan en la
 // tabla simplemente no se llenan. Si falta la columna de texto «ID portal», el script la crea sola.
 
@@ -376,10 +380,69 @@ function syncMinutasPortal_(pageId, list) {
   return out;
 }
 
+// ---------- Google Calendar sin desconexiones ----------
+// Google da al navegador permisos de 1 h que no puede renovar solo. Aquí se guarda, por persona, el permiso permanente
+// (refresh token) y se entrega uno nuevo de 1 h cuando el portal lo pide. Nunca sale el permiso permanente al navegador.
+const G_CLIENT_ID = '750897224529-ubbga1c9ioo28s2lh8a30l637c187lcn.apps.googleusercontent.com';
+const gSecret_ = () => prop_('GOOGLE_CLIENT_SECRET');
+const gKey_ = (w) => 'GTOKEN:' + w;
+function gGet_(w) { try { return JSON.parse(PropertiesService.getScriptProperties().getProperty(gKey_(w)) || 'null'); } catch (_) { return null; } }
+function gSet_(w, o) { PropertiesService.getScriptProperties().setProperty(gKey_(w), JSON.stringify(o)); }
+function gDel_(w) { PropertiesService.getScriptProperties().deleteProperty(gKey_(w)); }
+function gToken_(params) {
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', {
+    method: 'post', muteHttpExceptions: true,
+    payload: Object.assign({ client_id: G_CLIENT_ID, client_secret: gSecret_() }, params),
+  });
+  let d = {}; try { d = JSON.parse(r.getContentText()) || {}; } catch (_) {}
+  const c = r.getResponseCode();
+  if (c !== 200) throw err_(d.error_description || d.error || ('Google respondió ' + c), d.error || 'google', c === 400 || c === 401 ? 400 : 502);
+  return d;
+}
+function gRevoke_(t) { try { UrlFetchApp.fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(t), { method: 'post', muteHttpExceptions: true }); } catch (_) {} }
+function gEmail_(access) {
+  try {
+    const r = UrlFetchApp.fetch('https://www.googleapis.com/calendar/v3/calendars/primary', { headers: { Authorization: 'Bearer ' + access }, muteHttpExceptions: true });
+    const d = JSON.parse(r.getContentText()) || {};
+    return r.getResponseCode() === 200 ? String(d.id || d.summary || '') : '';
+  } catch (_) { return ''; }
+}
+const gOut_ = (d, row) => ({ linked: true, access_token: d.access_token, expires_in: d.expires_in, scope: d.scope || (row && row.scope) || '', email: (row && row.email) || '' });
+function gauth_(b, who) {
+  if (!gSecret_()) throw err_('Falta GOOGLE_CLIENT_SECRET en las propiedades del script.', 'gconfig', 500);
+  if (b.action === 'glink') {
+    if (typeof b.code !== 'string' || !b.code) throw err_('Falta el código de Google.', 'google', 400);
+    const d = gToken_({ code: b.code, grant_type: 'authorization_code', redirect_uri: 'postmessage' });
+    const old = gGet_(who) || {};
+    const refresh = d.refresh_token || old.refresh_token;
+    if (!refresh) {
+      // Google solo da el permiso permanente la primera vez: se le revoca este acceso para que el próximo «Conectar» lo entregue
+      gRevoke_(d.access_token);
+      throw err_('Google pidió confirmar el permiso otra vez. Presiona «Conectar» una vez más.', 'norefresh', 400);
+    }
+    const email = gEmail_(d.access_token) || old.email || '';
+    gSet_(who, { refresh_token: refresh, email, scope: d.scope || '', at: new Date().toISOString() });
+    return gOut_(d, { email, scope: d.scope });
+  }
+  if (b.action === 'gtoken') {
+    const row = gGet_(who);
+    if (!row || !row.refresh_token) return { linked: false };
+    try { return gOut_(gToken_({ refresh_token: row.refresh_token, grant_type: 'refresh_token' }), row); }
+    catch (e) {
+      // el permiso ya no sirve (lo quitaron en la cuenta de Google, o la app de Google sigue en «Prueba» y pasaron 7 días)
+      if (e.code === 'invalid_grant') { gDel_(who); return { linked: false, revoked: true }; }
+      throw e;
+    }
+  }
+  if (b.action === 'gunlink') { const row = gGet_(who); if (row && row.refresh_token) gRevoke_(row.refresh_token); gDel_(who); return { ok: true }; }
+  throw err_('Acción no permitida', 'accion', 400);
+}
+
 // ---------- entrada web ----------
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function handle_(b) {
   if (b.action === 'login') return login_(b);
+  if (/^g(token|link|unlink)$/.test(b.action || '')) return gauth_(b, checkPass_(b.st));
   if (!token_() || !db_()) throw err_('Faltan NOTION_TOKEN y/o NOTION_DB_CITAS en las propiedades del script.', 'config', 500);
   checkPass_(b.st);
   if (b.action === 'ping') return { ok: true, db: dbTag_() };
@@ -405,7 +468,7 @@ function doPost(e) {
 }
 /* abrir la URL del script en el navegador muestra si está configurado (no revela la llave) */
 function doGet() {
-  return out_({ ok: true, servicio: 'Puente Portal Nuwek → Notion', configurado: !!(token_() && db_()) });
+  return out_({ ok: true, servicio: 'Puente Portal Nuwek → Notion', configurado: !!(token_() && db_()), google: !!gSecret_() });
 }
 
 /* ▶ diagnosticoNotion: dice a qué espacio de Notion pertenece la llave y qué páginas/tablas tiene compartidas (no muestra la llave) */
@@ -471,4 +534,14 @@ function probarConexion() {
   Logger.log('Conexión con el personal del portal OK.');
   try { const r = minutas_([{ sid: '__prueba__', nombre: '', start: Date.now() - 7 * 86400000, end: Date.now() }]); Logger.log('Notas de reunión con IA: acceso OK' + (r.minutas.__prueba__ ? ' (encontró al menos una de los últimos 7 días)' : ' (sin notas que coincidan en la prueba)')); }
   catch (e) { Logger.log('Notas de reunión con IA: ' + e.message); }
+}
+
+/* ▶ probarGoogle: revisa que GOOGLE_CLIENT_SECRET esté puesto y cuántas personas tienen su Google Calendar vinculado (no muestra secretos) */
+function probarGoogle() {
+  if (!gSecret_()) { Logger.log('Falta GOOGLE_CLIENT_SECRET en Configuración del proyecto → Propiedades del script.'); return; }
+  const r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', muteHttpExceptions: true, payload: { client_id: G_CLIENT_ID, client_secret: gSecret_(), grant_type: 'refresh_token', refresh_token: 'prueba' } });
+  const d = JSON.parse(r.getContentText() || '{}');
+  Logger.log(d.error === 'invalid_client' ? 'El secreto NO corresponde al cliente OAuth del portal (revisa que copiaste el del cliente …lcn).' : 'Secreto del cliente OK (Google respondió «' + (d.error || r.getResponseCode()) + '», lo esperado en una prueba).');
+  const n = Object.keys(PropertiesService.getScriptProperties().getProperties()).filter((k) => k.indexOf('GTOKEN:') === 0).length;
+  Logger.log('Personas con Google Calendar vinculado: ' + n);
 }
