@@ -1222,6 +1222,30 @@ function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){ale
   const i=list.findIndex(x=>x.id===f.id); if(i>=0) list[i]=f; else list.push(f);
   saveGestFilters(list); qm=null; applyGestFilter(f.id); }
 function delGestFilter(){ if(!confirm('¿Eliminar esta vista?')) return; saveGestFilters(gestFilters().filter(x=>x.id!==qm.fid)); if(gestFilterId===qm.fid) clearGestFilter(true); qm=null; render(); }
+function gestTabsHtml(){ return `<div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button><button class="${gestSub==='min'?'on':''}" onclick="setGestSub('min')">📝 Minutas</button><button class="${gestSub==='dir'?'on':''}" onclick="setGestSub('dir')">📇 Directorio</button></div>`; }
+/* ===== 📇 Directorio: equipo Nuwek + contactos de clientes (correo y teléfono para contactar rápido) ===== */
+let dirTab='all', dirQ='';
+function setDirTab(v){ dirTab=v; render(); }
+function dirFilter(v){ dirQ=v||''; const q=dirQ.trim().toLowerCase(); document.querySelectorAll('.dir-it').forEach(e=>{ e.style.display=(!q||e.dataset.q.includes(q))?'':'none'; }); document.querySelectorAll('.dir-grp').forEach(g=>{ const any=[...g.querySelectorAll('.dir-it')].some(e=>e.style.display!=='none'); g.style.display=any?'':'none'; }); }
+function dirCopy(t){ try{ navigator.clipboard.writeText(t); shareToast('📋 Copiado: '+t); }catch(_){ prompt('Copia:',t); } }
+function dirWa(ph){ let d=String(ph||'').replace(/\D/g,''); if(d.length===10) d='52'+d; return d; }
+function dirPhone(ph,lbl){ if(!ph) return ''; const t=String(ph).trim(); return `<span class="dir-c"><a href="tel:${esc(t.replace(/[^\d+]/g,''))}" title="Llamar">📞 ${esc(t)}</a>${lbl?`<small>${lbl}</small>`:''}<a class="dir-ic" href="https://wa.me/${dirWa(t)}" target="_blank" rel="noopener" title="WhatsApp">💬</a><button type="button" class="dir-ic" title="Copiar teléfono" onclick="dirCopy('${esc(t).replace(/'/g,"")}')">📋</button></span>`; }
+function dirMail(em,lbl){ if(!em) return ''; const t=String(em).trim(); return `<span class="dir-c"><a href="mailto:${esc(t)}" title="Escribir correo">✉️ ${esc(t)}</a>${lbl?`<small>${lbl}</small>`:''}<button type="button" class="dir-ic" title="Copiar correo" onclick="dirCopy('${esc(t).replace(/'/g,"")}')">📋</button></span>`; }
+function dirItem(name,sub,photoP,phones,mails,extra){ const q=(name+' '+sub+' '+(extra||'')+' '+phones.concat(mails).map(x=>x[0]).join(' ')).toLowerCase();
+  const body=phones.map(x=>dirPhone(x[0],x[1])).join('')+mails.map(x=>dirMail(x[0],x[1])).join('');
+  const hid=dirQ.trim()&&!q.includes(dirQ.trim().toLowerCase()); return `<div class="dir-it"${hid?' style="display:none"':''} data-q="${esc(q)}"><div class="dir-who">${avatar(Object.assign({name},photoP||{}),true)}<div><b>${esc(name)}</b><div class="muted dir-sub">${esc(sub||'')}</div></div></div><div class="dir-ct">${body||'<span class="muted">Sin teléfono ni correo registrados</span>'}</div></div>`; }
+function gestDirView(){
+  const staff=store.activeStaff().slice().sort((a,b)=>a.name.localeCompare(b.name));
+  const nuw=staff.map(u=>dirItem(u.name,[u.role,u.team].filter(Boolean).join(' · '),{photo:u.photo,color:u.color},[[u.phoneWork,'trabajo'],[u.phonePersonal,'personal']].filter(x=>x[0]),[[u.emailWork,'trabajo'],[u.gmail,'Gmail']].filter(x=>x[0]))).join('');
+  const cls=store.d.clients.filter(c=>c.activo!==false).slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const ppl=(c.people||[]);
+    if(!ppl.length) return `<div class="dir-grp dir-empty"${dirQ.trim()?' style="display:none"':''}><div class="dir-gh">${esc(c.name)} <span class="muted">· sin contactos</span></div></div>`;
+    const items=ppl.map(x=>dirItem(x.name||'—',[x.role,c.name].filter(Boolean).join(' · '),{photo:x.photo},[[x.phone,'']].filter(y=>y[0]),[[x.email,'']].filter(y=>y[0]),c.name)).join('');
+    return `<div class="dir-grp"${(dirQ.trim()&&!items.includes('class="dir-it" data-q'))?' style="display:none"':''}><div class="dir-gh">${esc(c.name)} <span class="muted">· ${ppl.length} contacto${ppl.length===1?'':'s'}</span></div>${items}</div>`; }).join('');
+  const showN=dirTab!=='cli', showC=dirTab!=='nuwek';
+  return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Directorio · correos y teléfonos para contactar rápido</div></div>
+    <div class="gest-row1">${gestTabsHtml()}<div class="subtoggle"><button class="${dirTab==='all'?'on':''}" onclick="setDirTab('all')">Todos</button><button class="${dirTab==='nuwek'?'on':''}" onclick="setDirTab('nuwek')">Equipo Nuwek</button><button class="${dirTab==='cli'?'on':''}" onclick="setDirTab('cli')">Clientes</button></div></div>
+    <div class="kb-ctl"><label class="filt" style="flex:1;min-width:220px"><span class="glabel">Buscar</span><input id="dir-q" class="filter-val" style="width:100%" placeholder="Nombre, cliente, correo o teléfono…" value="${esc(dirQ)}" oninput="dirFilter(this.value)"></label></div>
+    <div class="dir-wrap">${showN?`<div class="dir-grp"${(dirQ.trim()&&!nuw.includes('class="dir-it" data-q'))?' style="display:none"':''}><div class="dir-gh">🏢 Equipo Nuwek <span class="muted">· ${staff.length}</span></div>${nuw}</div>`:''}${showC?cls:''}</div>`; }
 function setGestSub(v){ gestSub=v; if(v==='citas'||v==='min') gestScope='mes'; else if(gestScope==='todo') gestScope='mes'; render(); }
 function setGestScope(s){ gestScope=s; render(); }
 function setGestProject(v){ gestProject=v; render(); }
@@ -1256,10 +1280,11 @@ function viewGestion(){
   const R=gestRange();
   const projOpts='<option value="">Todos los proyectos</option>'+store.d.projects.map(p=>`<option value="${p.id}" ${gestProject===p.id?'selected':''}>${store.client(p.clientId).name} · ${p.name}</option>`).join('');
   const persOpts='<option value="">Equipo Nuwek</option>'+store.activeStaff().map(u=>`<option value="${u.id}" ${gestPerson===u.id?'selected':''}>${u.name}</option>`).join('');
+  if(gestSub==='dir') return gestDirView();
   const body = gestSub==='asig' ? gestAsignaciones(R) : gestSub==='citas' ? gestCitas() : gestSub==='min' ? gestMinutas() : gestCalendar(R);
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Vista de mando · ${gestSub==='asig'?'quién trabaja en qué':'calendario del equipo'}</div></div>
     <div class="gest-row1">
-    <div class="subtoggle gest-tabs"><button class="${gestSub==='cal'?'on':''}" onclick="setGestSub('cal')">Calendario</button><button class="${gestSub==='asig'?'on':''}" onclick="setGestSub('asig')">Asignaciones</button><button class="${gestSub==='citas'?'on':''}" onclick="setGestSub('citas')">📅 Citas</button><button class="${gestSub==='min'?'on':''}" onclick="setGestSub('min')">📝 Minutas</button></div>
+    ${gestTabsHtml()}
 <div class="subtoggle"><button class="${gestScope==='dia'?'on':''}" onclick="setGestScope('dia')">Hoy</button><button class="${gestScope==='semana'?'on':''}" onclick="setGestScope('semana')">Semana</button><button class="${gestScope==='mes'?'on':''}" onclick="setGestScope('mes')">Mes</button>${gestSub==='min'?`<button class="${gestScope==='todo'?'on':''}" onclick="setGestScope('todo')">Todo</button>`:''}</div>
     </div>
     <div class="gf-bar"><span class="glabel">Vistas</span>
