@@ -1008,6 +1008,8 @@ function myPendingTasks(){
 }
 /* Fecha que manda para ubicar una tarea en MIS pendientes: la subtarea mía pendiente más próxima; si no hay, el deadline de la tarea */
 function mySubDate(t){ const ds=(t.subtasks||[]).filter(s=>!s.done&&s.date&&subInvolves(s,currentUser)).map(s=>s.date).sort(); return ds[0]||''; }
+/* Hora de mi subtarea pendiente más próxima (la del día que manda); sin hora va al final de ese día */
+function myKeyTime(t){ const d=mySubDate(t); if(!d) return '99:99'; const hs=(t.subtasks||[]).filter(s=>!s.done&&s.date===d&&subInvolves(s,currentUser)).map(s=>s.time||'99:99').sort(); return hs[0]||'99:99'; }
 function myKeyDate(t){ return mySubDate(t)||t.dueDate||''; }
 function viewMisPendientes(){
   const u=store.person(currentUser);
@@ -1016,7 +1018,7 @@ function viewMisPendientes(){
   const ts=myPendingTasks();
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
   ts.forEach(t=>{ const d=myKeyDate(t); if(!d) buckets.sinf.push(t); else if(d<today) buckets.venc.push(t); else if(d===today) buckets.hoy.push(t); else if(d<=wkStr) buckets.sem.push(t); else buckets.resto.push(t); });
-  Object.values(buckets).forEach(a=>a.sort((x,y)=>(myKeyDate(x)||'9')<(myKeyDate(y)||'9')?-1:1));
+  Object.values(buckets).forEach(a=>a.sort((x,y)=>{ const kx=(myKeyDate(x)||'9')+' '+myKeyTime(x), ky=(myKeyDate(y)||'9')+' '+myKeyTime(y); return kx<ky?-1:kx>ky?1:0; }));   // más temprano arriba
   const sec=(title,icon,arr)=> accSec('op',title,icon,arr,opTaskRow);
   const clientes=[...new Set(ts.length?store.d.tasks.map(t=>(store.project(t.projectId)||{}).clientId).filter(Boolean):[])];
   const cliOpts='<option value="">Todos los clientes</option>'+store.d.clients.map(c=>`<option value="${c.id}" ${opFilterClient===c.id?'selected':''}>${c.name}</option>`).join('');
@@ -1493,7 +1495,7 @@ function viewAgenda(){
   const today=todayISO(); const wkStr=addDaysISO(today,7);
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
   items.forEach(it=>{const d=it.s.date; if(!d)buckets.sinf.push(it); else if(d<today)buckets.venc.push(it); else if(d===today)buckets.hoy.push(it); else if(d<=wkStr)buckets.sem.push(it); else buckets.resto.push(it);});
-  Object.values(buckets).forEach(a=>a.sort((x,y)=>(((x.s.date||'9')+(x.s.time||''))<((y.s.date||'9')+(y.s.time||'')))?-1:1));
+  Object.values(buckets).forEach(a=>a.sort((x,y)=>{ const kx=(x.s.date||'9')+' '+(x.s.time||'99:99'), ky=(y.s.date||'9')+' '+(y.s.time||'99:99'); return kx<ky?-1:kx>ky?1:0; }));   // más temprano arriba; sin hora al final del día
   const row=it=>{const p=store.project(it.t.projectId),c=store.client(p.clientId),f=kbFrente(it.t);const overdue=it.s.date&&it.s.date<today;
     const pend=(it.t.subtasks||[]).filter(x=>!x.done), sched=pend.filter(x=>x.date&&x.time).length; const sel=agSel&&agSel.sid===it.s.id; const canEdit=agCanEdit();
     return `<div class="ag-item${sel?' sel':''}${it.part?' part':''}" ${(canEdit&&!it.part)?`draggable="true" ondragstart="agListStart(event,'${it.t.id}','${it.s.id}')" ondragend="agListEnd()"`:''} onclick="openAgItem('${it.t.id}','${it.s.id}')" style="border-left:3px solid ${f.color}">
