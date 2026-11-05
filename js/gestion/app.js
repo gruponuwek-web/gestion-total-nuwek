@@ -566,7 +566,7 @@ function render(){
 function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(mnRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); if(nextOpen) nextRender(); },0);
+  setTimeout(mnRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnSum?mnSumModal():'')+(mnAuth?mnAuthModal():''); return; }
@@ -627,7 +627,7 @@ function whoSelector(){
 function sessionBar(){
   const u=store.person(session)||{name:'?'};
   const rl=permLabel(u.perm);
-  return `<div class="sessbar"><button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
+  return `<div class="sessbar"><span id="live-clock" class="live-clock" title="Hora actual">--:--:--</span><button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
 }
 /* ===== LOGIN ===== */
 function getLoginBg(){ return (store.d.settings && store.d.settings.loginBg) || LOGIN_BG; }
@@ -3006,7 +3006,7 @@ function startSync(){
 
 
 /* ================== SIGUIENTES ACTIVIDADES (⏰ junto a tu foto) ================== */
-let nextOpen=false;
+let nextOpen=false, nxSel=null;
 function nextItems(){
   const me=currentUser; const now=Date.now(); const out=[];
   store.d.tasks.forEach(t=>{ const p=store.project(t.projectId); if(!p) return; (t.subtasks||[]).forEach(s=>{
@@ -3023,15 +3023,17 @@ function nextBtnUpdate(){ const b=document.getElementById('next-btn'); if(!b||!s
   b.classList.toggle('soon',!!soon); b.title=soon?('Pronto: '+soon.s.name+' ('+nextWhen(soon).t+')'):'Tus siguientes actividades'; }
 function nextPopHtml(){ const its=nextItems();
   const rows=its.map(it=>{ const w=nextWhen(it); const cita=subHasCita(it.s); const f=kbFrente(it.t);
-    return `<div class="nx-it${w.soon?' soon':''}" onclick="goNext('${it.t.id}','${it.s.id}')"><div class="nx-when">${w.t}</div><div class="nx-tx"><div class="nx-nm">${cita?'📅 ':''}${it.part?'🫱🏽‍🫲🏾 ':''}${esc(it.s.name)}</div><div class="nx-sub">${esc(it.p.name)} · ${esc(it.t.name)} · <span style="color:${f.color};font-weight:600">${esc(f.name)}</span></div></div></div>`; }).join('');
+    return `<div class="nx-it${w.soon?' soon':''}${nxSel===it.s.id?' sel':''}" onclick="goNext('${it.t.id}','${it.s.id}')"><div class="nx-when">${w.t}</div><div class="nx-tx"><div class="nx-nm">${cita?'📅 ':''}${it.part?'🫱🏽‍🫲🏾 ':''}${esc(it.s.name)}</div><div class="nx-sub">${esc(it.p.name)} · ${esc(it.t.name)} · <span style="color:${f.color};font-weight:600">${esc(f.name)}</span></div></div></div>`; }).join('');
   return `<div class="nx-h">⏰ Lo que sigue <span class="muted">${its.length?its.length+' próxima'+(its.length>1?'s':''):''}</span></div><div class="nx-list">${rows||'<div class="nf-empty">🎉 No tienes actividades próximas programadas</div>'}</div>`; }
 function toggleNext(ev){ ev&&ev.stopPropagation(); nextOpen=!nextOpen; nextRender(); }
 function nextRender(){ let pop=document.getElementById('next-pop'); if(!nextOpen||!session){ if(pop) pop.remove(); return; }
   if(!pop){ pop=document.createElement('div'); pop.id='next-pop'; document.body.appendChild(pop); }
   pop.innerHTML=nextPopHtml(); const b=document.getElementById('next-btn'); const r=b?b.getBoundingClientRect():{right:innerWidth-20,bottom:60};
   pop.style.top=(r.bottom+8)+'px'; pop.style.right=Math.max(8,innerWidth-r.right-8)+'px'; }
-function goNext(tid,sid){ nextOpen=false; nextRender(); openAgItem(tid,sid); }
+function goNext(tid,sid){ nxSel=sid; openAgItem(tid,sid); setTimeout(nextRender,60); }   // la lista se queda abierta para seguir viendo lo demás
 document.addEventListener('click',ev=>{ if(nextOpen&&!ev.target.closest('#next-pop')&&!ev.target.closest('#next-btn')){ nextOpen=false; nextRender(); } });
+function clockTick(){ const c=document.getElementById('live-clock'); if(!c) return; const d=new Date(); const t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':'); if(c.textContent!==t) c.textContent=t; }
+setInterval(()=>{ if(!document.hidden) clockTick(); },1000); setTimeout(clockTick,0);
 setInterval(()=>{ if(session&&!document.hidden){ nextBtnUpdate(); if(nextOpen) nextRender(); } },30000);
 
 /* ================== NOTIFICACIONES (@menciones) ================== */
