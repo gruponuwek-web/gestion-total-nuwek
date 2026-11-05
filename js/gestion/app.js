@@ -1491,7 +1491,9 @@ function viewAgenda(){
   const per=store.person(agPerson);
   const persOpts=store.activeStaff().map(u=>`<option value="${u.id}" ${agPerson===u.id?'selected':''}>${u.name}</option>`).join('');
   const days=[0,1,2,3,4,5].map(i=>addDaysISO(agStart,i));   // [AGENDA · LUNES A SÁBADO 2026-10-23] antes eran 5 días (lun–vie)
-  const items=personSubtasks(agPerson,true).concat(participationSubs(agPerson));
+  let items=personSubtasks(agPerson,true).concat(participationSubs(agPerson));
+  { const ids=new Set(items.map(x=>x.s.id));   // la lista se rige por las subsubtareas: la subtarea madre se oculta si alguna de sus hijas ya está en la lista
+    items=items.filter(it=>!(subIsParent(it.t,it.s) && subKids(it.t,it.s.id).some(k=>ids.has(k.id)))); }
   const today=todayISO(); const wkStr=addDaysISO(today,7);
   const buckets={venc:[],hoy:[],sem:[],resto:[],sinf:[]};
   items.forEach(it=>{const d=it.s.date; if(!d)buckets.sinf.push(it); else if(d<today)buckets.venc.push(it); else if(d===today)buckets.hoy.push(it); else if(d<=wkStr)buckets.sem.push(it); else buckets.resto.push(it);});
