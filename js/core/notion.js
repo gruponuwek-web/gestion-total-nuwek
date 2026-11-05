@@ -303,6 +303,7 @@ function notionAvisoGo(){ const c = notionAvisoCur; if (!c) return; try{ window.
 function notionAvisoCerrar(){ notionAvisoCur = null; notionAvisoRender(); }
 
 async function notionPushMine(){
+  if (window.__bootStale){ notionPushSoon(); return; }   // [ARRANQUE INSTANTÁNEO] espera a los datos al día
   if (notionSt.off || notionSt.running || !notionWho() || !notionPass() || Date.now() < notionSt.pauseUntil) return;
   notionSt.running = true;
   try{

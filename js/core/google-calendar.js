@@ -1,6 +1,7 @@
 /* ================== GOOGLE CALENDAR (solo la persona que inició sesión) ==================
    Cada quien conecta SU cuenta de Google desde ⏰ o Mi espacio; nadie ve ni conecta el calendario de otro.
-   - La conexión queda guardada en este navegador POR PERSONA: al salir y volver a entrar sigue vinculada.
+   - Con el puente de Apps Script (GOOGLE_CLIENT_SECRET puesto) la conexión NO se pierde: el servidor renueva el permiso de Google
+     solo y sirve en cualquier navegador (ver [GOOGLE · SIN DESCONEXIONES]). Sin ella, queda guardada en este navegador POR PERSONA.
      Google da permisos de ~1 h; cuando vencen basta un clic en «Reconectar» (sin volver a dar permisos).
      Solo «Desconectar» la quita.
    - Todo se sincroniza solo (ya no hay botón): tus actividades del portal (las tuyas o donde estás en el equipo, con fecha,
@@ -28,7 +29,8 @@ function gcalSync(){
   const who=gcalWho();
   if(!who){ if(gcal.uid) gcal=GCAL_EMPTY(); return; }
   if(gcal.uid===who) return;
-  gcal=GCAL_EMPTY(); gcal.uid=who;
+  gcal=GCAL_EMPTY(); gcal.uid=who; gauthReset();
+  if(typeof gauthPass==='function') setTimeout(()=>gcalServerRefresh(false),0);   // [GOOGLE · SIN DESCONEXIONES] en un navegador nuevo, el vínculo llega del servidor
   try{ const s=JSON.parse(localStorage.getItem(gcalKey(who))||'null');
     if(s){ gcal.linked=s.linked!==false&&!!(s.token||s.linked); gcal.email=s.email||''; gcal.cal=s.email||''; gcal.scope=s.scope||'';
       if(s.token&&s.exp>Date.now()){ gcal.token=s.token; gcal.exp=s.exp; } } }catch(_){}
@@ -46,11 +48,117 @@ function gcalRefreshUI(){ const busy=(typeof agListDrag!=='undefined'&&agListDra
   clearTimeout(gcalRefreshUI.t);
   if(typeof renderKeepScroll==='function') renderKeepScroll(); else render(); if(typeof nextOpen!=='undefined'&&nextOpen) nextRender(); }
 
+/* ================== [GOOGLE · SIN DESCONEXIONES 2026-10-27] ==================
+   Antes: Google da permisos de 1 h y el navegador no puede renovarlos solo (bloquea la ventana de Google si no la abrió
+   un clic), y la vinculación vivía en UN navegador. Al dejar el portal abierto un rato o cambiar de navegador, había que
+   volver a conectar.
+   Ahora (con el puente de Google Apps Script, el mismo de Notion, y su propiedad GOOGLE_CLIENT_SECRET): al conectar, Google da un permiso PERMANENTE que se
+   guarda en el servidor (nunca en el navegador) y el portal pide uno nuevo de 1 h por su cuenta, sin ventanas, 5 min antes
+   de que venza y en cualquier navegador donde entres con tu usuario y código.
+   Para pedirlo, cada navegador recibe un «pase» al entrar con usuario y código (dura 30 días; «Salir» lo borra).
+   Sin el secreto puesto en el puente, o en sesiones abiertas antes de este cambio (sin pase), todo sigue como antes.
+   «Salir» borra el pase de este navegador, pero el vínculo sigue en el puente: al volver a entrar con tu código,
+   el calendario se reconecta solo, sin ventanas. Solo «Desconectar» lo quita.
+   Por ahora solo para el equipo (portal con código); el portal de clientes sigue con la conexión de 1 h. */
+const GAUTH_URL='https://script.google.com/macros/s/AKfycbwhCsfD7cRDN-1K_-qo5AI80JzVQjI5n8mdYYrJpenhRoZWeRPJefYskCf_CkKcc5a6VA/exec';
+let gauth={ p:null, srv:null, offUntil:0, retryAt:0 };   // srv: true = vinculada en el servidor · false = no · null = no se sabe
+/* p: renovación en curso (quien llegue mientras tanto la espera) · offUntil: la función no respondió; mientras tanto se usa la conexión de antes */
+function gauthReset(){ gauth.srv=null; gauth.offUntil=0; gauth.retryAt=0; }
+function gauthOff(){ return Date.now()<gauth.offUntil; }
+function gauthKey(who){ return 'nuwekGauth:'+who; }
+/* pase de este navegador; sirve también el de Notion (lo entrega el mismo puente al entrar con tu código) */
+function gauthPass(){ const w=gcalWho(); if(!w||gcalIsClient()) return ''; try{ return localStorage.getItem(gauthKey(w))||localStorage.getItem('nuwekNotionPass:'+w)||''; }catch(_){ return ''; } }
+/* el puente responde siempre 200 con {error,code,status}; sin respuesta → error sin status (= no disponible) */
+async function gauthCall(body){
+  let r, j=null;
+  try{ r=await fetch(GAUTH_URL,{ method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, redirect:'follow', body:JSON.stringify(body) }); j=await r.json(); }
+  catch(_){ throw new Error('El puente de Google no respondió'); }
+  if(!r.ok||!j) throw new Error('El puente de Google respondió '+(r&&r.status));
+  if(j.error){
+    if(j.code==='gconfig'||j.code==='accion'){ gauth.offUntil=Date.now()+30*60000; throw new Error(j.error); }   // puente sin GOOGLE_CLIENT_SECRET (o versión vieja): se usa la conexión de antes
+    throw Object.assign(new Error(j.error),{ status:j.status||400, code:j.code||'' });
+  }
+  return j;
+}
+/* al entrar con usuario y código se pide el pase de este navegador (si la función no está publicada, no pasa nada) */
+async function gcalServerLogin(cred){
+  if(!cred||cred.kind!=='staff') return;                       // portal de clientes: sigue la conexión de 1 h
+  const who=cred.uid;
+  try{ const r=await gauthCall({ action:'login', uid:cred.uid, pin:cred.pin });
+    if(r&&r.st){ try{ localStorage.setItem(gauthKey(who),r.st); }catch(_){} gauthReset(); if(gcalWho()===who) gcalServerRefresh(true); } }
+  catch(e){ if(!e.status) gauth.offUntil=Date.now()+10*60000; console.info('Google Calendar: sin renovación automática ('+(e.message||'el puente no respondió')+').'); }
+}
+function gauthApply(r){
+  gcal.token=r.access_token; gcal.exp=Date.now()+((+r.expires_in||3600)-120)*1000; gcal.scope=r.scope||gcal.scope||GCAL_SCOPE;
+  gcal.linked=true; gcal.err=''; if(r.email){ gcal.email=r.email; if(!gcal.cal) gcal.cal=r.email; }
+  gauth.srv=true; gcalStore();
+}
+/* pide al servidor un permiso nuevo de 1 h, sin ventanas. Devuelve true si quedó conectado */
+function gcalServerRefresh(force){
+  gcalSync(); const st=gauthPass();
+  if(!st) return Promise.resolve(false);
+  if(gauth.p) return gauth.p;                                   // ya hay una en curso: se espera esa
+  if(!force&&(gauthOff()||gauth.srv===false||Date.now()<gauth.retryAt)) return Promise.resolve(false);
+  if(!force&&gcalConnected()&&gcal.exp-Date.now()>5*60000) return Promise.resolve(true);
+  gauth.p=gauthRefreshNow(st,gcal.uid).finally(()=>{ gauth.p=null; });
+  return gauth.p;
+}
+async function gauthRefreshNow(st,uid){
+  try{
+    const r=await gauthCall({ action:'gtoken', st });
+    if(gcal.uid!==uid) return false;
+    if(r&&r.linked){ const was=gcalConnected(); gauthApply(r); if(!was){ gcalLoad(true); gcalRefreshUI(); } return true; }
+    gauth.srv=false;
+    if(r&&r.revoked){ gcal.err='Google ya no permite el acceso a tu calendario (se quitó el permiso). Presiona «Reconectar».'; gcalRefreshUI(); }
+    return false;
+  }catch(e){
+    if(e.status===401){ try{ localStorage.removeItem(gauthKey(uid)); }catch(_){} gauth.retryAt=Date.now()+10*60000; }   // pase vencido: se renueva al volver a entrar
+    else gauth.retryAt=Date.now()+(e.status?60000:5*60000);
+    return false;
+  }
+}
+/* revisa cada minuto (y al volver a la pestaña) si el permiso está por vencer */
+setInterval(()=>{ if(gcalWho()) gcalServerRefresh(false); },60000);
+setTimeout(()=>{ if(gcalWho()) gcalServerRefresh(false); },1500);
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&gcalWho()) gcalServerRefresh(false); });
+
+/* conectar guardando el permiso permanente en el servidor (ventana de Google con «código» en lugar de token) */
+function gcalConnectServer(then,uid,first){
+  const cc=google.accounts.oauth2.initCodeClient({ client_id:CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', include_granted_scopes:true,
+    login_hint:gcal.email||gcal.cal||undefined,
+    callback:async resp=>{
+      if(gcalWho()!==uid) return;
+      if(resp.error){ gcal.err=resp.error==='access_denied'?'No se dio permiso para usar el calendario.':'No se pudo conectar ('+resp.error+').'; gcalRefreshUI(); return; }
+      const okScope=!google.accounts.oauth2.hasGrantedAnyScope||google.accounts.oauth2.hasGrantedAnyScope(resp,GCAL_SCOPE,'https://www.googleapis.com/auth/calendar');
+      if(!okScope){ gcal.err='En la ventana de Google quedó sin marcar la casilla del calendario. Vuelve a conectar y déjala marcada.'; gcalRefreshUI(); return; }
+      try{
+        const r=await gauthCall({ action:'glink', st:gauthPass(), code:resp.code });
+        if(gcalWho()!==uid) return;
+        gauthApply(r); if(first) gcal.events=null;
+        if(typeof then==='function') then(); else gcalSyncNow();
+      }catch(e){
+        gcal.err=e.code==='norefresh'?'Google pidió confirmar de nuevo. Presiona «Conectar» una vez más.':(e.status?e.message:'No se pudo guardar la conexión con Google. Intenta de nuevo.');
+        if(!e.status) gauth.offUntil=Date.now()+10*60000;   // la función no respondió: el siguiente intento usa la conexión de antes
+        gcalRefreshUI();
+      }
+    },
+    error_callback:e=>{ if(gcalWho()!==uid) return;
+      gcal.err=e&&e.type==='popup_closed'?(first?'Se cerró la ventana de Google sin conectar. Si te apareció «Acceso bloqueado», pide a quien administra Google Cloud que agregue tu correo como usuario de prueba.':'')
+        :'No se pudo abrir la ventana de Google. Permite las ventanas emergentes para este sitio e intenta de nuevo.';
+      gcalRefreshUI(); } });
+  cc.requestCode();
+}
+
 /* pide el permiso a Google; then() corre cuando ya hay token válido */
 function gcalConnect(then){
   gcalSync(); if(!gcalWho()) return;
   if(!(window.google&&google.accounts&&google.accounts.oauth2)){ gcal.err='Google aún no termina de cargar. Intenta de nuevo en unos segundos.'; gcalRefreshUI(); return; }
   const uid=gcalWho(), first=!gcal.linked;
+  /* con pase: si el servidor ya tiene el vínculo, basta pedirle un permiso nuevo (sin ventana); si no, se vincula ahí */
+  if(gauthPass()&&!gauthOff()&&google.accounts.oauth2.initCodeClient){
+    if(gauth.srv===true){ gcal.err=''; gcalServerRefresh(true).then(ok=>{ if(gcalWho()!==uid) return; if(ok){ if(typeof then==='function') then(); else gcalSyncNow(); } else { gcal.err='No se pudo renovar la conexión. Presiona «Reconectar» otra vez.'; gauth.srv=false; gcalRefreshUI(); } }); return; }
+    gcalConnectServer(then,uid,first); return;
+  }
   const client=google.accounts.oauth2.initTokenClient({ client_id:CLIENT_ID, scope:GCAL_SCOPE, include_granted_scopes:true,
     callback:resp=>{
       if(gcalWho()!==uid) return;                // cambió la sesión mientras estaba abierta la ventana de Google
@@ -74,14 +182,22 @@ function gcalConnect(then){
 function gcalWithToken(fn){ if(gcalConnected()) fn(); else gcalConnect(fn); }
 /* olvidar: revoke=true al desconectar a propósito (quita también el vínculo); false solo limpia la memoria */
 function gcalForget(revoke){
-  const t=gcal.token, uid=gcal.uid;
+  const t=gcal.token, uid=gcal.uid||gcalWho();
   if(revoke){ if(uid){ try{ localStorage.removeItem(gcalKey(uid)); }catch(_){} }
     if(t&&window.google&&google.accounts&&google.accounts.oauth2){ try{ google.accounts.oauth2.revoke(t,()=>{}); }catch(_){} } }
-  gcal=GCAL_EMPTY(); gcal.uid=revoke?(gcalWho()||null):null;
+  else if(uid){ try{ localStorage.removeItem(gauthKey(uid)); }catch(_){} }   // «Salir»: este navegador ya no puede pedir permisos a nombre de esa persona
+  gcal=GCAL_EMPTY(); gcal.uid=revoke?(gcalWho()||null):null; gauth.srv=null;
 }
-function gcalDisconnect(){ if(!confirm('¿Desconectar tu Google Calendar de este navegador?\n\nLos eventos que el portal ya creó en tu calendario se quedan ahí.')) return; gcalForget(true); gcalRefreshUI(); }
-/* el permiso de Google venció: se queda vinculada y se ofrece reconectar */
-function gcalExpired(){ gcal.token=null; gcal.exp=0; gcalStore(); gcal.err=''; }
+async function gcalDisconnect(){ if(!confirm('¿Desconectar tu Google Calendar?\n\nSe desconecta en todos los navegadores. Los eventos que el portal ya creó en tu calendario se quedan ahí.')) return;
+  const st=gauthPass();
+  if(st){ try{ await gauthCall({ action:'gunlink', st }); }
+    catch(e){
+      /* sin la función publicada (y sin vínculo en el servidor) o con el pase vencido, basta con olvidar aquí */
+      if(e.status!==401&&!(e.status==null&&gauth.srv!==true)){ alert('No se pudo desconectar en el servidor: '+(e.message||'sin conexión')+'\n\nIntenta de nuevo en un momento.'); return; }
+    } }
+  gcalForget(true); gauth.srv=false; gcalRefreshUI(); }
+/* el permiso de Google venció: se pide uno nuevo al servidor; si no hay vínculo ahí, se ofrece reconectar */
+function gcalExpired(){ gcal.token=null; gcal.exp=0; gcalStore(); gcal.err=''; if(gauthPass()) setTimeout(()=>gcalServerRefresh(true),0); }
 
 /* ---------- Llamadas a Google con reintento y mensajes claros ----------
    Reintenta solo cuando Google pide esperar (429 / límite de uso / 500-503), con pausas de 0.8, 1.6 y 3.2 s.
@@ -449,6 +565,7 @@ function gcalMoveEvent(e,day,hm,dur){
 function gcalPushSoon(){
   const who=gcalWho(); if(!who) return;   // store.save() corre al crear la app, antes de que exista «session» (gcalWho lo cuida)
   if(!gcal.uid||gcal.uid!==who||!gcalConnected()||!gcalCanWrite()) return;
+  if(window.__bootStale) return;   // [ARRANQUE INSTANTÁNEO] con la copia local no se manda nada a Google; al llegar los datos al día sí
   clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{ if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; } gcalPushMine().then(()=>gcalLoad(true,true)); },1500);
 }
 
