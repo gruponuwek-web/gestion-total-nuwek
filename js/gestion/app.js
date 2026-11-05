@@ -597,7 +597,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (cliPeople ? cliPeopleModal() : '') + (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -820,7 +820,17 @@ function clientTabsHtml(c){
   const body=clientTab==='citas'?citasHistorialHtml(c):clientTab==='finanzas'?finanzasHtml(c):clientTab==='proximas'?`<div class="sec-title"><h2>🧭 Próximas subtareas</h2></div>${clientNextHtml(c)}`:clientTab==='notas'?clientNotasStaffHtml(c):`<div class="sec-title"><h2>📊 Scorecard</h2></div>${clientScoreHtml(c)}`;
   return bar+`<div class="client-tab-body">${body}</div>`; }
 
-let peopleOpen={};
+let peopleOpen={}, cliPeople=null;
+function openCliPeople(cid){ cliPeople={cid,q:''}; render(); setTimeout(()=>{ const e=document.getElementById('cpl-q'); if(e) e.focus(); },60); }
+function closeCliPeople(){ cliPeople=null; render(); }
+function cliPeopleQ(v){ if(!cliPeople) return; cliPeople.q=v; const e=document.getElementById('cpl-list'); if(e) e.innerHTML=cliPeopleRows(); }
+function cliPeopleRows(){ const c=store.client(cliPeople.cid); if(!c) return ''; const q=impNz(cliPeople.q||''); const list=(c.people||[]).filter(p=>!q||impNz((p.name||'')+' '+(p.role||'')).includes(q));
+  return list.map(p=>`<div class="cp-row" style="justify-content:space-between"><span style="display:flex;align-items:center;gap:8px;min-width:0">${avatar(p,true)}<span style="min-width:0"><b>${mnEsc(p.name)}</b>${p.portal?` <span title="Tiene acceso al portal (${mnEsc(p.portal.user)})">🔑</span>`:''}<br><span class="muted" style="font-size:.74rem">${mnEsc(p.role||'')}</span></span></span><span style="display:flex;gap:4px"><button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span></div>`).join('')||'<div class="muted" style="padding:10px">Sin coincidencias.</div>'; }
+function cliPeopleModal(){ const c=store.client(cliPeople.cid); if(!c){ cliPeople=null; return ''; }
+  return `<div class="modal active" style="z-index:100" onclick="if(event.target===this)closeCliPeople()"><div class="modal-card" style="max-width:520px"><div class="m-head"><div class="m-top"><div><div class="pill green">${mnEsc(c.name)}</div><h3 style="margin:8px 0 0">👥 Su gente · ${(c.people||[]).length}</h3></div><button class="x" onclick="closeCliPeople()">×</button></div></div><div class="m-body">
+    <input id="cpl-q" class="filter-val" style="width:100%;margin-bottom:8px" placeholder="🔎 Buscar por nombre o cargo…" value="${mnEsc(cliPeople.q)}" oninput="cliPeopleQ(this.value)" autocomplete="off">
+    <div id="cpl-list" class="cp-list" style="max-height:52vh;overflow:auto">${cliPeopleRows()}</div>
+    <div class="wiz-actions"><span></span><button class="btn" onclick="openContactForm('${c.id}')">+ Contacto</button></div></div></div></div>`; }
 function togglePeople(cid){ peopleOpen[cid]=!peopleOpen[cid]; render(); }
 function viewCliente(){
   const c=store.client(selClient); if(!c) return '';
@@ -850,7 +860,7 @@ function viewCliente(){
         <dt>Web</dt><dd>${c.web||'—'}</dd>
         <dt>Redes</dt><dd>${[['IG',c.ig],['FB',c.fb],['YouTube',c.youtube],['TikTok',c.tiktok],['LinkedIn',c.linkedin],['Otro',c.otro]].filter(r=>r[1]).map(r=>`${r[0]}: ${r[1]}`).join(' · ')||'—'}</dd>
         <dt>Responsable Nuwek</dt><dd>${c.generalResponsibleId?`${avatar(resp,true)} ${resp.name}`:'—'}</dd>
-        <dt>Su gente</dt><dd><div class="chiplist" style="align-items:center">${people} ${peopleMore} <button class="btn ghost sm" onclick="openContactForm('${c.id}')">+ Contacto</button></div></dd>
+        <dt>Su gente</dt><dd><div class="chiplist" style="align-items:center"><button class="btn ghost sm" onclick="openCliPeople('${c.id}')">👥 Ver contactos (${c.people.length})</button><button class="btn ghost sm" onclick="openContactForm('${c.id}')">+ Contacto</button>${c.people.slice(0,5).map(p=>`<span title="${esc(p.name)}">${avatar(p,true)}</span>`).join('')}${c.people.length>5?`<span class="muted" style="font-size:.78rem">+${c.people.length-5}</span>`:''}</div></dd>
       </dl>
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
@@ -4672,3 +4682,7 @@ setInterval(checkNewVersion,60000); setTimeout(checkNewVersion,8000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(checkNewVersion,500); });
 
 boot();
+/* quita el desplegable de «textos anteriores» del navegador en las cajas de escritura (notas, buscadores…) */
+(function(){ const fix=el=>{ try{ if(el.tagName==='INPUT'){ const t=(el.type||'text').toLowerCase(); if(['text','search','email','url','tel','number',''].includes(t)&&!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete','off'); } else if(el.tagName==='TEXTAREA'&&!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete','off'); }catch(_){} };
+  const scan=root=>{ if(root.nodeType!==1) return; fix(root); root.querySelectorAll&&root.querySelectorAll('input,textarea').forEach(fix); };
+  try{ new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(scan))).observe(document.documentElement,{childList:true,subtree:true}); document.querySelectorAll('input,textarea').forEach(fix); }catch(_){} })();
