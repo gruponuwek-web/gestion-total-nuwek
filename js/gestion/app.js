@@ -2873,7 +2873,10 @@ function setLoginBgFile(input){ const f=input.files&&input.files[0]; if(!f) retu
   });
 }
 function resetLoginBg(){ if(confirm('¿Restaurar el fondo por defecto?')){ store.setSetting('loginBg',null); render(); } }
-function selectOpTask(id){opSelTask=(opSelTask===id?null:id);draftAtt=[];draftMentions=[];subView='list';render();}
+function selectOpTask(id){ const off=(opSelTask===id); opSelTask=off?null:id; draftAtt=[];draftMentions=[];subView='list'; hiClear();
+  if(!off){ const t=store.task(id); const mine=t?(t.subtasks||[]).filter(x=>!x.done&&subInvolves(x,currentUser)).map(x=>x.id):[];   // lo que me toca se resalta en azul a la derecha
+    if(mine.length){ hiSub={tid:id,ids:mine}; const c=subCollapsedMap(); let ch=false; mine.forEach(sid=>{ const sb=t.subtasks.find(x=>x.id===sid); if(sb&&sb.parentId){ const par=t.subtasks.find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
+  render(); if(hiSub) setTimeout(()=>{ const el=document.querySelector('.op-right .sub-item.sub-hi'); if(el) el.scrollIntoView({block:'nearest',behavior:'smooth'}); },120); }
 
 /* init: cargar Personal desde Supabase y luego arrancar */
 let shareSubHint=null;
