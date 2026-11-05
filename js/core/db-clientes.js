@@ -23,7 +23,9 @@ function dbToAppClient(row){
     people: Array.isArray(row.contactos) ? row.contactos : [],
     tipo: row.tipo === 'interno' ? 'interno' : 'externo',
     logo: row.logo || '',
-    activo: row.activo !== false
+    activo: row.activo !== false,
+    ubicaciones: Array.isArray(row.ubicaciones) ? row.ubicaciones : [],
+    _ubCol: ('ubicaciones' in row)
   };
 }
 
@@ -46,7 +48,9 @@ function appToDbClient(c){
     contactos: c.people || [],
     tipo: c.tipo === 'interno' ? 'interno' : 'externo',
     logo: c.logo || '',
-    activo: c.activo !== false
+    activo: c.activo !== false,
+    // la columna "ubicaciones" se manda solo si ya existe en la base o si hay datos (así no truena antes del SQL)
+    ...(((c.ubicaciones||[]).length || c._ubCol) ? { ubicaciones: c.ubicaciones || [] } : {})
   };
 }
 
