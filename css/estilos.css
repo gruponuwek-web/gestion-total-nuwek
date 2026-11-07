@@ -1366,3 +1366,7 @@
 .dir-c small{color:var(--muted);font-size:.7rem}
 .dir-ic{background:none;border:0;cursor:pointer;font-size:.9rem;padding:2px;text-decoration:none}
 @media(max-width:720px){.dir-ct{justify-content:flex-start}}
+
+/* la caja de la minuta es textarea de una línea: así Chrome no ofrece el historial de lo escrito antes */
+.mn-inrow textarea{flex:1;border:1.5px solid var(--line);border-radius:9px;padding:7px 9px;font-size:.84rem;min-width:0;font-family:inherit;resize:none;height:34px;line-height:1.3;overflow:hidden;white-space:nowrap;box-sizing:border-box}
+.mn-inrow textarea:focus{outline:2px solid #2f6fd6;outline-offset:0}
