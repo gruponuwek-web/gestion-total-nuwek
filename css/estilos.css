@@ -1383,3 +1383,12 @@
 .gf-tree .gf-cli{display:flex;font-size:.9rem}
 
 .gestor-tg a+a{margin-left:14px}
+
+/* directorio condensado: cada empresa es una barra con su número; al abrirla se ven las personas */
+.dir-grp .dir-gb{display:none}.dir-grp.open .dir-gb{display:block}
+.dir-gh{display:flex;align-items:center;gap:10px}.dir-gh.click{cursor:pointer}.dir-gh.click:hover{background:#efeee6}
+.dir-gh .dir-arw{display:inline-block;width:14px;color:var(--muted);transition:transform .15s}.dir-grp.open .dir-arw{transform:rotate(90deg)}
+.dir-gh .dir-gt{flex:1}
+.dir-gh .dir-cnt{background:#e4ece8;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:800;color:var(--green)}
+.dir-all{font-size:.76rem;color:var(--muted);align-self:center}.dir-all a{cursor:pointer;text-decoration:underline dotted}
+.dir-wrap{gap:8px}
