@@ -1376,3 +1376,8 @@
 .mn-fab.tm-red{background:#d63a2f;animation:mnred 1s ease-in-out infinite}
 @keyframes mnred{0%,100%{box-shadow:0 8px 24px rgba(0,0,0,.28)}50%{box-shadow:0 0 0 6px rgba(214,58,47,.35),0 8px 24px rgba(0,0,0,.28)}}
 .mn-fab.tm-red .mn-dot,.mn-fab.tm-yellow .mn-dot,.mn-fab.tm-green .mn-dot{background:#fff}
+
+.gf-tree{max-height:min(46vh,360px);display:block!important;overflow:auto}
+.gf-tree .gf-cg{padding:4px 0;border-bottom:1px solid #f0efe8}.gf-tree .gf-cg:last-child{border-bottom:0}
+.gf-tree .gf-prj{display:flex;margin-left:24px;font-size:.84rem;color:#4b5b54}
+.gf-tree .gf-cli{display:flex;font-size:.9rem}

@@ -342,7 +342,7 @@ let session=null, loginUser=null, loginPin='', loginErr='', loginAttempts={};
 let view='clientes', selClient=null, selProject=null, selTab='gestor', role='gerencia';
 let currentUser='u_car', perfWindow='mes', perfMonth=todayISO().slice(0,7), opFilterClient='', opSelTask=null;
 let kbScope='mes', kbAnchor=todayISO(), kbGroup='frente', kbPerson='', kbClient='', kbProject='';
-let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestPeople=[], gestFilterId=null;
+let gestSub='asig', gestScope='mes', gestAnchor=todayISO(), gestProject='', gestPerson='', gestClients=[], gestProjects=[], gestPeople=[], gestFilterId=null;
 let svcOpen={}, teamOpen={};
 let agPerson='u_car', agStart=mondayOf(todayISO()), agSel=null, agListDrag=null;   // la semana empieza en lunes (antes «hoy» y al recargar salía mié–dom)
 const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -1204,21 +1204,24 @@ function gestFilters(){ const u=store.d.staff.find(x=>x.id===currentUser); if(u&
 function saveGestFilters(list){ try{ localStorage.setItem('gestFilters_'+currentUser,JSON.stringify(list)); }catch(_){}
   const u=store.d.staff.find(x=>x.id===currentUser); if(u) store.updateStaff(u.id,{gestFilters:list}); }
 function applyGestFilter(id,silent){ const f=gestFilters().find(x=>x.id===id); if(!f) return;
-  gestFilterId=f.id; gestClients=(f.clients||[]).slice(); gestPeople=(f.people||[]).slice(); gestScope=f.scope||'mes'; gestProject=''; gestPerson='';
+  gestFilterId=f.id; gestClients=(f.clients||[]).slice(); gestProjects=(f.projects||[]).filter(id=>store.project(id)); gestPeople=(f.people||[]).slice(); gestScope=f.scope||'mes'; gestProject=''; gestPerson='';
   try{ localStorage.setItem('gestLast_'+currentUser,f.id); }catch(_){} if(!silent) render(); }
-function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestPeople=[]; gestProject=''; gestPerson=''; gestEstado='';
+function clearGestFilter(silent){ gestFilterId=null; gestClients=[]; gestProjects=[]; gestPeople=[]; gestProject=''; gestPerson=''; gestEstado='';
   try{ localStorage.removeItem('gestLast_'+currentUser); }catch(_){} if(!silent) render(); }
 function gestInv(s,id){ return s.personId===id||(s.team||[]).includes(id); }   // la persona es responsable o participa
 let gestEstado='';
 function setGestEstado(v){ gestEstado=v; render(); }
 function gestEstadoOk(s){ if(!gestEstado) return true; const late=!s.done&&s.date&&s.date<todayISO(); return gestEstado==='hecha'?!!s.done:gestEstado==='vencida'?!!late:(!s.done&&!late); }
 function gestPersonOk(s){ return !gestPerson||gestInv(s,gestPerson); }
-function gestPass(x){ return gestEstadoOk(x.s) && (!gestClients.length||gestClients.includes(x.p.clientId)) && (!gestPeople.length||gestPeople.some(id=>gestInv(x.s,id))); }
-function openGestFilterForm(id){ const f=id?gestFilters().find(x=>x.id===id):null; qm={kind:'gestFilter',fid:id||null,f:f||{name:'',clients:[],people:[],scope:gestScope}}; render(); }
+/* Vista por empresa y/o proyecto: sin marcar = todo; un cliente marcado trae todos sus proyectos; también se pueden marcar proyectos sueltos */
+function gestProjOk(p){ return (!gestClients.length&&!gestProjects.length)||gestClients.includes(p.clientId)||gestProjects.includes(p.id); }
+function gestPass(x){ return gestEstadoOk(x.s) && gestProjOk(x.p) && (!gestPeople.length||gestPeople.some(id=>gestInv(x.s,id))); }
+function gfCliToggle(el){ document.querySelectorAll('.gf-pr[data-cl="'+el.value+'"]').forEach(x=>{ x.checked=el.checked; x.disabled=el.checked; }); }
+function openGestFilterForm(id){ const f=id?gestFilters().find(x=>x.id===id):null; qm={kind:'gestFilter',fid:id||null,f:f||{name:'',clients:[],projects:[],people:[],scope:gestScope}}; render(); }
 function saveGestFilter(){ const name=(val('gf-name')||'').trim(); if(!name){alert('Ponle un nombre a la vista.');return;}
-  const clients=[...document.querySelectorAll('.gf-cl:checked')].map(x=>x.value), people=[...document.querySelectorAll('.gf-pe:checked')].map(x=>x.value);
+  const clients=[...document.querySelectorAll('.gf-cl:checked')].map(x=>x.value), projects=[...document.querySelectorAll('.gf-pr:checked:not(:disabled)')].map(x=>x.value), people=[...document.querySelectorAll('.gf-pe:checked')].map(x=>x.value);
   const scope=(document.querySelector('input[name=gf-scope]:checked')||{}).value||'mes';
-  const list=gestFilters().slice(); const f={id:qm.fid||('gf_'+Date.now()),name,clients,people,scope};
+  const list=gestFilters().slice(); const f={id:qm.fid||('gf_'+Date.now()),name,clients,projects,people,scope};
   const i=list.findIndex(x=>x.id===f.id); if(i>=0) list[i]=f; else list.push(f);
   saveGestFilters(list); qm=null; applyGestFilter(f.id); }
 function delGestFilter(){ if(!confirm('¿Eliminar esta vista?')) return; saveGestFilters(gestFilters().filter(x=>x.id!==qm.fid)); if(gestFilterId===qm.fid) clearGestFilter(true); qm=null; render(); }
@@ -1377,7 +1380,7 @@ function gestAsignaciones(R){
   if(gestProject) all=all.filter(x=>x.p.id===gestProject);
   if(gestPerson) all=all.filter(x=>gestPersonOk(x.s));
   const staff=(gestPerson?store.activeStaff().filter(u=>u.id===gestPerson):store.activeStaff()).filter(u=>!gestPeople.length||gestPeople.includes(u.id));
-  const projects=(gestProject?store.d.projects.filter(p=>p.id===gestProject):store.d.projects).filter(p=>!gestClients.length||gestClients.includes(p.clientId)).slice().sort((a,b)=>{ const ca=(store.client(a.clientId)||{}).name||'', cb=(store.client(b.clientId)||{}).name||''; return ca.localeCompare(cb,'es')||(a.name||'').localeCompare(b.name||'','es'); });
+  const projects=(gestProject?store.d.projects.filter(p=>p.id===gestProject):store.d.projects).filter(gestProjOk).slice().sort((a,b)=>{ const ca=(store.client(a.clientId)||{}).name||'', cb=(store.client(b.clientId)||{}).name||''; return ca.localeCompare(cb,'es')||(a.name||'').localeCompare(b.name||'','es'); });
   const head=`<th class="ga-proj-h">PROYECTO</th>`+staff.map(u=>`<th class="ga-ph"><div class="ga-phin">${avatar(u,true)}<span>${u.name}</span></div></th>`).join('');
   const rows=projects.map(p=>{ const c=store.client(p.clientId); const fc=(store.frentesOf(p.id)[0]||{}).color||'#8a9a93'; const sv=store.service(p.serviceId);
     const cells=staff.map(u=>{ const items=all.filter(x=>x.p.id===p.id && (x.s.personId===u.id||(x.s.team||[]).includes(u.id)));
@@ -2221,7 +2224,8 @@ function quickModal(){
     const f=qm.f;
     inner=`<h3>${qm.fid?'Editar vista':'Nueva vista'}</h3>
       <div class="field"><label>Nombre de la vista</label><input id="gf-name" value="${esc(f.name)}" placeholder="Ej. Marketing"></div>
-      <div class="field"><label>Clientes <span class="muted" style="text-transform:none">(sin marcar = todos)</span></label><div class="gf-list">${store.d.clients.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>`<label class="gf-opt"><input type="checkbox" class="gf-cl" value="${c.id}" ${(f.clients||[]).includes(c.id)?'checked':''}> ${esc(c.name)}</label>`).join('')}</div></div>
+      <div class="field"><label>Empresas y proyectos <span class="muted" style="text-transform:none">(sin marcar = todo · marca la empresa para traer todos sus proyectos, o solo los proyectos que quieras)</span></label><div class="gf-list gf-tree">${store.d.clients.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>{ const cOn=(f.clients||[]).includes(c.id); const ps=store.d.projects.filter(x=>x.clientId===c.id).slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+        return `<div class="gf-cg"><label class="gf-opt gf-cli"><input type="checkbox" class="gf-cl" value="${c.id}" ${cOn?'checked':''} onchange="gfCliToggle(this)"> <b>${esc(c.name)}</b>${ps.length?` <span class="muted">· ${ps.length} proyecto${ps.length===1?'':'s'}</span>`:''}</label>${ps.map(x=>`<label class="gf-opt gf-prj"><input type="checkbox" class="gf-pr" data-cl="${c.id}" value="${x.id}" ${(cOn||(f.projects||[]).includes(x.id))?'checked':''} ${cOn?'disabled':''}> ${esc(x.name)}</label>`).join('')}</div>`; }).join('')}</div></div>
       <div class="field"><label>Personas <span class="muted" style="text-transform:none">(sin marcar = todas)</span></label><div class="gf-list">${store.activeStaff().map(u=>`<label class="gf-opt"><input type="checkbox" class="gf-pe" value="${u.id}" ${(f.people||[]).includes(u.id)?'checked':''}> ${esc(u.name)}</label>`).join('')}</div></div>
       <div class="field"><label>Periodo</label><div class="gf-scope">${[['dia','Hoy'],['semana','Semana'],['mes','Mes']].map(([v,l])=>`<label class="gf-opt"><input type="radio" name="gf-scope" value="${v}" ${(f.scope||'mes')===v?'checked':''}> ${l}</label>`).join('')}</div>
         <div class="hint">Con la vista aplicada puedes avanzar o retroceder de periodo con las flechas (‹ ›).</div></div>
