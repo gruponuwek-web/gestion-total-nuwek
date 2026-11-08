@@ -1381,3 +1381,5 @@
 .gf-tree .gf-cg{padding:4px 0;border-bottom:1px solid #f0efe8}.gf-tree .gf-cg:last-child{border-bottom:0}
 .gf-tree .gf-prj{display:flex;margin-left:24px;font-size:.84rem;color:#4b5b54}
 .gf-tree .gf-cli{display:flex;font-size:.9rem}
+
+.gestor-tg a+a{margin-left:14px}

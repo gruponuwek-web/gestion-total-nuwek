@@ -1602,10 +1602,16 @@ function tcDrop(ev){ if(!tcDrag) return; ev.preventDefault(); const cell=ev.curr
 
 let gestorHideDone=(()=>{ try{ return localStorage.getItem('gestorHideDone')==='1'; }catch(_){ return false; } })();
 function toggleGestorDone(){ gestorHideDone=!gestorHideDone; try{ localStorage.setItem('gestorHideDone',gestorHideDone?'1':'0'); }catch(_){} render(); }
+let gestorHideEt=(()=>{ try{ return localStorage.getItem('gestorHideEt')==='1'; }catch(_){ return false; } })();
+function toggleGestorEt(){ gestorHideEt=!gestorHideEt; try{ localStorage.setItem('gestorHideEt',gestorHideEt?'1':'0'); }catch(_){} render(); }
 function tabGestor(p){
   const colab=isColab();
-  const frentes=store.frentesOf(p.id), etapas=store.etapasOf(p.id), tasks=store.tasksOf(p.id);
-  if(etapas.length===0) return `<div class="lock">Este proyecto aún no tiene etapas.${colab?'':`<br><button class="btn sm" style="margin-top:10px" onclick="openEtapaForm('${p.id}')">+ Crear etapa</button>`}</div>`;
+  const frentes=store.frentesOf(p.id), etapasAll=store.etapasOf(p.id), tasks=store.tasksOf(p.id);
+  const etDone=e=>{ const ts=tasks.filter(t=>taskEtapaIds(t).has(e.id)); return ts.length>0&&ts.every(t=>t.status==='done'); };   // etapa completa: tiene tareas y todas están hechas
+  const nEtDone=etapasAll.filter(etDone).length;
+  const etapas=gestorHideEt?etapasAll.filter(e=>!etDone(e)):etapasAll;
+  if(etapasAll.length>0&&etapas.length===0) return `<div class="gestor-tg"><a onclick="toggleGestorEt()">👁 Mostrar etapas completadas (${nEtDone})</a></div><div class="lock">🎉 Todas las etapas están completadas.</div>`;
+  if(etapasAll.length===0) return `<div class="lock">Este proyecto aún no tiene etapas.${colab?'':`<br><button class="btn sm" style="margin-top:10px" onclick="openEtapaForm('${p.id}')">+ Crear etapa</button>`}</div>`;
   const etOps=e=>colab?'':`<span class="et-ops"><button title="Mover ←" onclick="moveEtapa('${p.id}','${e.id}',-1)">←</button><button title="Mover →" onclick="moveEtapa('${p.id}','${e.id}',1)">→</button><button title="Editar" onclick="openEtapaEdit('${e.id}','${p.id}')">✏️</button><button title="Eliminar" onclick="delEtapa('${e.id}','${p.id}')">🗑️</button></span>`;
   const head=`<tr><th class="corner">Frente ╲ Etapa</th>${etapas.map(e=>`<th><div class="et-hd"><div><div class="et-nm">${e.name}</div><span class="sub">${dLabel(e.start)}–${dLabel(e.end)}</span></div>${etOps(e)}</div></th>`).join('')}</tr>`;
   const rows=frentes.map(f=>{
@@ -1624,7 +1630,7 @@ function tabGestor(p){
     return `<tr><td class="frente-h" style="background:${f.color}"><div class="fr-hd"><span class="fr-nm">${f.name}</span>${frOps}</div></td>${cells}</tr>`;
   }).join('');
   const nDone=tasks.filter(t=>t.status==='done').length;
-  const tg=nDone?`<div class="gestor-tg"><a onclick="toggleGestorDone()">${gestorHideDone?'👁 Mostrar realizadas':'🙈 Ocultar realizadas'} (${nDone})</a></div>`:'';
+  const tg=(nDone||nEtDone)?`<div class="gestor-tg">${nDone?`<a onclick="toggleGestorDone()">${gestorHideDone?'👁 Mostrar realizadas':'🙈 Ocultar realizadas'} (${nDone})</a>`:''}${nEtDone?`<a onclick="toggleGestorEt()">${gestorHideEt?'👁 Mostrar etapas completadas':'🙈 Ocultar etapas completadas'} (${nEtDone})</a>`:''}</div>`:'';
   return `${tg}<div class="gantt-wrap"><table class="gantt"><thead>${head}</thead><tbody>${rows}</tbody></table></div>
     <div class="hint" style="margin-top:10px">Filas = Frentes · Columnas = Etapas · cada tarjeta es una tarea (clic para abrir). La etapa se deduce de la fecha de las subtareas.</div>`;
 }
