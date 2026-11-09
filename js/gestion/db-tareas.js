@@ -29,7 +29,8 @@ function dbToAppTask(row){
     repeatCal: (row.ciclo && row.ciclo.calendar) || null,
     nextId: (row.ciclo && row.ciclo.nextId) || null,
     repeatOf: (row.ciclo && row.ciclo.repeatOf) || null,
-    impCode: (row.ciclo && row.ciclo.impCode) || null
+    impCode: (row.ciclo && row.ciclo.impCode) || null,
+    daily: !!(row.ciclo && row.ciclo.daily)
   };
 }
 
@@ -53,7 +54,7 @@ function appToDbTask(t){
     links: t.links || [],
     ord: t.ord || 0,
     urgente: !!t.urgent,
-    ciclo: (t.repeatAfter||t.repeatCal||t.nextId||t.repeatOf||t.impCode) ? { repeatAfter: t.repeatAfter||null, calendar: t.repeatCal||null, nextId: t.nextId||null, repeatOf: t.repeatOf||null, impCode: t.impCode||null } : null
+    ciclo: (t.repeatAfter||t.repeatCal||t.nextId||t.repeatOf||t.impCode||t.daily) ? { repeatAfter: t.repeatAfter||null, calendar: t.repeatCal||null, nextId: t.nextId||null, repeatOf: t.repeatOf||null, impCode: t.impCode||null, daily: !!t.daily } : null
   };
 }
 
