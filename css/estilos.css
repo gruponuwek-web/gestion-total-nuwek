@@ -1433,3 +1433,5 @@
 .dl-cm.done{opacity:.65}.dl-cm.done .dl-nm{text-decoration:line-through}
 
 .mp-re{float:right;border:1.5px solid var(--line);border-radius:8px;font-size:.74rem;padding:3px 6px;background:#fff;font-family:inherit;cursor:pointer;margin-left:8px}
+
+.dl-cap{font-size:.8rem;color:var(--muted);margin:2px 0 2px}.dl-hr.sel{background:#f3f0ff}
