@@ -1248,12 +1248,14 @@ function dirMail(em,lbl){ if(!em) return ''; const t=String(em).trim(); return `
 function dirItem(name,sub,photoP,phones,mails,extra){ const q=dirNorm(name+' '+sub+' '+(extra||'')+' '+phones.concat(mails).map(x=>x[0]).join(' ')); const d=phones.map(x=>String(x[0]).replace(/\D/g,'')).join(' ');
   const body=phones.map(x=>dirPhone(x[0],x[1])).join('')+mails.map(x=>dirMail(x[0],x[1])).join('');
   return `<div class="dir-it" data-q="${esc(q)}" data-d="${esc(d)}"><div class="dir-who">${avatar(Object.assign({name},photoP||{}),true)}<div><b>${esc(name)}</b><div class="muted dir-sub">${esc(sub||'')}</div></div></div><div class="dir-ct">${body||'<span class="muted">Sin teléfono ni correo registrados</span>'}</div></div>`; }
-function dirGrp(key,title,n,itemsHtml){ return `<div class="dir-grp${dirOpen[key]?' open':''}" data-k="${esc(key)}" data-n="${n}"><div class="dir-gh${n?' click':''}" ${n?`onclick="dirToggle('${esc(key)}')"`:''}><span class="dir-arw">${n?'▸':'·'}</span><span class="dir-gt">${title}</span><span class="dir-cnt">${n}</span></div><div class="dir-gb">${itemsHtml}</div></div>`; }
+function dirGrp(key,title,n,itemsHtml,fav){ return `<div class="dir-grp${dirOpen[key]?' open':''}" data-k="${esc(key)}" data-n="${n}"><div class="dir-gh${n?' click':''}" ${n?`onclick="dirToggle('${esc(key)}')"`:''}><span class="dir-arw">${n?'▸':'·'}</span><span class="dir-gt">${fav?'<span class="dir-star">★</span> ':''}${title}</span><span class="dir-cnt">${n}</span></div><div class="dir-gb">${itemsHtml}</div></div>`; }
 function gestDirView(){
   const staff=store.activeStaff().slice().sort((a,b)=>a.name.localeCompare(b.name));
   const nuw=dirGrp('nuwek','🏢 Equipo Nuwek',staff.length,staff.map(u=>dirItem(u.name,[u.role,u.team].filter(Boolean).join(' · '),{photo:u.photo,color:u.color},[[u.phoneWork,'trabajo'],[u.phonePersonal,'personal']].filter(x=>x[0]),[[u.emailWork,'trabajo'],[u.gmail,'Gmail']].filter(x=>x[0]))).join(''));
-  const cls=store.d.clients.filter(c=>c.activo!==false).slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const ppl=(c.people||[]);
-    return dirGrp(c.id,esc(c.name),ppl.length,ppl.map(x=>dirItem(x.name||'—',[x.role,c.name].filter(Boolean).join(' · '),{photo:x.photo},[[x.phone,'']].filter(y=>y[0]),[[x.email,'']].filter(y=>y[0]),c.name)).join('')); }).join('');
+  const favs=new Set(myFavClients()); const mkCli=c=>{ const ppl=(c.people||[]);
+    return dirGrp(c.id,esc(c.name),ppl.length,ppl.map(x=>dirItem(x.name||'—',[x.role,c.name].filter(Boolean).join(' · '),{photo:x.photo},[[x.phone,'']].filter(y=>y[0]),[[x.email,'']].filter(y=>y[0]),c.name)).join(''),favs.has(c.id)); };
+  const cAll=store.d.clients.filter(c=>c.activo!==false).slice().sort((a,b)=>a.name.localeCompare(b.name)); const cFav=cAll.filter(c=>favs.has(c.id)), cRest=cAll.filter(c=>!favs.has(c.id));
+  const cls=(cFav.length?`<div class="dir-sep">★ Favoritos</div>${cFav.map(mkCli).join('')}<div class="dir-sep">Todos los clientes</div>`:'')+cRest.map(mkCli).join('');
   const showN=dirTab!=='cli', showC=dirTab!=='nuwek';
   return `<div class="op-hello"><h2>Gestión</h2><div class="muted">Directorio · correos y teléfonos para contactar rápido</div></div>
     <div class="gest-row1">${gestTabsHtml()}<div class="subtoggle"><button class="${dirTab==='all'?'on':''}" onclick="setDirTab('all')">Todos</button><button class="${dirTab==='nuwek'?'on':''}" onclick="setDirTab('nuwek')">Equipo Nuwek</button><button class="${dirTab==='cli'?'on':''}" onclick="setDirTab('cli')">Clientes</button></div></div>

@@ -1437,3 +1437,13 @@
 .dl-cap{font-size:.8rem;color:var(--muted);margin:2px 0 2px}.dl-hr.sel{background:#f3f0ff}
 
 .dl-mes{margin-left:auto;border:1.5px solid var(--line);border-radius:8px;font-size:.78rem;padding:3px 8px;background:#fff;font-family:inherit;cursor:pointer}
+
+/* directorio en 4 columnas; al abrir una barra ocupa todo el ancho */
+.dir-wrap{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;align-items:start}
+.dir-wrap>.dir-grp.open{grid-column:1/-1}
+.dir-sep{grid-column:1/-1;font-size:.78rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 -2px}
+.dir-star{color:#e0a800}
+.dir-wrap .dir-gh{padding:10px 12px}.dir-wrap .dir-gt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1100px){.dir-wrap{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.dir-wrap{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.dir-wrap{grid-template-columns:1fr}}
