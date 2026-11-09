@@ -1450,3 +1450,5 @@
 
 .dl-sc{max-height:430px;overflow-y:auto}
 .dl-fil{margin:4px 0 6px}
+
+.mp-cli{display:inline-block;background:#e4ece8;color:var(--green);border-radius:999px;font-size:.7rem;font-weight:800;padding:2px 9px;margin-right:6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
