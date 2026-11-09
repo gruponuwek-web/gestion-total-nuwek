@@ -4046,10 +4046,10 @@ function mnDrop(e,toId){ e.preventDefault(); const from=mnDragId; mnDragEnd(); i
 let mnIndent=0;
 /* ---- Viñetas con casilla (pendientes): cada una tiene un responsable; se palomean aunque la minuta ya esté cerrada ---- */
 function mnLineChk(lid){ const g=mnGet(); if(!g) return; const idx=g.m.lines.findIndex(x=>x.id===lid), l=g.m.lines[idx]; if(!l) return;
-  if(!l.chk){ if(l.kind!=='n'||!l.lvl){ shareToast('Las casillas van dentro de una actividad ○: primero hazla sub-viñeta (⇥) de una actividad.'); return; }
+  if(!l.chk){ if(l.kind!=='n'||!l.lvl){ shareToast('Las casillas van como sub-viñeta: primero hazla sub-viñeta (⇥) de una nota o actividad.'); return; }
     let pi=idx-1; while(pi>=0&&g.m.lines[pi].lvl) pi--; if(pi<0){ shareToast('Esta viñeta no cuelga de ninguna idea.'); return; }
-    const par=g.m.lines[pi]; let conv=false; if(par.kind!=='a') conv=true;
-    mnSave(m=>{ const pp=m.lines.find(x=>x.id===par.id), ll=m.lines.find(x=>x.id===lid); if(pp&&pp.kind!=='a'){ pp.kind='a'; pp.done=false; } ll.chk=true; if(!ll.resp) ll.resp=currentUser; return m; }); if(conv) shareToast('«'+(par.txt||'La idea').slice(0,40)+'» ahora es una actividad ○: las casillas siempre viven dentro de una actividad, que se liga a una subtarea.'); return; }
+    const par=g.m.lines[pi];
+    mnSave(m=>{ const ll=m.lines.find(x=>x.id===lid); ll.chk=true; if(!ll.resp) ll.resp=currentUser; return m; }); return; }
   mnSave(m=>{ const ll=m.lines.find(x=>x.id===lid); ll.chk=false; ll.done=false; delete ll.doneBy; delete ll.doneAt; return m; }); }
 function mnCanTick(l,m){ return !!session&&!!l.chk&&(l.resp===currentUser||can('minutaEditar')||can('posponer')||(m&&m.estado==='curso'&&m.by===currentUser)); }
 function mnFindMin(mid){ for(const t of store.d.tasks){ for(const s of (t.subtasks||[])){ const m=(s.minutas||[]).find(x=>x.id===mid); if(m) return {t,s,m}; } } return null; }
@@ -4062,7 +4062,7 @@ function mnOpenCount(m){ return (m.lines||[]).filter(l=>l.kind==='n'&&l.chk&&!l.
 function mnInherited(t,m){ const out=[]; (t.subtasks||[]).forEach(s=>{ if(s.isSeries) return; (s.minutas||[]).forEach(x=>{ if(x.id===m.id||!(x.start<m.start)) return; (x.lines||[]).forEach(l=>{ if(l.kind==='n'&&l.chk&&!l.done) out.push({sid:s.id,mid:x.id,l,date:x.start,sname:s.name}); }); }); }); return out.sort((a,b)=>((a.l.date||'9999')+a.date)<((b.l.date||'9999')+b.date)?-1:1); }
 function mnInhHtml(g,esc){ const inh=mnInherited(g.t,g.m); if(!inh.length) return ''; return `<div class="mn-inh"><div class="mn-sec">↪ Pendientes de minutas anteriores de esta tarea <span class="muted">· ${inh.length}</span></div>${inh.map(x=>`<div class="mn-ln"><button class="mn-mk ck" title="${mnCanTick(x.l,null)?'Palomear':'Solo '+esc(store.person(x.l.resp).name||'su responsable')+' o Dirección'}" onclick="mnTickRaw('${x.mid}','${x.l.id}')">☐</button><span class="mn-tx" style="flex:1;padding:4px 2px">${esc(x.l.txt)}</span><span class="mn-rsn" title="Responsable">${esc((store.person(x.l.resp).name||'—').split(' ')[0])}</span><span class="muted" style="font-size:.66rem;white-space:nowrap${x.l.date&&x.l.date<todayISO()?';color:#c0392b;font-weight:700':''}" title="${x.l.date?'Fecha del compromiso':'Fecha de la minuta'}">${x.l.date?(x.l.date<todayISO()?'⚠ ':'')+esc(dLabel(x.l.date)):esc(dLabel(x.date.slice(0,10)))}</span></div>`).join('')}</div>`; }
 /* ---- Puntos de minuta: viven dentro de una actividad, y la actividad se liga a una subtarea ---- */
-function mnAllPuntos(){ const out=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(s=>(s.minutas||[]).forEach(m=>{ mnGroups(m.lines||[]).forEach(g=>{ if(g.head.kind!=='a') return; const it=g.kids.filter(k=>k.kind==='n'&&k.chk); if(!it.length) return; out.push({t,s,m,head:g.head,items:it}); }); }))); return out; }
+function mnAllPuntos(){ const out=[]; store.d.tasks.forEach(t=>(t.subtasks||[]).forEach(s=>(s.minutas||[]).forEach(m=>{ mnGroups(m.lines||[]).forEach(g=>{ const it=g.kids.filter(k=>k.kind==='n'&&k.chk); if(!it.length) return; out.push({t,s,m,head:g.head,items:it}); }); }))); return out; }
 function subPuntos(tid,sid){ return mnAllPuntos().filter(x=>x.head.link&&x.head.link.tid===tid&&x.head.link.sid===sid); }
 let puntosOpen=null;
 function openPuntos(tid,sid){ puntosOpen={tid,sid}; render(); }
