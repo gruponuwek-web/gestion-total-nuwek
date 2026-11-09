@@ -566,7 +566,7 @@ function render(){
 function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(()=>{ if(document.getElementById('dir-q')) dirApply(); },0); setTimeout(mnRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
+  setTimeout(()=>{ if(document.getElementById('dir-q')) dirApply(); },0); setTimeout(mnRender,0); setTimeout(ppRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnSum?mnSumModal():'')+(mnAuth?mnAuthModal():''); return; }
@@ -4077,7 +4077,8 @@ function mpReassign(mid,ids,uid){ if(!uid) return; const f=mnFindMin(mid); if(!f
   const arr=(f.s.minutas||[]).map(x=>{ if(x.id!==mid) return x; const y=JSON.parse(JSON.stringify(x)); y.lines.forEach(l=>{ if(set.has(l.id)&&l.chk&&!l.done){ l.resp=uid; n++; } }); return y; });
   store.updateSubtask(f.t.id,f.s.id,{minutas:arr}); logEvent(f.t.id,'Pasó '+n+' pendiente(s) de la minuta de «'+f.s.name+'» a '+(store.person(uid).name||'')); shareToast('✔ '+n+' pendiente(s) ahora son de '+(store.person(uid).name||'').split(' ')[0]); render(); }
 /* Cliente y proyecto de un pendiente de minuta: el de la subtarea ligada; si no está ligada, el de la tarea donde se tomó la minuta */
-function mnCliOf(head,t0){ const lk=head&&head.link; const lt=lk&&store.task(lk.tid); const tt=lt||t0; const p=tt&&store.project(tt.projectId); const c=p&&store.client(p.clientId); return {c:c?c.name:'',p:p?p.name:'',t:tt?tt.name:''}; }
+function mnCliByName(txt){ const n=x=>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,''); const t=n(txt); if(!t) return null; let best=null; (store.d.clients||[]).forEach(c=>{ const cn=n(c.name).trim(); if(cn.length>=3&&t.includes(cn)&&(!best||cn.length>n(best.name).length)) best=c; }); return best; }
+function mnCliOf(head,t0){ const lk=head&&head.link; const lt=lk&&store.task(lk.tid); { const cn=mnCliByName(head&&head.txt); if(cn){ return {c:cn.name,p:'',t:''}; } } const tt=lt||t0; const p=tt&&store.project(tt.projectId); const c=p&&store.client(p.clientId); return {c:c?c.name:'',p:p?p.name:'',t:tt?tt.name:''}; }
 function mpToggleCard(){ mpShut=!mpShut; try{ localStorage.setItem('mpShut',mpShut?'1':'0'); }catch(_){} render(); }
 function mnMisPuntosHtml(){ const esc=mnEsc; const mine=[]; mnAllPuntos().forEach(g=>g.items.forEach(l=>{ if(!l.done&&l.resp===currentUser) mine.push({g,l}); })); if(!mine.length) return '';
   const groups=[]; mine.forEach(x=>{ let k=groups.find(y=>y.g.m.id===x.g.m.id&&y.g.head.id===x.g.head.id); if(!k){ k={g:x.g,items:[]}; groups.push(k); } k.items.push(x.l); });
@@ -5006,3 +5007,25 @@ boot();
 (function(){ const fix=el=>{ try{ if(el.tagName==='INPUT'){ const t=(el.type||'text').toLowerCase(); if(['text','search','email','url','tel','number',''].includes(t)&&!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete','off'); } else if(el.tagName==='TEXTAREA'&&!el.hasAttribute('autocomplete')) el.setAttribute('autocomplete','off'); }catch(_){} };
   const scan=root=>{ if(root.nodeType!==1) return; fix(root); root.querySelectorAll&&root.querySelectorAll('input,textarea').forEach(fix); };
   try{ new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(scan))).observe(document.documentElement,{childList:true,subtree:true}); document.querySelectorAll('input,textarea').forEach(fix); }catch(_){} })();
+
+/* ===== Círculo flotante de pendientes de minuta (F8) ===== */
+let ppOpen=false, ppShut={}, ppGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekPpGeo')||'null')||{}; }catch(_){ return {}; } })();
+function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>g.items.forEach(l=>{ if(!l.done&&l.resp===currentUser) mine.push({g,l}); })); return mine; }
+function ppToggle(){ ppOpen=!ppOpen; ppRender(); }
+function ppCli(k){ ppShut[k]=!ppShut[k]; ppRender(); }
+function ppRoot(){ let r=document.getElementById('pp-root'); if(!r){ r=document.createElement('div'); r.id='pp-root'; document.body.appendChild(r); } return r; }
+function ppRender(){ const r=ppRoot(); if(!session){ r.innerHTML=''; return; } const esc=mnEsc; const mine=ppMine(); const me=store.person(currentUser)||{};
+  const cl=[]; mine.forEach(x=>{ const ci=mnCliOf(x.g.head,x.g.t); const key=ci.c||'Sin cliente'; let c=cl.find(y=>y.k===key); if(!c){ c={k:key,n:0,acts:[]}; cl.push(c); } c.n++; let a=c.acts.find(y=>y.g.m.id===x.g.m.id&&y.g.head.id===x.g.head.id); if(!a){ a={g:x.g,p:ci.p,items:[]}; c.acts.push(a); } a.items.push(x.l); });
+  cl.sort((a,b)=>b.n-a.n||a.k.localeCompare(b.k));
+  const body=!mine.length?'<div class="pp-empty">🎉 No tienes pendientes de minuta.</div>':cl.map(c=>{ const shut=!!ppShut[c.k]; return `<div class="pp-cli"><div class="pp-ch" onclick="ppCli(${JSON.stringify(c.k).replace(/"/g,'&quot;')})"><span class="acc-arw" style="display:inline-block;width:14px;transform:rotate(${shut?-90:0}deg)">▾</span><b>${esc(c.k)}</b><span class="pp-n">${c.n}</span></div>${shut?'':c.acts.map(a=>`<div class="pp-act"><div class="pp-ah">${esc(a.g.head.txt)}<span class="muted"> · ${a.p?esc(a.p)+' · ':''}minuta del ${esc(dLabel(mnDay(a.g.m.start)))}</span></div>${a.items.map(l=>`<div class="pp-it"><button class="mn-mk ck" title="Palomear" onclick="mnTickRaw('${a.g.m.id}','${l.id}')">☐</button><span class="pp-tx">${esc(l.txt)}</span>${l.date?`<span class="pp-dt">${esc(dLabel(l.date))}</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; }).join('');
+  const h=`${ppOpen?`<div class="pp-panel"><div class="pp-h"><div><b>☐ Mis pendientes de minuta</b><div class="muted" style="font-size:.74rem">${mine.length} por atender · ${cl.length} cliente(s) · F8 para cerrar</div></div><button class="mn-x" title="Cerrar" onclick="ppToggle()">–</button></div><div class="pp-body">${body}</div></div>`:''}<button class="pp-fab" title="Mis pendientes de minuta (F8)" onclick="ppToggle()">${avatar(me)}${mine.length?`<span class="pp-badge">${mine.length}</span>`:''}</button>`;
+  if(r.dataset.sig===h) return; const pb=r.querySelector('.pp-body'); const st=pb?pb.scrollTop:0; r.dataset.sig=h; r.innerHTML=h; const nb=r.querySelector('.pp-body'); if(nb) nb.scrollTop=st; ppGeoApply(); }
+function ppGeoApply(){ const r=document.getElementById('pp-root'); if(!r) return; if(ppGeo.x!=null){ const x=Math.max(0,Math.min(ppGeo.x,window.innerWidth-64)), y=Math.max(0,Math.min(ppGeo.y,window.innerHeight-64)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.right='auto'; r.style.bottom='auto'; const left=x<window.innerWidth/2, up=y>window.innerHeight/2; r.classList.toggle('pl',left); r.classList.toggle('pd',!up); } else { r.classList.remove('pl','pd'); } }
+(function(){ let d=null;
+  document.addEventListener('pointerdown',e=>{ const f=e.target.closest&&e.target.closest('#pp-root .pp-fab'); if(!f) return; const r=document.getElementById('pp-root'); const b=r.getBoundingClientRect(); d={sx:e.clientX,sy:e.clientY,ox:b.left,oy:b.top,moved:false}; });
+  document.addEventListener('pointermove',e=>{ if(!d) return; const dx=e.clientX-d.sx, dy=e.clientY-d.sy; if(!d.moved&&Math.hypot(dx,dy)<5) return; d.moved=true; ppGeo={x:d.ox+dx,y:d.oy+dy}; ppGeoApply(); });
+  document.addEventListener('pointerup',()=>{ if(d&&d.moved){ window.__ppNoClick=Date.now(); try{ localStorage.setItem('nuwekPpGeo',JSON.stringify(ppGeo)); }catch(_){} } d=null; });
+  document.addEventListener('click',e=>{ if(window.__ppNoClick&&Date.now()-window.__ppNoClick<400&&e.target.closest&&e.target.closest('.pp-fab')){ e.stopPropagation(); e.preventDefault(); } },true);
+  document.addEventListener('keydown',e=>{ if(!session) return; if(e.key==='F8'){ e.preventDefault(); ppToggle(); } else if(e.key==='Escape'&&ppOpen&&!e.defaultPrevented){ const m=document.querySelector('.modal.active'); if(!m){ ppOpen=false; ppRender(); } } });
+  window.addEventListener('resize',()=>ppGeoApply());
+})();
