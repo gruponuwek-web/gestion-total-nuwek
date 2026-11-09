@@ -1035,7 +1035,6 @@ function viewMisPendientes(){
     : '<div class="muted" style="padding:20px;text-align:center">🎉 Sin pendientes. ¡Bien ahí!</div>';
   return `<div class="op-hello"><h2>Hola, ${u.name.split(' ')[0]}.</h2>
       <div class="muted">${ts.length} pendientes · ${buckets.hoy.length} hoy · <span style="color:var(--bad)">${buckets.venc.length} vencida${buckets.venc.length===1?'':'s'}</span></div></div>
-    ${mnMisPuntosHtml()}
     <div class="op-ctl"><label class="filt"><span class="glabel">Cliente</span><select class="filter-val" onchange="setOpClient(this.value)">${cliOpts}</select></label></div>
     <div class="op-split">
       <div class="op-left"><div class="op-list">${list}</div></div>
@@ -5009,16 +5008,17 @@ boot();
   try{ new MutationObserver(m=>m.forEach(x=>x.addedNodes.forEach(scan))).observe(document.documentElement,{childList:true,subtree:true}); document.querySelectorAll('input,textarea').forEach(fix); }catch(_){} })();
 
 /* ===== Círculo flotante de pendientes de minuta (F8) ===== */
-let ppOpen=false, ppShut={}, ppGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekPpGeo')||'null')||{}; }catch(_){ return {}; } })();
+let ppOpen=false, ppMin='', ppShut={}, ppGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekPpGeo')||'null')||{}; }catch(_){ return {}; } })();
 function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>g.items.forEach(l=>{ if(!l.done&&l.resp===currentUser) mine.push({g,l}); })); return mine; }
 function ppToggle(){ ppOpen=!ppOpen; ppRender(); }
+function ppSetMin(v){ ppMin=(ppMin===v)?'':v; ppRender(); }
 function ppCli(k){ ppShut[k]=!ppShut[k]; ppRender(); }
 function ppRoot(){ let r=document.getElementById('pp-root'); if(!r){ r=document.createElement('div'); r.id='pp-root'; document.body.appendChild(r); } return r; }
-function ppRender(){ const r=ppRoot(); if(!session){ r.innerHTML=''; return; } const esc=mnEsc; const mine=ppMine(); const me=store.person(currentUser)||{};
+function ppRender(){ const r=ppRoot(); if(!session){ r.innerHTML=''; return; } const esc=mnEsc; const all=ppMine(); const me=store.person(currentUser)||{}; const mins=[]; all.forEach(x=>{ let m=mins.find(y=>y.id===x.g.m.id); if(!m){ m={id:x.g.m.id,s:x.g.s.name,d:dLabel(mnDay(x.g.m.start)),n:0}; mins.push(m); } m.n++; }); if(ppMin&&!mins.some(m=>m.id===ppMin)) ppMin=''; const mine=ppMin?all.filter(x=>x.g.m.id===ppMin):all;
   const cl=[]; mine.forEach(x=>{ const ci=mnCliOf(x.g.head,x.g.t); const key=ci.c||'Sin cliente'; let c=cl.find(y=>y.k===key); if(!c){ c={k:key,n:0,acts:[]}; cl.push(c); } c.n++; let a=c.acts.find(y=>y.g.m.id===x.g.m.id&&y.g.head.id===x.g.head.id); if(!a){ a={g:x.g,p:ci.p,items:[]}; c.acts.push(a); } a.items.push(x.l); });
   cl.sort((a,b)=>b.n-a.n||a.k.localeCompare(b.k));
   const body=!mine.length?'<div class="pp-empty">🎉 No tienes pendientes de minuta.</div>':cl.map(c=>{ const shut=!!ppShut[c.k]; return `<div class="pp-cli"><div class="pp-ch" onclick="ppCli(${JSON.stringify(c.k).replace(/"/g,'&quot;')})"><span class="acc-arw" style="display:inline-block;width:14px;transform:rotate(${shut?-90:0}deg)">▾</span><b>${esc(c.k)}</b><span class="pp-n">${c.n}</span></div>${shut?'':c.acts.map(a=>`<div class="pp-act"><div class="pp-ah">${esc(a.g.head.txt)}<span class="muted"> · ${a.p?esc(a.p)+' · ':''}minuta del ${esc(dLabel(mnDay(a.g.m.start)))}</span></div>${a.items.map(l=>`<div class="pp-it"><button class="mn-mk ck" title="Palomear" onclick="mnTickRaw('${a.g.m.id}','${l.id}')">☐</button><span class="pp-tx">${esc(l.txt)}</span>${l.date?`<span class="pp-dt">${esc(dLabel(l.date))}</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; }).join('');
-  const h=`${ppOpen?`<div class="pp-panel"><div class="pp-h"><div><b>☐ Mis pendientes de minuta</b><div class="muted" style="font-size:.74rem">${mine.length} por atender · ${cl.length} cliente(s) · F8 para cerrar</div></div><button class="mn-x" title="Cerrar" onclick="ppToggle()">–</button></div><div class="pp-body">${body}</div></div>`:''}<button class="pp-fab" title="Mis pendientes de minuta (F8)" onclick="ppToggle()"><span class="pp-ic">📋</span>${mine.length?`<span class="pp-badge">${mine.length}</span>`:''}</button>`;
+  const h=`${ppOpen?`<div class="pp-panel"><div class="pp-h"><div><b>☐ Mis pendientes de minuta</b><div class="muted" style="font-size:.74rem">${mine.length} por atender · ${cl.length} cliente(s) · F8 para cerrar</div></div><button class="mn-x" title="Cerrar" onclick="ppToggle()">–</button></div>${mins.length>1?`<div class="pp-mins"><button class="${ppMin?'':'on'}" onclick="ppSetMin('')">Todas · ${all.length}</button>${mins.map(m=>`<button class="${ppMin===m.id?'on':''}" title="${esc(m.s)}" onclick="ppSetMin('${m.id}')">${esc(m.s.length>22?m.s.slice(0,21)+'…':m.s)} · ${esc(m.d)} · ${m.n}</button>`).join('')}</div>`:''}<div class="pp-body">${body}</div></div>`:''}<button class="pp-fab" title="Mis pendientes de minuta (F8)" onclick="ppToggle()"><span class="pp-ic">📋</span>${all.length?`<span class="pp-badge">${all.length}</span>`:''}</button>`;
   if(r.dataset.sig===h) return; const pb=r.querySelector('.pp-body'); const st=pb?pb.scrollTop:0; r.dataset.sig=h; r.innerHTML=h; const nb=r.querySelector('.pp-body'); if(nb) nb.scrollTop=st; ppGeoApply(); }
 function ppGeoApply(){ const r=document.getElementById('pp-root'); if(!r) return; if(ppGeo.x!=null){ const x=Math.max(0,Math.min(ppGeo.x,window.innerWidth-64)), y=Math.max(0,Math.min(ppGeo.y,window.innerHeight-64)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.right='auto'; r.style.bottom='auto'; const left=x<window.innerWidth/2, up=y>window.innerHeight/2; r.classList.toggle('pl',left); r.classList.toggle('pd',!up); } else { r.classList.remove('pl','pd'); } }
 (function(){ let d=null;
