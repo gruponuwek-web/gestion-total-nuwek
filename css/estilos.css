@@ -1472,3 +1472,5 @@
 .pp-mins button{flex:none;border:1px solid #cfdcd5;background:#f4f8f6;border-radius:14px;padding:3px 10px;font-size:.74rem;cursor:pointer;font-family:inherit;white-space:nowrap}
 .pp-mins button.on{background:var(--green);color:#fff;border-color:var(--green)}
 .pp-who{color:#5b6b64;font-weight:600}.pp-mins select{font-family:inherit;font-size:.78rem;padding:3px 8px;border-radius:12px;border:1px solid #cfdcd5;background:#f4f8f6}
+.pp-mins button.pp-mc{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 14%,#fff);color:#1f2d27}
+.pp-mins button.pp-mc.on{background:var(--pc);color:#fff;border-color:var(--pc)}
