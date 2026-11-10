@@ -571,7 +571,7 @@ function render(){
 function renderBase(){
   const app=document.getElementById('app');
   if(session){ saveSession(); saveNav(); }
-  setTimeout(()=>{ if(document.getElementById('dir-q')) dirApply(); },0); setTimeout(mnRender,0); setTimeout(ppRender,0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
+  setTimeout(()=>{ if(document.getElementById('dir-q')) dirApply(); },0); setTimeout(mnRender,0); setTimeout(ppRender,0); setTimeout(()=>{ if(session&&!trashBusy&&typeof dbLoadTrash==='function'){ trashBusy='1'; trashLoad(); } },0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
     if(publicSes){ app.innerHTML=viewPublicSession(); document.getElementById('modal-root').innerHTML=sesPubModal()+(mnSum?mnSumModal():'')+(mnAuth?mnAuthModal():''); return; }
@@ -605,7 +605,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (puntosOpen ? puntosModal() : '') + (cliPeople ? cliPeopleModal() : '') + (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (puntosOpen ? puntosModal() : '') + (trashOpen ? trashModal() : '') + (cliPeople ? cliPeopleModal() : '') + (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -632,7 +632,7 @@ function whoSelector(){
 function sessionBar(){
   const u=store.person(session)||{name:'?'};
   const rl=permLabel(u.perm);
-  return `<div class="sessbar"><span id="live-clock" class="live-clock" title="Hora actual">--:--:--</span><button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
+  return `<div class="sessbar"><span id="live-clock" class="live-clock" title="Hora actual">--:--:--</span>${trashCanSee()?`<button id="trash-btn" class="next-btn trash-btn" onclick="trashOpenPanel()" title="Papelera: lo que se eliminó y se puede recuperar">🗑️${trashVisible().length?`<span class="trash-n">${trashVisible().length}</span>`:''}</button>`:''}<button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
 }
 /* ===== LOGIN ===== */
 function getLoginBg(){ return (store.d.settings && store.d.settings.loginBg) || LOGIN_BG; }
@@ -2711,7 +2711,7 @@ function saveTaskEdit(id){
   logEvent(id,'Editó la tarea');
   editingTask=null;render();
 }
-function deleteTask(id){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ store.removeTask(id); modalTask=null; editingTask=null; render(); } }
+function deleteTask(id){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ trashAdd('tarea',id); store.removeTask(id); modalTask=null; editingTask=null; render(); } }
 function openTaskHi(id,sids){ hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
   const t=store.task(id); if(t){ const c=subCollapsedMap(); let ch=false; ids.forEach(sid=>{ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const par=(t.subtasks||[]).find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
   openTask(id); if(ids.length) setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${ids[0]}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },150); }
@@ -2758,7 +2758,7 @@ function cancelSubTime(){timingSub=null;render();}
 function delSub(tid,sid){const t0=store.task(tid);const s=t0.subtasks.find(x=>x.id===sid);const nk=subKids(t0,sid).length;
   if(s&&s.seriesId&&s.occDate){ const m=t0.subtasks.find(x=>x.id===s.seriesId); if(!confirm('¿Omitir esta repetición ('+dLabel(s.occDate)+')? La serie continúa con las demás.')) return; if(m&&m.series){ const sr=Object.assign({},m.series); sr.skip=(sr.skip||[]).concat([s.occDate]); m.series=sr; } store.removeSubtask(tid,sid); logEvent(tid,'Omitió la repetición del '+s.occDate+' de «'+s.name+'»'); render(); return; }
   if(s&&s.isSeries&&!confirm('¿Eliminar toda la serie «'+s.name+'» y sus '+nk+' repeticiones?')) return;
-  if(!(s&&s.isSeries)&&confirm(nk?'¿Eliminar esta subtarea y sus '+nk+' sub-subtarea(s)?':'¿Eliminar subtarea?')||(s&&s.isSeries)){const nm=s?s.name:'';store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
+  if(!(s&&s.isSeries)&&confirm(nk?'¿Eliminar esta subtarea y sus '+nk+' sub-subtarea(s)?':'¿Eliminar subtarea?')||(s&&s.isSeries)){const nm=s?s.name:'';trashAdd('sub',tid,sid);store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
 function setSubView(v){subView=v;editingLink=null;render();}
 function logEvent(taskId, action){ if(!taskId||!action) return; store.d.log=store.d.log||[]; const e={id:'lg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), userId:currentUser, taskId, action}; store.d.log.push(e); store.save(); if(typeof dbSaveLog==='function') dbSaveLog(e); }
 function taskLogPanel(t){
@@ -4245,7 +4245,7 @@ function mnSumClose(){ mnSum=null; mnSumFull=false; render(); }
 function mnSumPick(mid){ mnSum.mid=mid; mnSum.askDel=false; render(); }
 function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!can('minutaEliminar')){ shareToast('Tu perfil no puede eliminar minutas.'); return; }
   if(!mnSum.askDel){ mnSum.askDel=true; render(); return; }
-  store.updateSubtask(g.t.id,g.s.id,{minutas:(g.s.minutas||[]).filter(x=>x.id!==g.m.id)}); logEvent(g.t.id,'Eliminó la minuta del '+dLabel(mnDay(g.m.start))+' de «'+g.s.name+'»');
+  trashAdd('minuta',g.t.id,g.s.id,g.m.id); store.updateSubtask(g.t.id,g.s.id,{minutas:(g.s.minutas||[]).filter(x=>x.id!==g.m.id)}); logEvent(g.t.id,'Eliminó la minuta del '+dLabel(mnDay(g.m.start))+' de «'+g.s.name+'»');
   if(mnV&&mnV.mid===g.m.id){ mnV=null; try{ localStorage.removeItem(MN_KEY); }catch(_){} } mnSum=null; mnRender(); render(); shareToast('Minuta eliminada.'); }
 function mnDelNo(){ if(mnSum){ mnSum.askDel=false; render(); } }
 function mnSumGoCita(){ if(!mnSum) return; const {tid,sid}=mnSum; mnSum=null; render(); visitSession(tid,sid); }
@@ -5093,3 +5093,29 @@ function cpMinDetail(ctx,f){ const esc=mnEsc; const {t,s:sb,m}=f; const vs=m.pub
     ${asist?`<div style="margin:10px 0 4px"><b style="font-size:.82rem">Asistentes</b><div class="mn-chips" style="margin-top:4px">${asist}</div></div>`:''}
     <div style="margin-top:10px">${body||'<div class="muted">Sin contenido.</div>'}</div></div>
     <div class="card" style="margin-top:12px"><b>💬 Comentarios (${cs.length})</b>${csHtml||'<div class="muted" style="margin:6px 0">Aún no hay comentarios.</div>'}${form}</div></div>`; }
+
+
+/* ===== PAPELERA: lo eliminado se guarda 30 días y se puede restaurar =====
+   La ve Dirección/Gerencia (todo), y cada PM lo que eliminó él o lo de sus proyectos asignados. */
+let trashItems=[], trashOpen=false, trashLoaded=false, trashBusy='';
+const TRASH_DAYS=30;
+function trashCanSee(){ return !!session&&(isDireccion()||role==='gerencia'||role==='gerente'||role==='pm'); }
+function trashVisible(){ if(!trashCanSee()) return []; const all=role==='gerencia'||role==='gerente'||isDireccion(); return trashItems.filter(x=>all||x.userId===currentUser||(((store.project(x.projectId)||{}).pmIds)||[]).includes(currentUser)); }
+async function trashLoad(){ if(typeof dbLoadTrash!=='function') return; try{ const rows=await dbLoadTrash(); const lim=Date.now()-TRASH_DAYS*864e5; rows.filter(x=>new Date(x.ts).getTime()<lim).forEach(x=>{ if(typeof dbDeleteTrash==='function') dbDeleteTrash(x.id); }); trashItems=rows.filter(x=>new Date(x.ts).getTime()>=lim); trashLoaded=true; if(session) render(); }catch(e){ console.warn('Papelera:',e&&e.message||e); } }
+function trashAdd(tipo,tid,sid,mid){ try{ const t=store.task(tid); if(!t) return; const snap=x=>JSON.parse(JSON.stringify(x)); let titulo='',data={};
+    if(tipo==='tarea'){ titulo=t.name; data={task:snap(t),comments:(store.d.comments||[]).filter(c=>c.taskId===tid).map(c=>{ const y=snap(c); delete y.attachments; return y; })}; }
+    else if(tipo==='sub'){ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(!sb) return; titulo=sb.name; data={sub:snap(sb),kids:(t.subtasks||[]).filter(x=>x.parentId===sid).map(snap)}; }
+    else if(tipo==='minuta'){ const sb=(t.subtasks||[]).find(x=>x.id===sid); const m=sb&&(sb.minutas||[]).find(x=>x.id===mid); if(!m) return; titulo='Minuta del '+dLabel(mnDay(m.start))+' · '+sb.name; data={minuta:snap(m)}; }
+    else return;
+    const x={id:uidf('tr_'),userId:currentUser,tipo,titulo,projectId:t.projectId,taskId:tid,subId:sid||'',ts:new Date().toISOString(),data}; trashItems.unshift(x); if(typeof dbSaveTrash==='function') dbSaveTrash(x).then(ok=>{ if(!ok) shareToast('Ojo: no se pudo guardar en la papelera; no podrás recuperar esto.'); }); }catch(e){ console.warn('Papelera:',e); } }
+function trashOpenPanel(){ trashOpen=true; render(); trashLoad(); }
+function trashClose(){ trashOpen=false; render(); }
+function trashWhere(x){ const p=store.project(x.projectId); const c=p&&store.client(p.clientId); const t=store.task(x.taskId); const tn=t?t.name:(x.tipo==='tarea'?'':(x.data.task||{}).name||'(tarea eliminada)'); return [c&&c.name,p&&p.name,x.tipo==='tarea'?'':tn].filter(Boolean).join(' · '); }
+function trashRestore(id){ const x=trashItems.find(y=>y.id===id); if(!x) return; const d=x.data||{};
+  if(x.tipo==='tarea'){ if(store.task(x.taskId)){ shareToast('Esa tarea ya existe.'); return; } if(!store.project(x.projectId)){ shareToast('No se puede restaurar: el proyecto ya no existe.'); return; } const t=d.task; store.d.tasks.push(t); store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); (d.comments||[]).forEach(c=>{ store.d.comments.push(c); if(typeof dbSaveComment==='function') dbSaveComment(c); }); }
+  else if(x.tipo==='sub'){ const t=store.task(x.taskId); if(!t){ shareToast('No se puede restaurar: la tarea ya no existe (restaura primero la tarea).'); return; } if((t.subtasks||[]).some(z=>z.id===d.sub.id)){ shareToast('Esa subtarea ya existe.'); return; } const sub=d.sub; if(sub.parentId&&!(t.subtasks||[]).some(z=>z.id===sub.parentId)) sub.parentId=''; t.subtasks=(t.subtasks||[]).concat([sub],(d.kids||[]).filter(k=>!(t.subtasks||[]).some(z=>z.id===k.id))); store.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); }
+  else if(x.tipo==='minuta'){ const t=store.task(x.taskId); const sb=t&&(t.subtasks||[]).find(z=>z.id===x.subId); if(!sb){ shareToast('No se puede restaurar: la cita o subtarea ya no existe.'); return; } if((sb.minutas||[]).some(z=>z.id===d.minuta.id)){ shareToast('Esa minuta ya existe.'); return; } store.updateSubtask(t.id,sb.id,{minutas:(sb.minutas||[]).concat([d.minuta])}); }
+  logEvent(x.taskId,'Restauró de la papelera: «'+(x.titulo||'').slice(0,80)+'»'); trashItems=trashItems.filter(y=>y.id!==id); if(typeof dbDeleteTrash==='function') dbDeleteTrash(id); shareToast('Restaurado.'); render(); }
+function trashPurge(id){ if(!(isDireccion()||role==='gerencia'||role==='gerente')){ shareToast('Solo Dirección o Gerencia borran definitivamente.'); return; } if(!confirm('¿Borrar definitivamente? Ya no se podrá recuperar.')) return; trashItems=trashItems.filter(y=>y.id!==id); if(typeof dbDeleteTrash==='function') dbDeleteTrash(id); render(); }
+function trashModal(){ const esc=mnEsc; const rows=trashVisible(); const ico={tarea:'📋',sub:'↳',minuta:'📝'}; const lbl={tarea:'Tarea',sub:'Subtarea',minuta:'Minuta'}; const all=isDireccion()||role==='gerencia'||role==='gerente';
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)trashClose()"><div class="modal-card" style="max-width:680px"><div class="m-head"><div class="m-top"><div><h3 style="margin:0">🗑️ Papelera</h3><div class="muted" style="font-size:.8rem">${all?'Todo lo eliminado':'Lo que eliminaste y lo de tus proyectos'} · se guarda ${TRASH_DAYS} días.</div></div><button class="x" onclick="trashClose()">×</button></div></div><div class="m-body">${!trashLoaded?'<div class="muted">Cargando…</div>':(rows.length?rows.map(x=>`<div class="tr-row"><div class="tr-main"><div class="tr-t">${ico[x.tipo]||''} <span class="tr-k">${lbl[x.tipo]||''}</span> ${esc(x.titulo)}</div><div class="muted" style="font-size:.76rem">${esc(trashWhere(x))}</div><div class="muted" style="font-size:.74rem">Eliminó ${esc((store.person(x.userId).name||'—').split(' ')[0])} · ${esc(dLabel(mnDay(x.ts)))} ${esc(new Date(x.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}))}</div></div><div class="tr-btns"><button class="btn sm" onclick="trashRestore('${x.id}')">↩ Restaurar</button>${all?`<button class="btn ghost sm" style="color:#c0392b" onclick="trashPurge('${x.id}')">Borrar</button>`:''}</div></div>`).join(''):'<div class="muted">La papelera está vacía.</div>')}</div></div></div>`; }

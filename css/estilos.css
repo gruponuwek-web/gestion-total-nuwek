@@ -1487,3 +1487,6 @@
 #mn-root.big .mn-pw{position:fixed!important;left:3vw!important;right:3vw!important;top:3vh!important;bottom:3vh!important;width:auto!important;height:auto!important;max-height:none!important;z-index:171}
 #mn-root.big .mn-pw .mn-panel{font-size:1.02rem}#mn-root.big .mn-rz{display:none}
 #mn-root.big .mn-fab{position:fixed;left:18px;bottom:18px}
+/* papelera */
+.trash-btn{position:relative}.trash-n{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:#e53935;color:#fff;font-size:.62rem;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.tr-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #eef0ec}.tr-t{font-weight:600}.tr-k{font-size:.68rem;background:#eef0ec;border-radius:8px;padding:1px 7px;margin-right:4px;text-transform:uppercase}.tr-btns{display:flex;gap:6px;flex:none}

@@ -88,3 +88,20 @@ async function dbRenameTag(oldName, newName, color){
     console.log('💾 Etiqueta renombrada:', oldName, '→', newName);
   }catch(e){ console.error('Red al renombrar etiqueta:', e); }
 }
+
+/* ---------------- PAPELERA (tabla "papelera"; ver SQL en la conversación) ---------------- */
+function dbToAppTrash(r){ return { id:r.id, userId:r.user_id, tipo:r.tipo, titulo:r.titulo||'', projectId:r.project_id||'', taskId:r.tarea_id||'', subId:r.sub_id||'', ts:r.ts, data:r.data||{} }; }
+function appToDbTrash(x){ return { id:x.id, user_id:x.userId, tipo:x.tipo, titulo:x.titulo||'', project_id:x.projectId||null, tarea_id:x.taskId||null, sub_id:x.subId||null, ts:x.ts, data:x.data||{} }; }
+async function dbLoadTrash(){
+  const { data, error } = await sb.from('papelera').select('*').order('ts', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(dbToAppTrash);
+}
+async function dbSaveTrash(x){
+  try{ const { error } = await sb.from('papelera').upsert(appToDbTrash(x)); if (error){ console.error('Error guardando en la papelera:', error.message); return false; } return true; }
+  catch(e){ console.error('Red al guardar en la papelera:', e); return false; }
+}
+async function dbDeleteTrash(id){
+  try{ const { error } = await sb.from('papelera').delete().eq('id', id); if (error) console.error('Error borrando de la papelera:', error.message); }
+  catch(e){ console.error('Red al borrar de la papelera:', e); }
+}
