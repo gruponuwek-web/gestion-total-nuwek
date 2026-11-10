@@ -4024,7 +4024,7 @@ function mnRoleOk(){ return can('minuta'); }
 function isDailySub(t,s){ return !!(t&&t.daily&&s&&s.parentId); }
 let dailyGate=false;
 function mnStart(tid,sid){ { { const t1=store.task(tid), s1=t1&&(t1.subtasks||[]).find(x=>x.id===sid); if(isDailySub(t1,s1)&&!dailyGate){ shareToast('☀️ Los Daily se inician desde Gestión › Daily.'); return; } } const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } const t=store.task(tid), s=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!s) return;
-  if(!mnRoleOk()){ shareToast('Solo PM, Gerencia o Dirección pueden tomar la minuta.'); return; }
+  if(!mnRoleOk()){ shareToast('Tu perfil no tiene el permiso para tomar minutas. Pídeselo a Dirección.'); return; }
   const open=(s.minutas||[]).find(x=>x.estado==='curso'&&x.by!==currentUser);
   if(open){ const who=store.person(open.by).name||'otra persona'; if(!can('minutaEditar')){ alert('Esta cita ya tiene una minuta abierta por '+who+'. Solo una persona a la vez puede tomarla; debe cerrarla primero (o Dirección puede tomarla).'); return; } if(!confirm('La minuta está abierta por '+who+'. ¿Cerrarla y abrir una nueva a tu nombre?')) return; mnV={tid,sid,mid:open.id}; mnStopNow(true); }
   const act=mnActive(); if(act&&!(act.tid===tid&&act.sid===sid)){ if(!confirm('Ya tienes una minuta en curso. ¿Detenerla y empezar esta?')) return; mnV=act; mnStopNow(true); }
@@ -4285,7 +4285,7 @@ function mnAuthOpen(){ mnAuth={err:'',opts:null}; render(); setTimeout(()=>{ con
 function mnAuthClose(){ mnAuth=null; render(); }
 function mnAuthModal(){ const esc=mnEsc; return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)mnAuthClose()"><div class="modal-card" style="max-width:380px"><div class="m-head"><div class="m-top"><h3 style="margin:0">🔐 Acceso del equipo Nuwek</h3><button class="x" onclick="mnAuthClose()">×</button></div></div><div class="m-body">
   ${mnAuth.opts?`<p class="muted" style="margin-top:0">Ese código coincide con más de una persona. ¿Quién eres?</p><div class="mn-chips">${mnAuth.opts.map(u=>`<button class="mn-chip" onclick="mnAuthLogin('${u.id}')">${esc(u.name)}</button>`).join('')}</div>`
-  :`<p class="muted" style="margin-top:0">Escribe tu <b>código de 6 cifras</b> (PM, Gerencia o Dirección). Así queda registrado quién toma la minuta.</p><div class="field"><input id="au-code" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')mnAuthSubmit()"></div><div class="pin-err" style="color:#c0392b;min-height:18px">${esc(mnAuth.err||'')}</div><div class="wiz-actions"><button class="btn ghost" onclick="mnAuthClose()">Cancelar</button><button class="btn" onclick="mnAuthSubmit()">Entrar</button></div>`}</div></div></div>`; }
+  :`<p class="muted" style="margin-top:0">Escribe tu <b>código de 6 cifras</b>. Así queda registrado quién toma la minuta.</p><div class="field"><input id="au-code" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="off" onkeydown="if(event.key==='Enter')mnAuthSubmit()"></div><div class="pin-err" style="color:#c0392b;min-height:18px">${esc(mnAuth.err||'')}</div><div class="wiz-actions"><button class="btn ghost" onclick="mnAuthClose()">Cancelar</button><button class="btn" onclick="mnAuthSubmit()">Entrar</button></div>`}</div></div></div>`; }
 function mnAuthSubmit(){ const code=((document.getElementById('au-code')||{}).value||'').trim(); const lock=mnFails.x; if(lock&&lock.until&&Date.now()<lock.until){ mnAuth.err='Demasiados intentos. Espera unos minutos.'; render(); return; }
   const el=store.activeStaff().filter(u=>canFor(u.id,'minuta')&&String(u.password||'')===code&&code);
   if(!el.length){ const a=mnFails.x||{fails:0,until:0}; a.fails++; if(a.fails>=3){ a.until=Date.now()+5*60*1000; a.fails=0; mnAuth.err='Demasiados intentos. Espera 5 minutos.'; } else mnAuth.err='Código incorrecto o sin permiso (solo PM, Gerencia o Dirección).'; mnFails.x=a; render(); return; }
@@ -4401,7 +4401,7 @@ const PERM_DEF={
   gerencia:Object.fromEntries(PERM_KEYS.map(k=>[k[0],true])),
   gerente:{proyectos:true,copiar:true,importar:true,fechas:true,eliminarTareas:true,log:true,minuta:true,minutaEliminar:true,daily:true,posponer:true},
   pm:{fechas:true,eliminarTareas:true,log:true,minuta:true,daily:true,posponer:true},
-  colab:{}
+  colab:{minuta:true}
 };
 let perfVer=0, perfDbState='unknown', perfSel='', perfDraft=null, perfMsg='';
 function perfBuiltins(){ const st=(store.d.perfiles||[]); return ['gerencia','gerente','pm','colab'].map(id=>{ const o=st.find(x=>x.id===id)||{}; return {id,name:PERM_BASES[id],base:id,builtin:true,perms:Object.assign({},PERM_DEF[id],id==='gerencia'?PERM_DEF.gerencia:(o.perms||{})),miembros:[]}; }); }
