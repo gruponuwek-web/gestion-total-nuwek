@@ -240,7 +240,7 @@ class Store{
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   releaseNext(t,s){ const now=new Date().toISOString(); (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id&&!d.done){ d.turno={pred:s.id,predName:s.name,ts:now,by:currentUser}; d.turnoAck={}; } }); }
-  updateSubtask(tid,sid,patch){ if(patch&&patch.date) patch=Object.assign({},patch,{date:okDate(patch.date)}); const t=this.task(tid); if(!t) return; const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDate()){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateSubtask(tid,sid,patch){ if(patch&&patch.date) patch=Object.assign({},patch,{date:okDate(patch.date)}); const t=this.task(tid); if(!t) return; const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDateOf(t,s)){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   /* Ciclo "N días después de terminar": al terminar la subtarea se crea la siguiente (con sus sub-subtareas) en hoy + N */
   spawnNextSubtask(t,s){ const n=+s.repeatAfter; if(!n||(s.nextId&&t.subtasks.some(x=>x.id===s.nextId))) return null;
     const nd=addDaysISO(todayISO(),n); const shift=daysBetween(s.date||todayISO(),nd); const now=new Date().toISOString(); const sid=s.seriesId||s.id;
@@ -367,8 +367,9 @@ const PERM_LABEL={gerencia:'Dirección',gerente:'Gerencia',pm:'Project Manager',
 function permLabel(k){ return PERM_LABEL[k]||PERM_LABEL.colab; }
 function permOptions(sel){ return ['gerencia','gerente','pm','colab'].map(k=>`<option value="${k}" ${(sel===k||(!sel&&k==='colab'))?'selected':''}>${PERM_LABEL[k]}</option>`).join(''); }
 function canManageProject(){ return can('proyectos'); }          // crear / editar / eliminar proyectos
+function canSubDateOf(t,s){ if(can('fechas')) return true; if(!s||!session) return false; const mine=x=>x&&(x.personId===currentUser||(x.team||[]).includes(currentUser)); if(mine(s)) return true; const par=s.parentId&&t&&(t.subtasks||[]).find(x=>x.id===s.parentId); return !!mine(par); }   // un colaborador mueve las fechas de SUS subtareas y sub-subtareas
 function canSubDate(){ return can('fechas'); }   // fechas de subtareas y de tareas
-const SUB_DATE_MSG='Solo el PM puede cambiar las fechas de las subtareas.';
+const SUB_DATE_MSG='Solo puedes cambiar la fecha de tus propias subtareas y sub-subtareas; las demás las mueve el PM.';
 /* ===== Sub-subtareas: tarea > subtarea (madre) > sub-subtarea (hija). Un solo nivel de sangría ===== */
 /* ===== Series por calendario: la MADRE (isSeries) guarda la regla y la plantilla; las HIJAS son las repeticiones ===== */
 const SERIES_HORIZON_DAYS=56;   // 8 semanas por adelantado
@@ -1588,7 +1589,7 @@ function agBlockDown(ev){
     const r=body.getBoundingClientRect(); const topPx=(blkTop-r.top);   // posición real del bloque soltado
     let min=AG.H0*60+agSnap(topPx/AG.rowH*60); min=Math.max(AG.H0*60,Math.min(min,AG.H1*60-Math.max(dur,15)));
     const time=String(Math.floor(min/60)).padStart(2,'0')+':'+String(min%60).padStart(2,'0');
-    if(body.dataset.day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes cambiar la hora dentro del mismo día.'); render(); return; }
+    if(body.dataset.day!==sub.date && !canSubDateOf(t,sub)){ alert(SUB_DATE_MSG+' Puedes cambiar la hora dentro del mismo día.'); render(); return; }
     depApply(tid,sid,{date:body.dataset.day,time},()=>{ logEvent(tid,'Movió la subtarea «'+sub.name+'» a '+body.dataset.day+' '+time); agSel={tid,sid}; render(); }); };
   document.addEventListener('pointermove',onMove); document.addEventListener('pointerup',onUp);
 }
@@ -1619,7 +1620,7 @@ function agListDrop(ev){ if(!agListDrag) return; ev.preventDefault(); const body
      «arrastrando» y se tragaba los siguientes clics (‹ › y Hoy dejaban de responder). */
   const day=body.dataset.day;
   setTimeout(()=>{
-    if(day!==sub.date && !canSubDate()){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
+    if(day!==sub.date && !canSubDateOf(t,sub)){ alert(SUB_DATE_MSG+' Puedes colocarla en su mismo día.'); agSel=d; render(); return; }
     depApply(d.tid,d.sid,{date:day,time},()=>{ logEvent(d.tid,'Agendó la subtarea «'+sub.name+'» el '+day+' '+time); agSel=d; render(); });
   },60); }
 function agNotes(days){ let h=''; const si=agSelInfo();
@@ -4481,7 +4482,7 @@ function subEditModal(){
   const t=store.task(subEd.tid); const s0=t&&(t.subtasks||[]).find(x=>x.id===subEd.sid); if(!s0){ subEd=null; return ''; }
   const s=s0.isSeries?Object.assign({},s0,{personId:seriesTpl(s0).personId,date:(s0.series||{}).startDate,time:seriesTpl(s0).time,durMin:seriesTpl(s0).durMin,team:seriesTpl(s0).team,invitados:seriesTpl(s0).invitados}):s0; const sr=s0.series||{};
   const p=store.project(t.projectId)||{id:''}; const c=store.client(p.clientId)||{people:[]}; const people=c.people||[];
-  const dateLocked=!canSubDate(); const et=store.etapaOfDate(p.id,s.date); const etapas=store.etapasOf(p.id);
+  const dateLocked=!canSubDate(); const dateOwn=!canSubDateOf(t,s0); const et=store.etapaOfDate(p.id,s.date); const etapas=store.etapasOf(p.id);
   const persOpts=['<option value="">— Sin responsable —</option>',staffOptEls(s.personId,' (Nuwek)'),...people.map(pp=>`<option value="${pp.id}" ${pp.id===s.personId?'selected':''}>${esc(pp.name)} (Cliente)</option>`)].join('');
   const durSet=[...new Set([...DUR_OPTS,...(s.durMin?[+s.durMin]:[])])].sort((a,b)=>a-b);
   const durOpts=`<option value="">— Sin estimación —</option>`+durSet.map(m=>`<option value="${m}" ${m===(+s.durMin)?'selected':''}>${fmtDurShort(m)}</option>`).join('');
@@ -4508,7 +4509,7 @@ function subEditModal(){
         <div class="field"><label>Nombre</label><input id="sm-name" value="${esc(s.name)}"></div>
         <div class="sm-req-note">Obligatorios: responsable, fecha, hora y estimación de tiempo. Si falta alguno, el lápiz se queda en rojo.</div>
         <div class="field row"><div><label>Responsable *</label><select id="sm-person" class="${bad(s.personId).trim()}">${persOpts}</select></div>
-          <div><label>${s0.isSeries?'Inicio de la serie *':(isPar?'Fecha (la de su sub-subtarea más lejana)':'Fecha *')}</label><input id="sm-date" type="date" value="${s.date||''}" class="${isPar?'':bad(s.date).trim()}" oninput="smDateChange()" ${isPar?'disabled title="Se calcula sola con la sub-subtarea más lejana"':(dateLocked?`disabled title="${SUB_DATE_MSG}"`:'')}></div></div>
+          <div><label>${s0.isSeries?'Inicio de la serie *':(isPar?'Fecha (la de su sub-subtarea más lejana)':'Fecha *')}</label><input id="sm-date" type="date" value="${s.date||''}" class="${isPar?'':bad(s.date).trim()}" oninput="smDateChange()" ${isPar?'disabled title="Se calcula sola con la sub-subtarea más lejana"':(dateOwn?`disabled title="${SUB_DATE_MSG}"`:'')}></div></div>
         <div class="field row"><div><label>${isPar?'Hora (no aplica)':'Hora *'}</label><input id="sm-time" type="time" value="${isPar?'':(s.time||'')}" class="${isPar?'':bad(s.time).trim()}" ${isPar?'disabled':''}></div>
           <div><label>${isPar?'Tiempo estimado (no aplica)':'Cuánto tardará *'}</label><select id="sm-dur" class="${isPar?'':bad(s.durMin).trim()}" ${isPar?'disabled':''}>${durOpts}</select></div></div>
         ${isPar?'<div class="hint" style="margin:-4px 0 10px">Esta subtarea tiene sub-subtareas: su fecha es la de la sub-subtarea más lejana, no lleva hora ni tiempo estimado, y se marca hecha sola cuando todas sus sub-subtareas estén hechas.</div>':''}
