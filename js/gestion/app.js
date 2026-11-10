@@ -368,6 +368,10 @@ function permLabel(k){ return PERM_LABEL[k]||PERM_LABEL.colab; }
 function permOptions(sel){ return ['gerencia','gerente','pm','colab'].map(k=>`<option value="${k}" ${(sel===k||(!sel&&k==='colab'))?'selected':''}>${PERM_LABEL[k]}</option>`).join(''); }
 function canManageProject(){ return can('proyectos'); }          // crear / editar / eliminar proyectos
 function canSubDateOf(t,s){ if(can('fechas')) return true; if(!s||!session) return false; const mine=x=>x&&(x.personId===currentUser||(x.team||[]).includes(currentUser)); if(mine(s)) return true; const par=s.parentId&&t&&(t.subtasks||[]).find(x=>x.id===s.parentId); return !!mine(par); }   // un colaborador mueve las fechas de SUS subtareas y sub-subtareas
+/* PM por proyecto: un proyecto sin PM marcados lo ven todos los PM; con PM marcados, solo ellos (Dirección y Gerencia ven todo) */
+function pmSeesProject(pid){ if(!isPM()) return true; const p=store.project(pid); const ids=(p&&p.pmIds)||[]; return !ids.length||ids.includes(currentUser); }
+function pmPickHtml(sel,pref){ const pms=store.activeStaff().filter(u=>(u.perm||'colab')==='pm'); if(!pms.length) return '<div class="hint">Aún no hay personas con el rol de PM.</div>'; return '<div class="pm-pick">'+pms.map(u=>`<label class="gf-opt"><input type="checkbox" class="${pref}" value="${u.id}" ${(sel||[]).includes(u.id)?'checked':''}> ${mnEsc(u.name)}</label>`).join('')+'</div><div class="hint">Si no marcas a nadie, lo verán todos los PM.</div>'; }
+function pmPickRead(pref){ return [...document.querySelectorAll('input.'+pref+':checked')].map(x=>x.value); }
 function canSubDate(){ return can('fechas'); }   // fechas de subtareas y de tareas
 const SUB_DATE_MSG='Solo puedes cambiar la fecha de tus propias subtareas y sub-subtareas; las demás las mueve el PM.';
 /* ===== Sub-subtareas: tarea > subtarea (madre) > sub-subtarea (hija). Un solo nivel de sangría ===== */
@@ -889,7 +893,7 @@ function projectHealth(pid){
 
 /* ================== WIZARD ================== */
 function startWizard(cid){ if(!canManageProject()) return;
-  wiz={step:1,clientId:cid,serviceId:store.d.services[0].id,price:'',monthlyPay:'',months:'',paymentDay:'',startDate:'',endDate:'',
+  wiz={step:1,pmIds:(isPM()?[currentUser]:[]),clientId:cid,serviceId:store.d.services[0].id,price:'',monthlyPay:'',months:'',paymentDay:'',startDate:'',endDate:'',
        alcances:[],loadTemplate:true,etapas:[],frentes:[]};
   render(); setTimeout(()=>{ const el=document.getElementById('w-monthly'); if(el) el.focus(); },30);
 }
@@ -922,6 +926,7 @@ function wizStep2(){
     <div class="field row"><div><label>Pago por mes</label><input id="w-monthly" type="number" placeholder="27083" value="${wiz.monthlyPay}"></div>
       <div><label># de meses</label><input id="w-months" type="number" placeholder="6" value="${wiz.months}"></div></div>
     <div class="field row"><div><label>Día de pago</label><input id="w-payday" type="number" min="1" max="31" placeholder="5" value="${wiz.paymentDay}"></div><div></div></div>
+    <div class="field"><label>¿Qué PM verán este proyecto?</label>${pmPickHtml(wiz.pmIds,'w-pm')}</div>
     <div class="field row"><div><label>Fecha de inicio</label><input id="w-start" type="date" value="${wiz.startDate}"></div>
       <div><label>Fecha de cierre</label><input id="w-end" type="date" value="${wiz.endDate}"></div></div>
     <div class="wiz-actions"><button class="btn ghost" onclick="closeWizard()">Cancelar</button><button class="btn" onclick="wizNext()">Continuar →</button></div>`;
@@ -946,7 +951,7 @@ function wizPickService(sid){
   render();
 }
 function wizPick(id){wiz.clientId=id; render();}
-function wizSaveStep2(){wiz.serviceId=val('w-svc')||wiz.serviceId;wiz.monthlyPay=+val('w-monthly')||0;wiz.months=+val('w-months')||0;wiz.paymentDay=+val('w-payday')||5;wiz.startDate=val('w-start');wiz.endDate=val('w-end');}
+function wizSaveStep2(){wiz.serviceId=val('w-svc')||wiz.serviceId;wiz.monthlyPay=+val('w-monthly')||0;wiz.months=+val('w-months')||0;wiz.paymentDay=+val('w-payday')||5;wiz.startDate=val('w-start');wiz.endDate=val('w-end'); if(document.querySelector('input.w-pm')||document.getElementById('w-svc')) wiz.pmIds=pmPickRead('w-pm');}
 function wizNext(){ if(wiz.step===1){ wizSaveStep2(); if(wiz.loadTemplate&&wiz.frentes.length===0){const sv=store.service(wiz.serviceId)||{frentes:[]}; (sv.frentes||[]).forEach((f,i)=>wiz.frentes.push({name:f.name,color:f.color||FRENTE_PALETTE[i%FRENTE_PALETTE.length]}));} } wiz.step=Math.min(2,wiz.step+1); render(); }
 function wizBack(){ if(wiz.step===1)wizSaveStep2(); wiz.step=Math.max(1,wiz.step-1); render(); }
 function wizAddAlc(){const it=val('w-alc-item');const q=val('w-alc-qty');if(!it||!q)return;wiz.alcances.push({item:it,qty:+q,period:val('w-alc-per')});render();}
@@ -959,7 +964,7 @@ async function wizCreate(){
   if(wiz.step===1) wizSaveStep2();
   if(wiz.frentes.length===0){alert('Agrega al menos un frente.');return;}
   if(!wiz.price){ wiz.price = (wiz.monthlyPay&&wiz.months) ? wiz.monthlyPay*wiz.months : ((store.service(wiz.serviceId)||{}).listPrice||0); }
-  const p=store.addProject({clientId:wiz.clientId,serviceId:wiz.serviceId,name:store.service(wiz.serviceId).name,price:wiz.price,monthlyPay:wiz.monthlyPay,months:wiz.months,paymentDay:wiz.paymentDay,startDate:wiz.startDate,endDate:wiz.endDate,status:'active',alcances:wiz.alcances});
+  const p=store.addProject({clientId:wiz.clientId,serviceId:wiz.serviceId,name:store.service(wiz.serviceId).name,price:wiz.price,monthlyPay:wiz.monthlyPay,months:wiz.months,paymentDay:wiz.paymentDay,startDate:wiz.startDate,endDate:wiz.endDate,status:'active',alcances:wiz.alcances,pmIds:wiz.pmIds||[]});
   // Guardar el PROYECTO en Supabase y ESPERAR a que exista antes de crear sus frentes/etapas
   // (frentes y etapas dependen del proyecto por llave foránea).
   if(typeof dbSaveProject==='function'){ try{ await dbSaveProject(p); }catch(e){ console.error(e); } }
@@ -2129,6 +2134,7 @@ function quickModal(){
         <div><label>Día de pago</label><input id="qm-payday" type="number" value="${p2.paymentDay||1}"></div></div>
       <div class="field row"><div><label>Inicio</label><input id="qm-start" type="date" value="${p2.startDate||''}"></div>
         <div><label>Cierre</label><input id="qm-end" type="date" value="${p2.endDate||''}"></div></div>
+      <div class="field"><label>¿Qué PM verán este proyecto?</label>${pmPickHtml(p2.pmIds,'qm-pm')}</div>
       <div class="hint">Editar el precio no toca el calendario de pagos (ese lo manejas aparte). Tip: puedes usar el total programado como precio.</div>
       <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
   } else if(qm.kind==='proyectoDel'){
@@ -2444,7 +2450,7 @@ function openScoreEdit(pid,sid){qm={kind:'scoreEdit',pid,sid};render();}
 function saveScore(){const u=val('qm-scurl');if(!u){alert('Pon el link del scorecard.');return;}store.addScorecard(qm.pid,val('qm-sctitle'),u,val('qm-scdate'));qm=null;render();}
 function saveScoreEdit(){const u=val('qm-scurl');if(!u){alert('Pon el link del scorecard.');return;}store.updateScorecard(qm.pid,qm.sid,{title:val('qm-sctitle'),url:u,date:val('qm-scdate')});qm=null;render();}
 function delScore(pid,sid){if(confirm('¿Eliminar este scorecard?')){store.removeScorecard(pid,sid);render();}}
-function saveProjectEdit(){const nm=(val('qm-pname')||'').trim(); if(!nm){alert('El proyecto necesita un nombre.');return;} store.updateProject(qm.pid,{name:nm,price:+val('qm-price')||0,monthlyPay:+val('qm-monthly')||0,months:+val('qm-months')||0,paymentDay:+val('qm-payday')||1,startDate:val('qm-start'),endDate:val('qm-end')});qm=null;render();}
+function saveProjectEdit(){const nm=(val('qm-pname')||'').trim(); if(!nm){alert('El proyecto necesita un nombre.');return;} store.updateProject(qm.pid,{name:nm,price:+val('qm-price')||0,monthlyPay:+val('qm-monthly')||0,months:+val('qm-months')||0,paymentDay:+val('qm-payday')||1,startDate:val('qm-start'),endDate:val('qm-end'),pmIds:pmPickRead('qm-pm')});qm=null;render();}
 function toggleSvc(id){ svcOpen[id]=!svcOpen[id]; render(); }
 function toggleTeam(key){ teamOpen[key]=(teamOpen[key]!==true); render(); }
 function openSvcForm(){qm={kind:'servicio'};render();}
@@ -4300,8 +4306,8 @@ let mnFilK='', mnFilQ='';
 function mnQFocus(){ const e=document.getElementById('mn-q'); if(e){ e.focus(); const n=e.value.length; try{ e.setSelectionRange(n,n); }catch(_){} } }
 function mnStBadge(s){ const ms=(s.minutas||[]); const cur=ms.find(m=>m.estado==='curso'); if(cur) return `<span class="mn-st rec" title="La minuta está abierta ahora mismo">● En curso · ${esc(store.person(cur.by).name||'')}</span>`; const done=ms.filter(m=>m.estado!=='curso'); if(done.length){ const unl=done.reduce((a,m)=>a+m.lines.filter(l=>l.kind==='a'&&!l.link).length,0); return `<span class="mn-st ok">✓ Terminada${done.length>1?' ('+done.length+')':''}</span>${unl?`<span class="mn-st warn" title="Actividades de la minuta que aún no se ligan a una subtarea">⚠ ${unl} sin ligar</span>`:''}`; } return `<span class="mn-st none" title="Todavía no se inicia la minuta">⏳ Sin iniciar</span>`; }
 function gestMinutas(){ const R=gestRange(); const td=todayISO(); const pers=x=>!gestPerson||x.s.personId===gestPerson||x.m&&(x.m.by===gestPerson||(x.m.asist||[]).some(a=>a.id===gestPerson))||(!x.m&&((x.s.team||[]).includes(gestPerson)));
-  let today=(td>=R.start&&td<=R.end)?mnTodayCitas().map(x=>Object.assign(x,{p:store.project(x.t.projectId)||{},c:store.client((store.project(x.t.projectId)||{}).clientId)||{name:''}})).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(pers):[];
-  let all=mnAll().filter(x=>{ const d=mnDay(x.m.start); return d>=R.start&&d<=R.end; }).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(pers); if(mnFilK==='pend') all=all.filter(x=>mnOpenCount(x.m)>0); else if(mnFilK) all=all.filter(x=>x.m.kind===mnFilK); if(mnFilQ){ const q=impNz(mnFilQ); all=all.filter(x=>impNz(x.s.name+' '+x.c.name+' '+x.t.name+' '+x.m.lines.map(l=>l.txt).join(' ')).includes(q)); }
+  let today=(td>=R.start&&td<=R.end)?mnTodayCitas().map(x=>Object.assign(x,{p:store.project(x.t.projectId)||{},c:store.client((store.project(x.t.projectId)||{}).clientId)||{name:''}})).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(x=>pmSeesProject(x.t.projectId)).filter(pers):[];
+  let all=mnAll().filter(x=>{ const d=mnDay(x.m.start); return d>=R.start&&d<=R.end; }).filter(gestPass).filter(x=>!gestProject||x.p.id===gestProject).filter(x=>pmSeesProject(x.t.projectId)).filter(pers); if(mnFilK==='pend') all=all.filter(x=>mnOpenCount(x.m)>0); else if(mnFilK) all=all.filter(x=>x.m.kind===mnFilK); if(mnFilQ){ const q=impNz(mnFilQ); all=all.filter(x=>impNz(x.s.name+' '+x.c.name+' '+x.t.name+' '+x.m.lines.map(l=>l.txt).join(' ')).includes(q)); }
   const rowT=x=>`<div class="cita-row"><div class="cita-when"><b>${x.s.time||'hoy'}</b><span>${x.k==='cliente'?'cliente':'interna'}</span></div><div class="cita-main"><div class="cita-nm">${esc(x.s.name)}</div><div class="muted" style="font-size:.78rem">${esc((store.client((store.project(x.t.projectId)||{}).clientId)||{}).name||'')} · ${esc(x.t.name)}</div></div><div class="cita-side" style="display:flex;align-items:center;gap:8px">${mnStBadge(x.s)}<button class="btn sm" onclick="mnSumOpen('${x.t.id}','${x.s.id}')">📝 Ver minuta</button></div></div>`;
   return `<div class="sec-title"><h2 style="font-size:1.1rem">Citas de hoy${(R.start>td||R.end<td)?' <span class="muted" style="font-weight:400">(fuera del periodo)</span>':''}</h2><button class="btn sm" onclick="mnNewOpen()">+ Nueva minuta</button></div><div class="cita-list">${today.map(rowT).join('')||'<div class="muted">Hoy no hay citas con hora y más de una persona.</div>'}</div>
     <div class="sec-title" style="margin-top:18px"><h2 style="font-size:1.1rem">Historial de minutas <span class="muted" style="font-weight:400">· ${all.length} · ${esc(gestRangeLabel(R))}</span></h2><div style="display:flex;gap:8px"><select class="filter-val" onchange="mnFilK=this.value;render()"><option value="">Todas</option><option value="cliente" ${mnFilK==='cliente'?'selected':''}>Con cliente</option><option value="interna" ${mnFilK==='interna'?'selected':''}>Internas</option><option value="pend" ${mnFilK==='pend'?'selected':''}>Con pendientes por cumplir</option></select><input id="mn-q" class="filter-val" placeholder="🔎 Buscar en el historial…" value="${esc(mnFilQ)}" oninput="mnFilQ=this.value;render();mnQFocus()" style="width:230px;background:#fff;font-family:inherit;font-size:.9rem;color:inherit"></div></div>
@@ -5010,7 +5016,7 @@ boot();
 
 /* ===== Círculo flotante de pendientes de minuta (F8) ===== */
 let ppOpen=false, ppMin='', ppPer='', ppShut={}, ppGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekPpGeo')||'null')||{}; }catch(_){ return {}; } })();
-function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>g.items.forEach(l=>{ if(!l.done&&(l.resp===currentUser||isPM())) mine.push({g,l}); })); return mine; }
+function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>{ const lk=g.head&&g.head.link; const lt=lk&&store.task(lk.tid); if(!pmSeesProject((lt||g.t).projectId)) return; g.items.forEach(l=>{ if(!l.done&&(l.resp===currentUser||isPM())) mine.push({g,l}); }); }); return mine; }
 function ppToggle(){ ppOpen=!ppOpen; ppRender(); }
 function ppSetPer(v){ ppPer=v||''; ppRender(); }
 function ppSetMin(v){ ppMin=(ppMin===v)?'':v; ppRender(); }

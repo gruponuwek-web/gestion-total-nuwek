@@ -1475,3 +1475,4 @@
 .pp-mins button.pp-mc{border-color:var(--pc);background:color-mix(in srgb,var(--pc) 14%,#fff);color:#1f2d27}
 .pp-mins button.pp-mc.on{background:var(--pc);color:#fff;border-color:var(--pc)}
 .sub-chip.out-et{background:#fff1d6;color:#8a5a00;border-color:#f0c36a}
+.pm-pick{display:flex;flex-wrap:wrap;gap:6px 16px;padding:6px 2px}
