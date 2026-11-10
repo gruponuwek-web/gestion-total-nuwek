@@ -1483,3 +1483,7 @@
 .cpm-form{margin-top:10px}
 .modal-card.mn-full{max-width:96vw!important;width:96vw;min-height:92vh;margin:0 auto}.modal-card.mn-full .m-body{font-size:1.02rem}
 .cpm-full{position:fixed;inset:0;z-index:120;background:#f6f5ef;overflow:auto;padding:18px max(16px,4vw)}.cpm-full .cpm-g{padding:9px 0}.cpm-full .cpm-h{font-size:1.05rem}.cpm-full .cpm-k{font-size:.98rem}
+/* panel de minuta en pantalla completa */
+#mn-root.big .mn-pw{position:fixed!important;left:3vw!important;right:3vw!important;top:3vh!important;bottom:3vh!important;width:auto!important;height:auto!important;max-height:none!important;z-index:171}
+#mn-root.big .mn-pw .mn-panel{font-size:1.02rem}#mn-root.big .mn-rz{display:none}
+#mn-root.big .mn-fab{position:fixed;left:18px;bottom:18px}
