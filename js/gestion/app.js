@@ -4845,9 +4845,10 @@ function restoreClientSession(){ try{ const o=JSON.parse(localStorage.getItem('n
 function clientLogout(){ if(typeof gcalForget==='function') gcalForget(false); clientSess=null; cpChg=null; cpChgShown=false; cpTaskId=null; cpUserEd=null; try{ localStorage.removeItem('nuwekClient'); sessionStorage.removeItem('nuwekCpView'); }catch(_){} render(); }
 function cpCtx(){ if(!clientSess) return null; const c=store.client(clientSess.cid); const me=c&&(c.people||[]).find(x=>x.id===clientSess.pid); if(!c||c.activo===false||!me||!me.portal||me.portal.activo===false) return null; return {c,me,isAdmin:me.portal.rol==='admin'}; }
 function setCpView(v){ cpView=v; try{ sessionStorage.setItem('nuwekCpView',v); }catch(_){} render(); window.scrollTo(0,0); }
-function cpSecs(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['minutas','🗒️ Minutas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas'],['minutas','🗒️ Minutas']]; }
+function cpSecs(ctx){ const L=cpSecs0(ctx); return cpMySubs(ctx).length?L:L.filter(x=>x[0]!=='tareas'); }
+function cpSecs0(ctx){ return ctx.isAdmin?[['inicio','🏠 Inicio'],['tareas','✅ Mis tareas'],['citas','📅 Citas'],['minutas','🗒️ Minutas'],['gantt','📊 Gantt'],['finanzas','💰 Finanzas'],['tiempos','⏱ Tiempos'],['notas','📝 Notas'],['score','🏆 Scorecard'],['usuarios','👥 Usuarios']]:[['tareas','✅ Mis tareas'],['citas','📅 Mis citas'],['minutas','🗒️ Minutas']]; }
 function cpGroups(ctx){ if(!ctx.isAdmin) return [{t:'',items:cpSecs(ctx)}]; const m={}; cpSecs(ctx).forEach(x=>m[x[0]]=x);
-  return [{t:'Seguimiento',items:['inicio','tareas','citas','minutas','gantt'].map(k=>m[k])},{t:'Resultados',items:['tiempos','score','notas'].map(k=>m[k])},{t:'Administración',items:['finanzas','usuarios'].map(k=>m[k])}]; }
+  return [{t:'Seguimiento',items:['inicio','tareas','citas','minutas','gantt'].map(k=>m[k]).filter(Boolean)},{t:'Resultados',items:['tiempos','score','notas'].map(k=>m[k]).filter(Boolean)},{t:'Administración',items:['finanzas','usuarios'].map(k=>m[k]).filter(Boolean)}]; }
 function renderClientPortal(){
   const app=document.getElementById('app'); const ctx=cpCtx(); if(!ctx){ clientSess=null; try{ localStorage.removeItem('nuwekClient'); }catch(_){} app.innerHTML=loginScreen(); document.getElementById('modal-root').innerHTML=''; return; }
   if(ctx.me.portal&&ctx.me.portal.reset&&!cpChg&&!cpChgShown){ cpChgShown=true; cpChg={forced:true}; }
@@ -4864,7 +4865,7 @@ function renderClientPortal(){
 /* ---- datos del cliente ---- */
 function cpProjects(ctx){ return store.projectsOf(ctx.c.id); }
 function cpAllSubs(ctx){ const out=[]; cpProjects(ctx).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(!s.isSeries) out.push({s,t,p}); }))); return out; }
-function cpMySubs(ctx){ return cpAllSubs(ctx).filter(({s})=>s.personId===ctx.me.id||(s.invitados||[]).includes(ctx.me.id)); }
+function cpMySubs(ctx){ return cpAllSubs(ctx).filter(({s})=>s.personId===ctx.me.id); }   // solo lo que lo nombra como responsable (las citas a las que está invitado salen en Citas)
 function cpProgress(p){ let d=0,n=0; store.tasksOf(p.id).forEach(t=>workSubs(t).forEach(s=>{ n++; if(s.done) d++; })); return {d,n,pct:n?Math.round(d/n*100):0}; }
 function cpSubRow(it,ctx){ const {s,t,p}=it; const per=store.person(s.personId); const today=todayISO(); const late=!s.done&&s.date&&s.date<today; const cita=subHasCita(s); const est=citaEstadoInfo(s);
   const when=s.date?(s.date===today?'hoy':dLabel(s.date)):'sin fecha';
@@ -4912,7 +4913,7 @@ function cpNextHtml(ctx){ const items=clientNextSubs(ctx.c); const rows=items.ma
 /* ---- Mis tareas ---- */
 function cpTareas(ctx){ const mine=cpMySubs(ctx); const today=todayISO(); const pend=mine.filter(x=>!x.s.done).sort((a,b)=>((a.s.date||'9')+(a.s.time||''))<((b.s.date||'9')+(b.s.time||''))?-1:1); const hechas=mine.filter(x=>x.s.done).slice(-8).reverse();
   const g=(t,arr)=>arr.length?`<div class="sec-title"><h2 style="font-size:1.05rem">${t} <span class="muted" style="font-size:.8rem">${arr.length}</span></h2></div><div class="cita-list">${arr.map(x=>cpSubRow(x,ctx)).join('')}</div>`:'';
-  return `<div class="muted" style="margin-bottom:10px">Las actividades en las que participas${ctx.isAdmin?'':' (solo ves lo tuyo)'}.</div>`+(mine.length?g('🔴 Atrasadas',pend.filter(x=>x.s.date&&x.s.date<today))+g('🟡 Hoy',pend.filter(x=>x.s.date===today))+g('🗓️ Próximas',pend.filter(x=>x.s.date&&x.s.date>today))+g('⚪ Sin fecha',pend.filter(x=>!x.s.date))+g('✅ Hechas recientemente',hechas):'<div class="muted">Por ahora no tienes actividades asignadas. 🎉</div>'); }
+  return `<div class="muted" style="margin-bottom:10px">Las actividades que tienen tu nombre como responsable.</div>`+(mine.length?g('🔴 Atrasadas',pend.filter(x=>x.s.date&&x.s.date<today))+g('🟡 Hoy',pend.filter(x=>x.s.date===today))+g('🗓️ Próximas',pend.filter(x=>x.s.date&&x.s.date>today))+g('⚪ Sin fecha',pend.filter(x=>!x.s.date))+g('✅ Hechas recientemente',hechas):'<div class="muted">Por ahora no tienes actividades asignadas. 🎉</div>'); }
 /* ---- Citas ---- */
 function cpCitas(ctx){ return (typeof gcalClientCitas==='function'?gcalClientCitas(ctx):'')+citasHistorialHtml(ctx.c,{filter:x=>ctx.isAdmin||(x.s.invitados||[]).includes(ctx.me.id)}); }
 /* ---- Gantt ---- */
