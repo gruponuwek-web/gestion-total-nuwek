@@ -1481,3 +1481,5 @@
 .cpm-g{padding:6px 0;border-bottom:1px solid #eef0ec}.cpm-h{font-size:.92rem}.cpm-k{padding:2px 0 2px 18px;font-size:.86rem}
 .cpm-cm{border:0;background:transparent;cursor:pointer;opacity:.35;font-size:.8rem;margin-left:6px}.cpm-cm:hover,.cpm-cm.on{opacity:1}
 .cpm-form{margin-top:10px}
+.modal-card.mn-full{max-width:96vw!important;width:96vw;min-height:92vh;margin:0 auto}.modal-card.mn-full .m-body{font-size:1.02rem}
+.cpm-full{position:fixed;inset:0;z-index:120;background:#f6f5ef;overflow:auto;padding:18px max(16px,4vw)}.cpm-full .cpm-g{padding:9px 0}.cpm-full .cpm-h{font-size:1.05rem}.cpm-full .cpm-k{font-size:.98rem}

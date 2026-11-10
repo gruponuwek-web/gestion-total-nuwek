@@ -4238,7 +4238,8 @@ let mnSum=null, mnAuth=null; const mnFails={};
 function mnCanEdit(m){ return m.estado==='curso'?(m.by===currentUser||can('minutaEditar')):can('minutaEditar'); }
 function mnLogEdit(label){ const g=mnGet(); if(g&&g.m.estado!=='curso') logEvent(g.t.id,'Editó la minuta cerrada de «'+g.s.name+'»'+(label?': '+label:'')); }
 function mnSumOpen(tid,sid,mid){ { const t0=store.task(tid), s0=t0&&(t0.subtasks||[]).find(x=>x.id===sid); if(s0&&s0.unida){ const R=citaRoot(t0,s0); tid=R.t.id; sid=R.s.id; } } mnSum={tid,sid,mid:mid||''}; mnPre=null; render(); }
-function mnSumClose(){ mnSum=null; render(); }
+let mnSumFull=false;
+function mnSumClose(){ mnSum=null; mnSumFull=false; render(); }
 function mnSumPick(mid){ mnSum.mid=mid; mnSum.askDel=false; render(); }
 function mnDel(){ const g=mnSumGet(); if(!g||!g.m) return; if(!can('minutaEliminar')){ shareToast('Tu perfil no puede eliminar minutas.'); return; }
   if(!mnSum.askDel){ mnSum.askDel=true; render(); return; }
@@ -4260,7 +4261,7 @@ function mnSumBody(g){ const esc=mnEsc; const {t,s,m}=g; const by=store.person(m
     <h5>Enlaces</h5>${m.links.map(x=>`<div class="mn-sl"><a href="${esc(x.u)}" target="_blank" rel="noopener noreferrer">🔗 ${esc(x.t)}</a></div>`).join('')||'<div class="muted">Sin enlaces.</div>'}</div>`; }
 function mnSumModal(){ const esc=mnEsc; const g=mnSumGet(); if(!g){ mnSum=null; return ''; } const {t,s,ms,m}=g; const onPage=!!(publicSes&&(publicSes.sid===s.id||(()=>{ const pt=store.task(publicSes.tid); const ps=pt&&(pt.subtasks||[]).find(x=>x.id===publicSes.sid); return !!ps&&citaRootS(ps)===s; })())); const p=store.project(t.projectId)||{}; const c=store.client(p.clientId)||{name:''}; const k=citaKind(s)||(subHasCita(s)?'cliente':'interna');
   let tok=s.shareToken; const url=tok?sessionShareUrl(t.id,s.id,tok):''; 
-  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)mnSumClose()"><div class="modal-card" style="max-width:640px"><div class="m-head"><div class="m-top"><div><div class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</div><h3 style="margin:6px 0 0">📝 ${esc(s.name)}</h3><div class="muted" style="font-size:.8rem">${esc(c.name)} · ${esc(p.name)} · ${esc(t.name)}${s.date?' · '+esc(dLabel(s.date)):''} ${esc(s.time||'')}</div></div><button class="x" onclick="mnSumClose()">×</button></div></div><div class="m-body">
+  return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)mnSumClose()"><div class="modal-card ${mnSumFull?'mn-full':''}" style="max-width:640px"><div class="m-head"><div class="m-top"><div><div class="pill ${k==='cliente'?'green':'yellow'}">${k==='cliente'?'con cliente':'interna'}</div><h3 style="margin:6px 0 0">📝 ${esc(s.name)}</h3><div class="muted" style="font-size:.8rem">${esc(c.name)} · ${esc(p.name)} · ${esc(t.name)}${s.date?' · '+esc(dLabel(s.date)):''} ${esc(s.time||'')}</div></div><span style="display:flex;gap:6px;align-items:center"><button class="btn ghost sm" title="${mnSumFull?'Salir de pantalla completa':'Ver en pantalla completa'}" onclick="mnSumFull=!mnSumFull;render()">${mnSumFull?'⤡ Reducir':'⛶ Pantalla completa'}</button><button class="x" onclick="mnSumClose()">×</button></span></div></div><div class="m-body">
     <div class="field"><label>🔗 Link de la sesión</label><div style="display:flex;gap:6px"><input readonly value="${esc(url||'Se genera al copiarlo')}" style="flex:1;font-size:.78rem" onfocus="this.select()"><button class="btn ghost sm" onclick="copySessionLink('${t.id}','${s.id}');setTimeout(render,300)">Copiar</button></div></div>
     ${m?`${ms.length>1?`<div class="mn-chips" style="margin-bottom:8px">${ms.map(x=>`<button class="mn-chip ${x.id===m.id?'on':''}" onclick="mnSumPick('${x.id}')">${esc(dLabel(mnDay(x.start)))} · ${x.estado==='curso'?'en curso':mnClockTxt(new Date(x.end)-new Date(x.start))}</button>`).join('')}</div>`:''}${mnSumBody(g)}${mnPubStaffHtml(t,s,m)}
       <div class="wiz-actions"><span class="muted" style="font-size:.74rem;margin-right:auto">${can('minutaEditar')?'Tu perfil puede editar; cada cambio queda en el log.':'Tu perfil no puede editar una minuta cerrada.'}</span>
@@ -5041,7 +5042,7 @@ function ppGeoApply(){ const r=document.getElementById('pp-root'); if(!r) return
 
 
 /* ===== PUBLICAR minuta: el cliente la ve en su portal, comenta y el administrador la valida (queda bloqueada) ===== */
-let mnBypass=false, cpMin=null, cpMinV=0, cpMinLine='';
+let mnBypass=false, cpMin=null, cpMinV=0, cpMinLine='', cpMinFull=false;
 function mnLocked(m){ return !!(m&&m.pub&&m.pub.val); }
 function mnPubWrite(tid,sid,mid,fn){ const t=store.task(tid); const sb=t&&(t.subtasks||[]).find(x=>x.id===sid); if(!sb) return false; const arr=(sb.minutas||[]).map(x=>{ if(x.id!==mid) return x; const y=JSON.parse(JSON.stringify(x)); y.pub=y.pub||{versions:[],comments:[],val:null}; fn(y); return y; }); store.updateSubtask(tid,sid,{minutas:arr}); return true; }
 function mnPublish(tid,sid,mid){ const f=mnFindMin(mid); if(!f) return; const m=f.m;
@@ -5065,7 +5066,8 @@ function mnPubStaffHtml(t,s,m){ const esc=mnEsc; if(m.estado==='curso') return '
 /* ---- lado del cliente ---- */
 function cpMinList(ctx){ const out=[]; cpProjects(ctx).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(sb=>(sb.minutas||[]).forEach(m=>{ if(m.pub&&(m.pub.versions||[]).length) out.push({t,s:sb,m,p}); })))); return out.sort((a,b)=>{ const x=a.m.pub.versions; const y=b.m.pub.versions; return x[x.length-1].ts<y[y.length-1].ts?1:-1; }); }
 function cpMinOpen(mid){ cpMin=mid; cpMinV=0; cpMinLine=''; render(); window.scrollTo(0,0); }
-function cpMinBack(){ cpMin=null; cpMinLine=''; render(); }
+function cpMinBack(){ cpMin=null; cpMinLine=''; cpMinFull=false; render(); }
+function cpMinFullTog(){ cpMinFull=!cpMinFull; render(); }
 function cpMinVer(n){ cpMinV=n; render(); }
 function cpMinLinePick(lid){ cpMinLine=(cpMinLine===lid)?'':lid; render(); setTimeout(()=>{ const e=document.getElementById('cpm-in'); if(e) e.focus(); },50); }
 function cpMinSend(){ const ctx=cpCtx(); const f=cpMin&&mnFindMin(cpMin); if(!ctx||!f) return; const el=document.getElementById('cpm-in'); const txt=(el&&el.value||'').trim(); if(!txt) return; if(!mnPubComment(f.t.id,f.s.id,f.m.id,'c',ctx.me.id,ctx.me.name||'',txt,cpMinLine)){ alert('Esta minuta ya fue validada y no admite más comentarios.'); render(); return; } cpMinLine=''; render(); }
@@ -5082,10 +5084,10 @@ function cpMinDetail(ctx,f){ const esc=mnEsc; const {t,s:sb,m}=f; const vs=m.pub
   const tgt=cpMinLine?mnPubLineTxt(m,vs.length,cpMinLine):'';
   const form=val?'':`<div class="cpm-form">${cpMinLine?`<div class="muted" style="font-size:.78rem;margin-bottom:4px">Comentando sobre: «${esc(tgt.slice(0,70))}» <a style="cursor:pointer" onclick="cpMinLinePick('${cpMinLine}')">(quitar)</a></div>`:''}<textarea id="cpm-in" rows="3" placeholder="Escribe un comentario para Grupo Nuwek…" style="width:100%"></textarea><div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button class="btn" onclick="cpMinSend()">Enviar comentario</button>${ctx.isAdmin?`<button class="btn" style="background:#2f9e5b" onclick="cpMinValidate()">✅ Validar esta minuta (v${vs.length})</button>`:'<span class="muted" style="font-size:.78rem;align-self:center">La validación la hace el administrador de tu cuenta.</span>'}</div></div>`;
   const asist=(sn.asist||[]).map(a=>`<span class="mn-chip" style="cursor:default">${esc(a.name)}</span>`).join('');
-  return `<button class="btn ghost sm" onclick="cpMinBack()">← Todas las minutas</button><div class="card" style="margin-top:10px"><h3 style="margin:0 0 2px">🗒️ ${esc(sb.name)}</h3><div class="muted" style="font-size:.8rem">${esc(t.name)} · ${esc(dLabel(mnDay(sn.start)))} · ${esc(new Date(sn.start).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}))}</div>
+  return `<div class="${cpMinFull?'cpm-full':''}"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" onclick="cpMinBack()">← Todas las minutas</button><button class="btn ghost sm" onclick="cpMinFullTog()">${cpMinFull?'⤡ Reducir':'⛶ Pantalla completa'}</button></div><div class="card" style="margin-top:10px"><h3 style="margin:0 0 2px">🗒️ ${esc(sb.name)}</h3><div class="muted" style="font-size:.8rem">${esc(t.name)} · ${esc(dLabel(mnDay(sn.start)))} · ${esc(new Date(sn.start).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}))}</div>
     ${val?`<div class="ses-resp" style="background:#e8f6ee;color:#1f6b45;margin:10px 0">✅ <b>Validada por ${esc(val.name)}</b> el ${esc(dLabel(mnDay(val.ts)))} (versión ${val.v}). Ya no admite cambios ni comentarios.</div>`:''}
     ${vs.length>1?`<div class="mn-chips" style="margin:10px 0">${vs.map(x=>`<button class="mn-chip ${x.n===cur.n?'on':''}" onclick="cpMinVer(${x.n})">Versión ${x.n} · ${esc(dLabel(mnDay(x.ts)))}</button>`).join('')}</div>`:''}
     ${!isLast?`<div class="muted" style="font-size:.78rem;margin:6px 0">Estás viendo una versión anterior. La vigente es la ${vs.length}.</div>`:''}
     ${asist?`<div style="margin:10px 0 4px"><b style="font-size:.82rem">Asistentes</b><div class="mn-chips" style="margin-top:4px">${asist}</div></div>`:''}
     <div style="margin-top:10px">${body||'<div class="muted">Sin contenido.</div>'}</div></div>
-    <div class="card" style="margin-top:12px"><b>💬 Comentarios (${cs.length})</b>${csHtml||'<div class="muted" style="margin:6px 0">Aún no hay comentarios.</div>'}${form}</div>`; }
+    <div class="card" style="margin-top:12px"><b>💬 Comentarios (${cs.length})</b>${csHtml||'<div class="muted" style="margin:6px 0">Aún no hay comentarios.</div>'}${form}</div></div>`; }
