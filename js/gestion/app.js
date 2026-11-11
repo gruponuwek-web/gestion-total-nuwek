@@ -240,7 +240,7 @@ class Store{
   subSetLink(tid,sid,idx,field,val){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links&&s.links[idx]){ s.links[idx][field]=val; this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   subDelLink(tid,sid,idx){ const t=this.task(tid); const s=t.subtasks.find(x=>x.id===sid); if(s&&s.links){ s.links.splice(idx,1); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t); } }
   releaseNext(t,s){ const now=new Date().toISOString(); (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id&&!d.done){ d.turno={pred:s.id,predName:s.name,ts:now,by:currentUser}; d.turnoAck={}; } }); }
-  updateSubtask(tid,sid,patch){ if(patch&&patch.date) patch=Object.assign({},patch,{date:okDate(patch.date)}); const t=this.task(tid); if(!t) return; const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDateOf(t,s)){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateSubtask(tid,sid,patch){ if(patch&&patch.date) patch=Object.assign({},patch,{date:okDate(patch.date)}); const t=this.task(tid); if(!t) return; const s=(t.subtasks||[]).find(x=>x.id===sid); if(s){ if(patch&&patch.date!==undefined&&patch.date!==s.date){ if(!canSubDateOf(t,s)){ patch=Object.assign({},patch); delete patch.date; } else s.dateConflict=false; } const wasDone=s.done; if(patch&&patch.done!==undefined&&patch.noEntregada===undefined&&s.noEntregada) patch=Object.assign({},patch,{noEntregada:false}); Object.assign(s,patch); if(patch&&patch.done===true&&!wasDone) this.releaseNext(t,s); if(patch&&patch.done===false&&wasDone) (t.subtasks||[]).forEach(d=>{ if(d.dependsOn===s.id){ delete d.turno; delete d.turnoAck; } }); if(patch&&patch.done===true&&!wasDone&&s.repeatAfter&&!subIsChild(t,s)) this.spawnNextSubtask(t,s); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   /* Ciclo "N días después de terminar": al terminar la subtarea se crea la siguiente (con sus sub-subtareas) en hoy + N */
   spawnNextSubtask(t,s){ const n=+s.repeatAfter; if(!n||(s.nextId&&t.subtasks.some(x=>x.id===s.nextId))) return null;
     const nd=addDaysISO(todayISO(),n); const shift=daysBetween(s.date||todayISO(),nd); const now=new Date().toISOString(); const sid=s.seriesId||s.id;
@@ -302,7 +302,7 @@ class Store{
     this.d.payments=(this.d.payments||[]).filter(x=>x.projectId!==pid); this.d.frentes=this.d.frentes.filter(f=>f.projectId!==pid); this.d.etapas=this.d.etapas.filter(e=>e.projectId!==pid);
     this.d.projects=this.d.projects.filter(p=>p.id!==pid); this.save(); return true; }
   removeTask(id){ this.d.tasks=this.d.tasks.filter(t=>t.id!==id); this.d.comments=this.d.comments.filter(c=>c.taskId!==id); this.save(); if(typeof dbDeleteTask==='function') dbDeleteTask(id); }
-  updateTask(tid,patch){ const t=this.task(tid); if(t){ if(patch&&patch.dueDate!==undefined&&patch.dueDate!==t.dueDate&&!canSubDate()){ patch=Object.assign({},patch); delete patch.dueDate; } const wasSt=t.status; Object.assign(t,patch); if(patch&&patch.status==='done'&&wasSt!=='done'&&t.repeatAfter) this.spawnNextTask(t); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
+  updateTask(tid,patch){ const t=this.task(tid); if(t){ if(patch&&patch.dueDate!==undefined&&patch.dueDate!==t.dueDate&&!canSubDate()){ patch=Object.assign({},patch); delete patch.dueDate; } const wasSt=t.status; if(patch&&patch.status!==undefined&&patch.noEntregada===undefined&&t.noEntregada&&patch.status!=='done') patch=Object.assign({},patch,{noEntregada:false}); Object.assign(t,patch); if(patch&&patch.status==='done'&&wasSt!=='done'&&t.repeatAfter) this.spawnNextTask(t); this.save(); if(typeof dbSaveTask==='function') dbSaveTask(t);} }
   addComment(tid,uid,text,attachments,mentions){ const cm={id:'cm_'+Date.now(),taskId:tid,userId:uid,text,ts:new Date().toISOString(),attachments:attachments||[],mentions:mentions||[],readBy:[]}; this.d.comments.push(cm); this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
   updateComment(cmId,text,mentions){ const cm=this.d.comments.find(c=>c.id===cmId); if(!cm) return; cm.text=text; cm.readBy=(cm.readBy||[]).filter(id=>(mentions||[]).includes(id)); cm.mentions=mentions||[]; this.save(); if(typeof dbSaveComment==='function') dbSaveComment(cm); }
   removeComment(cmId){ this.d.comments=this.d.comments.filter(c=>c.id!==cmId); this.save(); if(typeof dbDeleteComment==='function') dbDeleteComment(cmId); }
@@ -498,7 +498,7 @@ let tareasMode='kanban', calMonth=new Date(), groupBy='frente', filterPersona=''
 
 const money=n=>'$'+Math.round(n||0).toLocaleString('es-MX');
 function fmtTime(min){min=Math.round(min||0); if(min<=0)return'—'; if(min<60)return min+' min'; const h=Math.floor(min/60),m=min%60; return m?`${h}h ${m}m`:`${h}h`;}
-function dk(t){return t.status==='done'?'✓ ':'';}
+function dk(t){return t.status==='done'?(t.noEntregada?'':'✓ '):'';}
 function taskDelay(t){const ds=(t.subtasks||[]).map(s=>s.date).filter(Boolean).sort();if(!ds.length)return 0;const last=ds[ds.length-1];return last>t.dueDate?Math.round((new Date(last)-new Date(t.dueDate))/86400000):0;}
 const statusLabel={'to-do':'To Do','in-progress':'En Progreso','done':'Hecho','ajuste':'Ajuste','on-hold':'En Pausa'};
 function avatar(p,sm){p=p||{}; if(p.photo) return `<span class="avatar ${sm?'sm':''}" style="background-image:url('${p.photo}');background-size:cover;background-position:center"></span>`; return `<span class="avatar ${sm?'sm':''}" style="background:${p.color||'#8a9a93'}">${(p.name||'?')[0]}</span>`;}
@@ -605,7 +605,7 @@ function renderBase(){
     app.innerHTML = shell(body);
   }
   // modal
-  document.getElementById('modal-root').innerHTML = (puntosOpen ? puntosModal() : '') + (trashOpen ? trashModal() : '') + (cliPeople ? cliPeopleModal() : '') + (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
+  document.getElementById('modal-root').innerHTML = (puntosOpen ? puntosModal() : '') + (delAsk ? delAskModal() : '') + (trashOpen ? trashModal() : '') + (cliPeople ? cliPeopleModal() : '') + (modalTask ? taskModal() : (qm ? quickModal() : '')) + (libModal ? libraryModal() : '') + (wiz ? wizModal() : '') + (subEd ? subEditModal() : '') + (clientPop ? clientPopModal() : '') + (verbInfo ? verbInfoModal() : '') + (expS ? expModal() : '') + (pdfS ? pdfModal() : '') + (mnSum ? mnSumModal() : '') + (joinAsk ? joinAskModal() : '') + (mnNew ? mnNewModal() : '') + (movT ? movTModal() : '') + (movS ? movModal() : '') + (dupS ? dupModal() : '') + (accEd ? accModal() : '') + (copyS ? copyModal() : '') + (depPrev ? depPrevModal() : '') + (lightbox ? lightboxModal() : '');
   setTimeout(ganttAfter,0);
 }
 function isMiEspacio(){ return view==='op_pendientes'||view==='op_kanban'||view==='op_agenda'||view==='op_desempeno'; }
@@ -856,7 +856,7 @@ function viewCliente(){
     return `<div class="card click" style="${conc?'opacity:.85':''}" onclick="openProject('${p.id}')">
       <div style="display:flex;justify-content:space-between;align-items:start">
         <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div>${conc?' <span class="pill gray">✅ Concluido</span>':''}<h3 style="margin:8px 0 2px">${p.name}</h3></div>
-        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}" title="Avance: ${health.hechas} de ${health.total} actividades hechas. Puntualidad: ${health.pct}% (actividades hechas o por hacer dentro de su fecha).">${health.icon} ${health.avance}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
+        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}" title="Puntualidad: ${health.pct}% de las actividades están hechas o por hacer dentro de su fecha (las tardías la bajan).">${health.icon} ${health.pct}%</span><span class="pill ${health.avance===100?'green':'gray'}" title="Avance: ${health.hechas} de ${health.total} actividades realizadas.">✓ ${health.avance}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
       </div>
       <div class="muted" style="font-size:.85rem;margin-top:6px">${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}</div>
     </div>`;
@@ -885,12 +885,12 @@ function viewCliente(){
 }
 
 function projectHealth(pid){
-  const ts=store.tasksOf(pid); let onTime=0,total=0,hechas=0;
-  ts.forEach(t=>{ (t.subtasks||[]).forEach(s=>{ total++; if(s.done) hechas++; const today=todayISO();
+  const ts=store.tasksOf(pid); let onTime=0,total=0,hechas=0,all=0;
+  ts.forEach(t=>{ (t.subtasks||[]).forEach(s=>{ all++; if(s.noEntregada) return; total++; if(s.done) hechas++; const today=todayISO();
     if(s.done){ if(s.date<=t.dueDate) onTime++; } else { if(s.date>=today) onTime++; } }); });
   const pct= total? Math.round(onTime/total*100):100;
-  const avance= total?Math.round(hechas/total*100):0; const cls= avance===100?'green':(pct>=75?'green':pct>=50?'yellow':'red'); const icon= avance===100?'✅':(pct>=75?'🟢':pct>=50?'🟡':'🔴');
-  return {pct,cls,icon,avance,hechas,total};
+  const avance= all?Math.round(hechas/all*100):0; const cls= pct>=75?'green':pct>=50?'yellow':'red'; const icon= pct>=75?'🟢':pct>=50?'🟡':'🔴';
+  return {pct,cls,icon,avance,hechas,total:all};
 }
 
 /* ================== WIZARD ================== */
@@ -1122,7 +1122,7 @@ function viewTableros(){
   const projs=store.d.projects.filter(p=>store.d.tasks.some(t=>t.projectId===p.id&&personParticipates(t,currentUser)) || store.d.tasks.some(t=>t.projectId===p.id&&(t.subtasks||[]).some(s=>s.personId===currentUser)));
   const cards=(projs.length?projs:store.d.projects).map(p=>{const c=store.client(p.clientId);const sv=store.service(p.serviceId);const h=projectHealth(p.id);
     return `<div class="card click" onclick="openProject('${p.id}')">
-      <div style="display:flex;justify-content:space-between;align-items:start"><div><div class="pill yellow">${sv?sv.name:''}</div><h3 style="margin:8px 0 2px">${p.name}</h3><div class="muted" style="font-size:.85rem">${c.name}</div></div><span class="pill ${h.cls}" title="Avance: ${h.hechas} de ${h.total} actividades hechas. Puntualidad: ${h.pct}%.">${h.icon} ${h.avance}%</span></div></div>`;}).join('');
+      <div style="display:flex;justify-content:space-between;align-items:start"><div><div class="pill yellow">${sv?sv.name:''}</div><h3 style="margin:8px 0 2px">${p.name}</h3><div class="muted" style="font-size:.85rem">${c.name}</div></div><span style="display:flex;gap:6px"><span class="pill ${h.cls}" title="Puntualidad: ${h.pct}%">${h.icon} ${h.pct}%</span><span class="pill ${h.avance===100?'green':'gray'}" title="Avance: ${h.hechas} de ${h.total} actividades realizadas.">✓ ${h.avance}%</span></span></div></div>`;}).join('');
   return `<div class="op-hello"><h2>Tableros</h2><div class="muted">Consulta (solo lectura) los proyectos en los que participas.</div></div>
     <div class="grid cols-3">${cards||'<div class="muted">Sin proyectos.</div>'}</div>`;
 }
@@ -1968,7 +1968,7 @@ function tabKPIs(p){
     if(!subCnt[s.personId]) subCnt[s.personId]={done:0,total:0}; subCnt[s.personId].total++; if(s.done) subCnt[s.personId].done++; }));
   const totalTasks=tasks.length, doneTasks=tasks.filter(t=>t.status==='done').length;
   const totalSub=tasks.reduce((a,t)=>a+(t.subtasks||[]).length,0);
-  const doneSub=tasks.reduce((a,t)=>a+workSubs(t).filter(s=>s.done).length,0);
+  const doneSub=tasks.reduce((a,t)=>a+workSubs(t).filter(s=>s.done&&!s.noEntregada).length,0);
   const avancePct=totalSub?Math.round(doneSub/totalSub*100):0;
 
   const etapas=store.etapasOf(p.id), frentes=store.frentesOf(p.id);
@@ -2603,7 +2603,7 @@ function taskBody(t,panel){
     const _mR=citaRoot(t,s); const _mn=(_mR.s.minutas||[]); const _minChip=_mn.length?`<span class="sub-chip chip-link mn-chip-min${_mn.some(x=>x.estado==='curso')?' rec':''}${mnPubSt(_mn)?' pub-chip'+(mnPubSt(_mn)==='val'?' val':''):''}" title="${_mn.some(x=>x.estado==='curso')?'La minuta está en curso':(mnPubSt(_mn)==='val'?'El cliente validó la minuta':mnPubSt(_mn)?'Publicada en el portal del cliente':'Ver la minuta de esta cita')}" onclick="event.stopPropagation();mnSumOpen('${t.id}','${s.id}')">${_mn.some(x=>x.estado==='curso')?'🔴':(mnPubSt(_mn)==='val'?'✅':mnPubSt(_mn)?'📤':'📝')} Minuta${mnPubSt(_mn)==='val'?' validada':mnPubSt(_mn)?' publicada':''}${_mn.length>1?' ('+_mn.length+')':''}${(()=>{ const ls=_mn.flatMap(x=>(x.lines||[]).filter(l=>l.kind==='n'&&l.chk)); return ls.length?' · '+ls.filter(l=>l.done).length+'/'+ls.length:''; })()}</span>`:'';
     const _pp=subPuntos(t.id,s.id).flatMap(x=>x.items); const _ppChip=_pp.length?`<span class="sub-chip chip-link mn-chip-min" title="Puntos de minuta de esta subtarea · clic para verlos" onclick="event.stopPropagation();openPuntos('${t.id}','${s.id}')">☐ ${_pp.filter(x=>x.done).length}/${_pp.length}</span>`:'';
     const _dyChip=isDailySub(t,s)?`<span class="sub-chip cita-int chip-link" title="Los Daily se gestionan en Gestión › Daily" onclick="event.stopPropagation();openDailyArea('${t.id}')">☀️ Daily</span>`:'';
-    const chips=`${ackBtn}${depChip}${isDailySub(t,s)?_dyChip:citaBase}${_minChip}${_ppChip}${_unid}${_choque}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${(()=>{ if(s.isSeries||s.done) return ''; const ets=store.etapasOf(t.projectId); if(!ets.length) return ''; if(s.date&&store.etapaOfDate(t.projectId,s.date)) return ''; return `<span class="sub-chip out-et" title="${s.date?'Esta fecha (' +dLabel(s.date)+') cae fuera de las etapas del proyecto.':'Sin fecha: no pertenece a ninguna etapa.'} Puedes trabajarla con normalidad; el PM puede agregar o extender una etapa.">⚠ fuera de etapa</span>`; })()}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
+    const chips=`${s.noEntregada?'<span class="sub-chip ne-chip" title="Se cerró como no entregada: no cuenta como realizada">✗ No entregada</span>':''}${ackBtn}${depChip}${isDailySub(t,s)?_dyChip:citaBase}${_minChip}${_ppChip}${_unid}${_choque}${cliChip}${serChip}${s.repeatAfter?`<span class="sub-chip" title="${repLabel(s.repeatAfter)}">↻ ${s.repeatAfter} d</span>`:''}${s.date?`<span class="sub-chip${lateD?' late':''}">📅 ${dLabel(s.date)}</span>`:''}${(()=>{ if(s.isSeries||s.done) return ''; const ets=store.etapasOf(t.projectId); if(!ets.length) return ''; if(s.date&&store.etapaOfDate(t.projectId,s.date)) return ''; return `<span class="sub-chip out-et" title="${s.date?'Esta fecha (' +dLabel(s.date)+') cae fuera de las etapas del proyecto.':'Sin fecha: no pertenece a ninguna etapa.'} Puedes trabajarla con normalidad; el PM puede agregar o extender una etapa.">⚠ fuera de etapa</span>`; })()}${lateD?`<span class="late-tag" title="Venció el ${dLabel(s.date)} y sigue pendiente">⚠ ${lateD===1?'1 día':lateD+' días'}</span>`:''}${s.dateConflict?'<span class="date-bad" title="La fecha original no cabía en la nueva etapa; se puso hoy. Edítala.">🔴</span>':''}${s.done&&s.timeSpent?`<span class="sub-chip">⏱ ${fmtTime(s.timeSpent)}</span>`:''}${lockTag}`;
     const whoName=_t.personId?`<span class="sub-who" title="${esc(per.name||'')}">${esc((per.name||'').split(' ')[0])}</span>`:`<span class="sub-who none">Sin asignar</span>`;
     const av=`<span class="urg-av" title="${s.urgent?'Urgente: clic para quitar':(_t.personId?per.name+' · clic para marcar como urgente':'Sin responsable · clic para marcar como urgente')}" onclick="event.stopPropagation();toggleSubUrgent('${t.id}','${s.id}')">${s.urgent?'<span class="urg">⚠️</span>':avatar(_t.personId?per:{name:'?',color:'#cfd6d1'},true)}${(_t.team||[]).length?`<i class="av-n" title="${(_t.team||[]).length} persona(s) más del equipo participan">+${(_t.team||[]).length}</i>`:''}</span>`;
     const right=timing
@@ -2616,7 +2616,7 @@ function taskBody(t,panel){
     const childForm=(addingChild&&addingChild.sid===s.id&&addingChild.tid===t.id)?`<div class="sub-addkid"><input id="nc-name" placeholder="Nueva sub-subtarea en «${esc(s.name)}»…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChildSub()}else if(event.key==='Escape'){event.stopPropagation();cancelAddChild()}"><button class="btn sm" onclick="addChildSub()">+ Agregar</button><button class="btn ghost sm" onclick="cancelAddChild()">Cancelar</button></div>`:'';
     return `<div class="sub-group-item"><div class="sub-item sub2${lateD?' is-late':''}${depth?' sub-child':''}${hiSub&&hiSub.ids.includes(s.id)?' sub-hi':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>${chev}
-      <span class="check ${s.done?'done':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${s.isSeries?'Serie: se palomea cada repetición':(locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas')}"`}>${s.done?'✓':''}</span>
+      <span class="check ${s.done?'done':''} ${s.noEntregada?'ne':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${s.isSeries?'Serie: se palomea cada repetición':(locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas')}"`}>${s.done?'✓':''}</span>
       <div class="sub-body" title="${esc(detail)}"><div class="sub-nm2 ${s.done?'done':''}">${tipoDot(s,t)}${s.name} ${donePct}</div>${chips?`<div class="sub-chips">${chips}</div>`:''}</div>
       ${right}</div>${childForm}</div>`;
   }).join('');
@@ -2714,7 +2714,7 @@ function saveTaskEdit(id){
   logEvent(id,'Editó la tarea');
   editingTask=null;render();
 }
-function deleteTask(id){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(confirm('¿Eliminar esta tarea y sus subtareas/comentarios?')){ trashAdd('tarea',id); store.removeTask(id); modalTask=null; editingTask=null; render(); } }
+function deleteTask(id,forced){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(!forced){ delAsk={tid:id,sid:''}; render(); return; } { trashAdd('tarea',id); store.removeTask(id); modalTask=null; editingTask=null; render(); } }
 function openTaskHi(id,sids){ hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
   const t=store.task(id); if(t){ const c=subCollapsedMap(); let ch=false; ids.forEach(sid=>{ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const par=(t.subtasks||[]).find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
   openTask(id); if(ids.length) setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${ids[0]}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },150); }
@@ -2758,10 +2758,11 @@ function toggleSub(tid,sid){const t=store.task(tid);const s=t.subtasks.find(x=>x
   if(s.done){if(isColab()&&subTimeLocked(s)){alert('Ya pasaron los 10 minutos: el tiempo de esta subtarea quedó fijo y no puede editarse.');return;}store.updateSubtask(tid,sid,{done:false,timeSpent:0,doneAt:null});logEvent(tid,'Reabrió la subtarea «'+s.name+'»');render();}else{timingSub=tid+':'+sid;render();setTimeout(()=>{const el=document.getElementById('stime-'+sid);if(el)el.focus();},0);}}
 function confirmSubTime(tid,sid){const el=document.getElementById('stime-'+sid);const m=parseInt(el&&el.value,10);if(!m||m<=0){alert('Escribe los minutos.');return;}const s0=store.task(tid).subtasks.find(x=>x.id===sid);store.updateSubtask(tid,sid,{done:true,timeSpent:m,doneAt:new Date().toISOString()});logEvent(tid,'Completó la subtarea «'+s0.name+'» ('+fmtTime(m)+')');timingSub=null;render();}
 function cancelSubTime(){timingSub=null;render();}
-function delSub(tid,sid){const t0=store.task(tid);const s=t0.subtasks.find(x=>x.id===sid);const nk=subKids(t0,sid).length;
+function delSub(tid,sid,forced){const t0=store.task(tid);const s=t0.subtasks.find(x=>x.id===sid);const nk=subKids(t0,sid).length;
   if(s&&s.seriesId&&s.occDate){ const m=t0.subtasks.find(x=>x.id===s.seriesId); if(!confirm('¿Omitir esta repetición ('+dLabel(s.occDate)+')? La serie continúa con las demás.')) return; if(m&&m.series){ const sr=Object.assign({},m.series); sr.skip=(sr.skip||[]).concat([s.occDate]); m.series=sr; } store.removeSubtask(tid,sid); logEvent(tid,'Omitió la repetición del '+s.occDate+' de «'+s.name+'»'); render(); return; }
   if(s&&s.isSeries&&!confirm('¿Eliminar toda la serie «'+s.name+'» y sus '+nk+' repeticiones?')) return;
-  if(!(s&&s.isSeries)&&confirm(nk?'¿Eliminar esta subtarea y sus '+nk+' sub-subtarea(s)?':'¿Eliminar subtarea?')||(s&&s.isSeries)){const nm=s?s.name:'';trashAdd('sub',tid,sid);store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
+  if(s&&!s.isSeries&&!forced){ delAsk={tid,sid}; render(); return; }
+  {const nm=s?s.name:'';trashAdd('sub',tid,sid);store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
 function setSubView(v){subView=v;editingLink=null;render();}
 function logEvent(taskId, action){ if(!taskId||!action) return; store.d.log=store.d.log||[]; const e={id:'lg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), userId:currentUser, taskId, action}; store.d.log.push(e); store.save(); if(typeof dbSaveLog==='function') dbSaveLog(e); }
 function taskLogPanel(t){
@@ -4879,7 +4880,7 @@ function renderClientPortal(){
 function cpProjects(ctx){ return store.projectsOf(ctx.c.id); }
 function cpAllSubs(ctx){ const out=[]; cpProjects(ctx).forEach(p=>store.tasksOf(p.id).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(!s.isSeries) out.push({s,t,p}); }))); return out; }
 function cpMySubs(ctx){ return cpAllSubs(ctx).filter(({s})=>s.personId===ctx.me.id); }   // solo lo que lo nombra como responsable (las citas a las que está invitado salen en Citas)
-function cpProgress(p){ let d=0,n=0; store.tasksOf(p.id).forEach(t=>workSubs(t).forEach(s=>{ n++; if(s.done) d++; })); return {d,n,pct:n?Math.round(d/n*100):0}; }
+function cpProgress(p){ let d=0,n=0; store.tasksOf(p.id).forEach(t=>workSubs(t).forEach(s=>{ n++; if(s.done&&!s.noEntregada) d++; })); return {d,n,pct:n?Math.round(d/n*100):0}; }
 function cpSubRow(it,ctx){ const {s,t,p}=it; const per=store.person(s.personId); const today=todayISO(); const late=!s.done&&s.date&&s.date<today; const cita=subHasCita(s); const est=citaEstadoInfo(s);
   const when=s.date?(s.date===today?'hoy':dLabel(s.date)):'sin fecha';
   return `<div class="cita-row" style="border-left:4px solid ${s.done?'#3f9d6d':late?'#c0392b':kbFrente(t).color}"><div class="cita-when"><b>${when}</b><span>${s.time||''}</span></div>
@@ -5133,3 +5134,18 @@ function trashRestore(id){ const x=trashItems.find(y=>y.id===id); if(!x) return;
 function trashPurge(id){ if(!(isDireccion()||role==='gerencia'||role==='gerente')){ shareToast('Solo Dirección o Gerencia borran definitivamente.'); return; } if(!confirm('¿Borrar definitivamente? Ya no se podrá recuperar.')) return; trashItems=trashItems.filter(y=>y.id!==id); if(typeof dbDeleteTrash==='function') dbDeleteTrash(id); render(); }
 function trashModal(){ const esc=mnEsc; const rows=trashVisible(); const ico={tarea:'📋',sub:'↳',minuta:'📝'}; const lbl={tarea:'Tarea',sub:'Subtarea',minuta:'Minuta'}; const all=isDireccion()||role==='gerencia'||role==='gerente';
   return `<div class="modal active" style="z-index:150" onclick="if(event.target===this)trashClose()"><div class="modal-card" style="max-width:680px"><div class="m-head"><div class="m-top"><div><h3 style="margin:0">🗑️ Papelera</h3><div class="muted" style="font-size:.8rem">${all?'Todo lo eliminado':'Lo que eliminaste y lo de tus proyectos'} · se guarda ${TRASH_DAYS} días.</div></div><button class="x" onclick="trashClose()">×</button></div></div><div class="m-body">${!trashLoaded?'<div class="muted">Cargando…</div>':(rows.length?rows.map(x=>`<div class="tr-row"><div class="tr-main"><div class="tr-t">${ico[x.tipo]||''} <span class="tr-k">${lbl[x.tipo]||''}</span> ${esc(x.titulo)}</div><div class="muted" style="font-size:.76rem">${esc(trashWhere(x))}</div><div class="muted" style="font-size:.74rem">Eliminó ${esc((store.person(x.userId).name||'—').split(' ')[0])} · ${esc(dLabel(mnDay(x.ts)))} ${esc(new Date(x.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}))}</div></div><div class="tr-btns"><button class="btn sm" onclick="trashRestore('${x.id}')">↩ Restaurar</button>${all?`<button class="btn ghost sm" style="color:#c0392b" onclick="trashPurge('${x.id}')">Borrar</button>`:''}</div></div>`).join(''):'<div class="muted">La papelera está vacía.</div>')}</div></div></div>`; }
+
+
+/* ===== Al eliminar: ¿la borras o la marcas como NO ENTREGADA? (queda tachada, como hecha pero sin la palomita) ===== */
+let delAsk=null;
+function delAskClose(){ delAsk=null; render(); }
+function delAskModal(){ const t=store.task(delAsk.tid); const sb=delAsk.sid&&t&&(t.subtasks||[]).find(x=>x.id===delAsk.sid); if(!t||(delAsk.sid&&!sb)){ delAsk=null; return ''; } const esc=mnEsc; const nm=sb?sb.name:t.name; const kids=sb?subKids(t,sb.id).length:0; const kind=!sb?'tarea':(sb.parentId?'sub-subtarea':'subtarea');
+  return `<div class="modal active" style="z-index:160" onclick="if(event.target===this)delAskClose()"><div class="modal-card" style="max-width:480px"><div class="m-head"><div class="m-top"><h3 style="margin:0">¿Qué hacemos con esta ${kind}?</h3><button class="x" onclick="delAskClose()">×</button></div></div><div class="m-body"><p style="margin-top:0"><b>${esc(nm)}</b></p>
+    <div class="da-opt"><button class="btn" style="background:#6b7a73" onclick="delAskNoEntr()">✗ Marcar como no entregada</button><div class="muted" style="font-size:.78rem;margin-top:4px">Se queda en su lugar, tachada como si ya estuviera cerrada, pero <b>sin la palomita</b> de hecha. No cuenta como realizada${(!sb||kids)?' y cierra también sus pendientes':''}.</div></div>
+    <div class="da-opt"><button class="btn ghost" style="color:#c0392b;border-color:#e3b1ab" onclick="delAskDelete()">🗑️ Borrarla</button><div class="muted" style="font-size:.78rem;margin-top:4px">Se elimina${sb&&kids?' con sus '+kids+' sub-subtarea(s)':(!sb?' con sus subtareas y comentarios':'')}. Queda 30 días en la papelera por si te arrepientes.</div></div>
+    <div class="wiz-actions"><button class="btn ghost" onclick="delAskClose()">Cancelar</button></div></div></div></div>`; }
+function delAskDelete(){ const a=delAsk; delAsk=null; if(a.sid) delSub(a.tid,a.sid,true); else deleteTask(a.tid,true); }
+function delAskNoEntr(){ const a=delAsk; delAsk=null; const t=store.task(a.tid); if(!t) return; const now=new Date().toISOString(); const mk=x=>store.updateSubtask(a.tid,x.id,{done:true,noEntregada:true,timeSpent:0,doneAt:now});
+  if(a.sid){ const sb=(t.subtasks||[]).find(x=>x.id===a.sid); if(!sb) return; subKids(t,sb.id).filter(k=>!k.done).forEach(mk); mk(sb); logEvent(a.tid,'Marcó como NO ENTREGADA la '+(sb.parentId?'sub-subtarea':'subtarea')+' «'+sb.name+'»'); }
+  else { (t.subtasks||[]).filter(x=>!x.done&&!x.isSeries).forEach(mk); store.updateTask(a.tid,{status:'done',noEntregada:true}); logEvent(a.tid,'Marcó como NO ENTREGADA la tarea «'+t.name+'»'); }
+  shareToast('Marcada como no entregada.'); render(); }
