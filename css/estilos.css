@@ -1497,3 +1497,4 @@
 .check.done.ne{background:#b9c2be;border-color:#b9c2be;font-size:0;color:transparent}.check.done.ne *{display:none}
 .da-opt{margin:12px 0}
 .sub-chip.ne-chip{background:#eceeed;color:#59655f;border-color:#cfd5d2}
+.mn-edbar{display:flex;gap:8px;align-items:center;margin:10px 0 4px;padding:8px 10px;border-radius:10px;background:#f4f6f3}.mn-edbar.dirty{background:#fff4d6}.mn-b.ghost{background:transparent;color:#2c3e37;border:1px solid #cfd5d2}
