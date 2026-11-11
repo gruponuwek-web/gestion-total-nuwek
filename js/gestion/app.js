@@ -4043,8 +4043,9 @@ function mnPrePanel(){ const t=store.task(mnPre.tid); const s=t&&(t.subtasks||[]
 function mnView(tid,sid,mid){ mnPre=null; mnV={tid,sid,mid}; mnOpen=true; mnRev=null; { const g=mnGet(); mnEdSnap=(g&&g.m.estado!=='curso')?{mid:g.m.id,s:mnSnapStr(g.m)}:null; } mnRender(); }
 let mnEdSnap=null;
 function mnSnapStr(m){ return JSON.stringify({lines:m.lines||[],links:m.links||[],asist:m.asist||[]}); }
-function mnEdOk(){ const g=mnGet(); if(!g) return; mnEdSnap={mid:g.m.id,s:mnSnapStr(g.m)}; logEvent(g.t.id,'Actualizó la minuta cerrada de «'+g.s.name+'»'); shareToast('Minuta actualizada.'); mnRender(); render(); }
-function mnEdCancel(){ const g=mnGet(); if(!g||!mnEdSnap||mnEdSnap.mid!==g.m.id) return; const o=JSON.parse(mnEdSnap.s); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?Object.assign(JSON.parse(JSON.stringify(x)),{lines:o.lines,links:o.links,asist:o.asist}):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); logEvent(g.t.id,'Canceló los cambios de la minuta cerrada de «'+g.s.name+'»'); shareToast('Cambios cancelados: la minuta quedó como estaba.'); mnRender(); render(); }
+function mnEdOk(){ const g=mnGet(); if(!g) return; mnEdSnap={mid:g.m.id,s:mnSnapStr(g.m)}; logEvent(g.t.id,'Actualizó la minuta cerrada de «'+g.s.name+'»'); shareToast('Minuta actualizada.'); mnEdBack(g); }
+function mnEdCancel(){ const g=mnGet(); if(!g||!mnEdSnap||mnEdSnap.mid!==g.m.id) return; const o=JSON.parse(mnEdSnap.s); const arr=(g.s.minutas||[]).map(x=>x.id===g.m.id?Object.assign(JSON.parse(JSON.stringify(x)),{lines:o.lines,links:o.links,asist:o.asist}):x); store.updateSubtask(g.t.id,g.s.id,{minutas:arr}); logEvent(g.t.id,'Canceló los cambios de la minuta cerrada de «'+g.s.name+'»'); shareToast('Cambios cancelados: la minuta quedó como estaba.'); mnEdBack(g); }
+function mnEdBack(g){ mnEdSnap=null; mnTimeEd=false; mnClose(); mnSumOpen(g.t.id,g.s.id,g.m.id); }
 let mnBig=false;
 function mnBigTog(){ mnBig=!mnBig; mnRender(); }
 function mnToggle(){ mnOpen=!mnOpen; mnRender(); }
