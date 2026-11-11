@@ -783,7 +783,7 @@ let showInactive=false;
 function viewClientes(){
   const favs=myFavClients();
   const card=c=>{
-    const n=store.projectsOf(c.id).length; const fav=favs.includes(c.id);
+    const n=store.projectsOf(c.id).filter(p=>p.status!=='concluded').length; const fav=favs.includes(c.id);
     return `<div class="card click${fav?' is-fav':''}${c.activo===false?' cl-off':''}" onclick="openClient('${c.id}')">
       <button class="fav-btn${fav?' on':''}" title="${fav?'Quitar de favoritos':'Marcar como favorito'}" onclick="event.stopPropagation();toggleFavClient('${c.id}')">${fav?'★':'☆'}</button>
       <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}
@@ -851,16 +851,18 @@ function viewCliente(){
   const PEOPLE_LIM=8; const pOpen=!!peopleOpen[c.id]; const pList=pOpen?c.people:c.people.slice(0,PEOPLE_LIM);
   const people=pList.map(p=>`<span class="chip tag-chip">${avatar(p,true)} ${p.portal?`<span title="Tiene acceso al portal (${esc(p.portal.user)})">🔑</span> `:''}${p.name}${p.role?' · '+p.role:''} <button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span>`).join('') || '<span class="muted" style="font-size:.85rem">Sin contactos aún</span>';
   const peopleMore=c.people.length>PEOPLE_LIM?`<button class="btn ghost sm" onclick="togglePeople('${c.id}')">${pOpen?'▴ Ver menos':'▾ Ver más ('+(c.people.length-PEOPLE_LIM)+')'}</button>`:'';
-  const projs=store.projectsOf(c.id).map(p=>{
-    const sv=store.service(p.serviceId); const health=projectHealth(p.id);
-    return `<div class="card click" onclick="openProject('${p.id}')">
+  const projCard=p=>{
+    const sv=store.service(p.serviceId); const health=projectHealth(p.id); const conc=p.status==='concluded';
+    return `<div class="card click" style="${conc?'opacity:.85':''}" onclick="openProject('${p.id}')">
       <div style="display:flex;justify-content:space-between;align-items:start">
-        <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div><h3 style="margin:8px 0 2px">${p.name}</h3></div>
-        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}">${health.icon} ${health.pct}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
+        <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div>${conc?' <span class="pill gray">✅ Concluido</span>':''}<h3 style="margin:8px 0 2px">${p.name}</h3></div>
+        <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}" title="Avance: ${health.hechas} de ${health.total} actividades hechas. Puntualidad: ${health.pct}% (actividades hechas o por hacer dentro de su fecha).">${health.icon} ${health.avance}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
       </div>
       <div class="muted" style="font-size:.85rem;margin-top:6px">${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}</div>
     </div>`;
-  }).join('');
+  };
+  const allP=store.projectsOf(c.id); const projs=allP.filter(p=>p.status!=='concluded').map(projCard).join(''); const concl=allP.filter(p=>p.status==='concluded');
+  const conclHtml=concl.length?`<details class="cl-concl" style="margin-top:14px"><summary class="sec-title" style="cursor:pointer"><h2 style="display:inline">Proyectos concluidos <span class="muted" style="font-size:.85rem">· ${concl.length}</span></h2></summary><div class="grid cols-2" style="margin-top:8px">${concl.map(projCard).join('')}</div></details>`:'';
   return `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › ${c.name}</div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
@@ -878,17 +880,17 @@ function viewCliente(){
       </dl>`:''}
     </div>
     <div class="sec-title"><h2>Proyectos vivos</h2></div>
-    <div class="grid cols-2">${projs||'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>'}</div>
+    <div class="grid cols-2">${projs||(concl.length?'<div class="muted">No hay proyectos vivos; los concluidos están abajo.</div>':'<div class="muted">Sin proyectos aún. Usa “+ Nuevo proyecto”.</div>')}</div>${conclHtml}
     ${clientTabsHtml(c)}`;
 }
 
 function projectHealth(pid){
-  const ts=store.tasksOf(pid); let onTime=0,total=0;
-  ts.forEach(t=>{ (t.subtasks||[]).forEach(s=>{ total++; const today=todayISO();
+  const ts=store.tasksOf(pid); let onTime=0,total=0,hechas=0;
+  ts.forEach(t=>{ (t.subtasks||[]).forEach(s=>{ total++; if(s.done) hechas++; const today=todayISO();
     if(s.done){ if(s.date<=t.dueDate) onTime++; } else { if(s.date>=today) onTime++; } }); });
   const pct= total? Math.round(onTime/total*100):100;
-  const cls= pct>=75?'green':pct>=50?'yellow':'red'; const icon= pct>=75?'🟢':pct>=50?'🟡':'🔴';
-  return {pct,cls,icon};
+  const avance= total?Math.round(hechas/total*100):0; const cls= avance===100?'green':(pct>=75?'green':pct>=50?'yellow':'red'); const icon= avance===100?'✅':(pct>=75?'🟢':pct>=50?'🟡':'🔴');
+  return {pct,cls,icon,avance,hechas,total};
 }
 
 /* ================== WIZARD ================== */
@@ -1120,7 +1122,7 @@ function viewTableros(){
   const projs=store.d.projects.filter(p=>store.d.tasks.some(t=>t.projectId===p.id&&personParticipates(t,currentUser)) || store.d.tasks.some(t=>t.projectId===p.id&&(t.subtasks||[]).some(s=>s.personId===currentUser)));
   const cards=(projs.length?projs:store.d.projects).map(p=>{const c=store.client(p.clientId);const sv=store.service(p.serviceId);const h=projectHealth(p.id);
     return `<div class="card click" onclick="openProject('${p.id}')">
-      <div style="display:flex;justify-content:space-between;align-items:start"><div><div class="pill yellow">${sv?sv.name:''}</div><h3 style="margin:8px 0 2px">${p.name}</h3><div class="muted" style="font-size:.85rem">${c.name}</div></div><span class="pill ${h.cls}">${h.icon} ${h.pct}%</span></div></div>`;}).join('');
+      <div style="display:flex;justify-content:space-between;align-items:start"><div><div class="pill yellow">${sv?sv.name:''}</div><h3 style="margin:8px 0 2px">${p.name}</h3><div class="muted" style="font-size:.85rem">${c.name}</div></div><span class="pill ${h.cls}" title="Avance: ${h.hechas} de ${h.total} actividades hechas. Puntualidad: ${h.pct}%.">${h.icon} ${h.avance}%</span></div></div>`;}).join('');
   return `<div class="op-hello"><h2>Tableros</h2><div class="muted">Consulta (solo lectura) los proyectos en los que participas.</div></div>
     <div class="grid cols-3">${cards||'<div class="muted">Sin proyectos.</div>'}</div>`;
 }
@@ -2136,7 +2138,7 @@ function quickModal(){
         <div><label>Cierre</label><input id="qm-end" type="date" value="${p2.endDate||''}"></div></div>
       <div class="field"><label>¿Qué PM verán este proyecto?</label>${pmPickHtml(p2.pmIds,'qm-pm')}</div>
       <div class="hint">Editar el precio no toca el calendario de pagos (ese lo manejas aparte). Tip: puedes usar el total programado como precio.</div>
-      <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
+      <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button><button class="btn ghost" style="color:#1f6b45;border-color:#b9e0c9" onclick="setProjectStatus('${qm.pid}','${p2.status==='concluded'?'active':'concluded'}')">${p2.status==='concluded'?'↩ Reabrir proyecto':'✅ Concluir proyecto'}</button><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
   } else if(qm.kind==='proyectoDel'){
     const p2=store.project(qm.pid), st=store.projectStats(qm.pid);
     inner=`<h3 style="color:#c0392b">Eliminar proyecto</h3>
@@ -2428,6 +2430,7 @@ function savePayEdit(){const d=val('qm-pdate'),a=val('qm-pamount');if(!d||!a){al
 function delPay(payId,pid){if(confirm('¿Eliminar este pago?')){store.removePayment(payId);render();}}
 function openGenPagos(pid){qm={kind:'genPagos',pid};render();}function runGenPagos(){const freq=val('qm-freq'),count=+val('qm-count'),total=+val('qm-total'),start=val('qm-pstart');if(!count||!total||!start){alert('Completa frecuencia, número, total y fecha.');return;}if(!confirm('Esto reemplaza el calendario de pagos actual. ¿Continuar?'))return;store.generatePaymentsCustom(qm.pid,freq,count,total,start);qm=null;render();}
 function openProjectEdit(pid){ if(!canManageProject()) return; qm={kind:'proyectoEdit',pid};render();}
+function setProjectStatus(pid,st){ if(!canManageProject()) return; const p=store.project(pid); if(!p) return; if(st==='concluded'&&!confirm('¿Concluir «'+p.name+'»? No se borra nada: pasa a «Proyectos concluidos» y puedes reabrirlo cuando quieras.')) return; store.updateProject(pid,{status:st}); qm=null; shareToast(st==='concluded'?'Proyecto concluido.':'Proyecto reabierto.'); render(); }
 function openProjectDel(pid){ if(!canManageProject()) return; qm={kind:'proyectoDel',pid}; render(); }
 async function confirmProjectDel(){ if(!canManageProject()||!qm||qm.kind!=='proyectoDel') return; const p=store.project(qm.pid); if(!p) return;
   if((val('qm-delname')||'').trim()!==p.name.trim()){ alert('El nombre no coincide.'); return; }
