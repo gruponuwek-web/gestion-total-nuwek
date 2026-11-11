@@ -5189,7 +5189,24 @@ function mnParseNotion(txt){ const raw=String(txt||'').replace(/\r/g,'').split('
     /* línea suelta: si parece un título (corta, sin punto final) y la siguiente es lista, queda como principal; si no, es nota */
     out.push({kind:'n',lvl:hasHead?1:0,txt:x,chk:false,done:false}); });
   return {lines:out,links}; }
-function mnPaste(ev){ try{ const txt=(ev.clipboardData||window.clipboardData).getData('text/plain')||''; const multi=txt.replace(/\r/g,'').split('\n').filter(x=>x.trim()).length>1; const marks=/^\s*(#{1,6}\s|[-*+•]\s|\[[ xX]\]|[☐□☑])/m.test(txt); if(!multi&&!marks) return; const g=mnGet(); if(!g) return; if(mnLocked(g.m)){ shareToast('Esta minuta ya fue validada por el cliente y está bloqueada.'); return; }
-    ev.preventDefault(); const r=mnParseNotion(txt); if(!r.lines.length) return; const now=new Date().toISOString(); const rows=r.lines.map(l=>Object.assign({id:uidf('ml_'),link:null,resp:l.chk?currentUser:'',ts:now},l)); if(r.lines.length>1&&rows.every(l=>l.lvl===0)){}
+function mnParseHtml(html){ const doc=new DOMParser().parseFromString(html,'text/html'); const out=[]; const links=[]; let inAcu=false, hasHead=false;
+  const ACU=/(acuerdo|pendiente|compromiso|tarea|to-?do|siguiente|next|por hacer|action)/i;
+  const txtOf=el=>{ const c=el.cloneNode(true); c.querySelectorAll('ul,ol,input,style,script').forEach(x=>x.remove()); c.querySelectorAll('a[href]').forEach(a=>{ const u=a.getAttribute('href')||''; const t=(a.textContent||'').trim(); if(/^https?:/i.test(u)&&t) links.push({t:t.slice(0,60),u}); }); return (c.textContent||'').replace(/[\u200b\u00a0]/g,' ').replace(/\s+/g,' ').trim(); };
+  const isBlock=el=>/^(H[1-6]|UL|OL|LI|P|DIV|SECTION|ARTICLE|BLOCKQUOTE|TABLE|PRE)$/.test(el.tagName);
+  const li=(el,depth)=>{ let x=txtOf(el); const cls=((el.className||'')+' '+((el.parentElement&&el.parentElement.className)||'')).toString().toLowerCase(); const cb=el.querySelector(':scope > input[type=checkbox], :scope > div input[type=checkbox], :scope > label input[type=checkbox]'); const sym=x.match(/^([☐□☑✅✔])\s*/); const chk=!!cb||!!sym||/to-?do|checkbox/.test(cls)||/^\[( |x|X)\]\s/.test(x); const done=(cb&&cb.checked)||(sym&&/[☑✅✔]/.test(sym[1]))||/checked/.test(cls)||/^\[[xX]\]/.test(x)||!!el.querySelector(':scope > .checkbox-on,:scope > .checkbox.checkbox-on');
+    x=x.replace(/^([☐□☑✅✔]|\[[ xX]\])\s*/,''); if(x){ const asChk=chk||(inAcu&&hasHead); out.push({kind:'n',lvl:(hasHead||depth>0)?1:0,txt:x,chk:asChk&&hasHead,done:asChk&&hasHead&&!!done}); }
+    Array.from(el.children).filter(c=>/^(UL|OL)$/.test(c.tagName)).forEach(l=>list(l,depth+1)); };
+  const list=(el,depth)=>{ Array.from(el.children).forEach(c=>{ if(c.tagName==='LI') li(c,depth); else walk(c,depth); }); };
+  const walk=(node,depth)=>{ Array.from(node.childNodes).forEach(c=>{ if(c.nodeType===3){ const t=(c.textContent||'').replace(/\s+/g,' ').trim(); if(t) out.push({kind:'n',lvl:hasHead?1:0,txt:t,chk:false,done:false}); return; }
+      if(c.nodeType!==1) return; const tag=c.tagName;
+      if(/^H[1-6]$/.test(tag)){ const x=txtOf(c); if(!x) return; inAcu=ACU.test(x); hasHead=true; out.push({kind:'n',lvl:0,txt:x,chk:false,done:false}); return; }
+      if(tag==='UL'||tag==='OL'){ list(c,depth); return; }
+      if(tag==='LI'){ li(c,depth); return; }
+      if(/^(STYLE|SCRIPT|META|HEAD)$/.test(tag)) return;
+      if(Array.from(c.children).some(isBlock)){ walk(c,depth); return; }
+      const x=txtOf(c); if(x) out.push({kind:'n',lvl:hasHead?1:0,txt:x,chk:false,done:false}); }); };
+  walk(doc.body,0); return {lines:out,links}; }
+function mnPaste(ev){ try{ const cd=(ev.clipboardData||window.clipboardData); const txt=cd.getData('text/plain')||''; const html=cd.getData('text/html')||''; const hasHtml=/<(h[1-6]|ul|ol|li)\b/i.test(html); const multi=txt.replace(/\r/g,'').split('\n').filter(x=>x.trim()).length>1; const marks=/^\s*(#{1,6}\s|[-*+•]\s|\[[ xX]\]|[☐□☑])/m.test(txt); if(!multi&&!marks&&!hasHtml) return; const g=mnGet(); if(!g) return; if(mnLocked(g.m)){ shareToast('Esta minuta ya fue validada por el cliente y está bloqueada.'); return; }
+    ev.preventDefault(); let r=hasHtml?mnParseHtml(html):{lines:[]}; if(!r.lines.length) r=mnParseNotion(txt); if(!r.lines.length) return; const now=new Date().toISOString(); const rows=r.lines.map(l=>Object.assign({id:uidf('ml_'),link:null,resp:l.chk?currentUser:'',ts:now},l)); if(r.lines.length>1&&rows.every(l=>l.lvl===0)){}
     mnSave(m=>{ rows.forEach(l=>m.lines.push(l)); (r.links||[]).forEach(k=>{ if(!(m.links||[]).some(z=>z.u===k.u)) (m.links=m.links||[]).push(k); }); return m; });
     const nh=rows.filter(l=>l.lvl===0).length, nc=rows.filter(l=>l.chk).length, nb=rows.length-nh-nc; shareToast('Pegado: '+nh+' título(s)/nota(s) principal(es), '+nb+' viñeta(s) y '+nc+' acuerdo(s) con cuadrito.'); setTimeout(()=>{ const b=document.querySelector('.mn-lines'); if(b) b.scrollTop=b.scrollHeight; },60); }catch(e){ console.warn('Pegar minuta:',e); } }
