@@ -29,8 +29,7 @@ async function dbDeleteComment(id){
 }
 // Carga LIGERA: sin los adjuntos (las imágenes en base64 pesaban varios MB y se bajaban cada 3 s).
 async function dbLoadComentarios(){
-  const { data, error } = await sb.from('comentarios').select('id,tarea_id,user_id,text,ts,mentions,read_by').order('ts', { ascending: true });
-  if (error) throw error;
+  const data = await sbAll(()=>sb.from('comentarios').select('id,tarea_id,user_id,text,ts,mentions,read_by').order('ts',{ascending:true}).order('id',{ascending:true}));
   return (data || []).map(dbToAppComment);
 }
 // Adjuntos de los comentarios de UNA tarea (se piden al abrirla).
@@ -50,10 +49,18 @@ async function dbSaveComment(c){
 /* ---------------- LOG (auditoría) ---------------- */
 function dbToAppLog(row){ return { id: row.id, ts: row.ts, userId: row.user_id, taskId: row.tarea_id, action: row.action || '' }; }
 function appToDbLog(e){ return { id: e.id, ts: e.ts, user_id: e.userId, tarea_id: e.taskId, action: e.action || '' }; }
+let _logCache=null;   // la 1.ª vez trae TODO el log (por páginas); después solo los más recientes y los junta
 async function dbLoadLog(){
-  const { data, error } = await sb.from('log').select('*').order('ts', { ascending: true });
-  if (error) throw error;
-  return (data || []).map(dbToAppLog);
+  let rows;
+  if(!_logCache){
+    rows=await sbAll(()=>sb.from('log').select('*').order('ts',{ascending:true}).order('id',{ascending:true}));
+    _logCache=new Map(); rows.forEach(r=>_logCache.set(r.id,r));
+  } else {
+    const { data, error } = await sb.from('log').select('*').order('ts',{ascending:false}).limit(1000);
+    if (error) throw error;
+    (data||[]).forEach(r=>_logCache.set(r.id,r));
+  }
+  return [..._logCache.values()].sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0).map(dbToAppLog);
 }
 async function dbSaveLog(e){
   try{

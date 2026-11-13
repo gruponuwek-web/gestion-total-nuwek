@@ -35,8 +35,7 @@ function appToDbPago(x){
 
 // --- LEER todos los pagos ---
 async function dbLoadPagos(){
-  const { data, error } = await sb.from('pagos').select('*').order('due_date', { ascending: true });
-  if (error) throw error;
+  const data = await sbAll(()=>sb.from('pagos').select('*').order('due_date',{ascending:true}).order('id',{ascending:true}));
   return (data || []).map(dbToAppPago);
 }
 

@@ -23,5 +23,19 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   };
 })();
 
+
+/* Supabase solo devuelve 1,000 filas por consulta. sbAll(() => sb.from('x').select('*').order('id'))
+   pide por páginas de 1,000 hasta traer todo. Pasa una función que arme la consulta (con un orden estable). */
+async function sbAll(build){
+  const out=[]; const N=1000;
+  for(let from=0; from<200000; from+=N){
+    const { data, error } = await build().range(from, from+N-1);
+    if(error) throw error;
+    out.push(...(data||[]));
+    if(!data || data.length<N) break;
+  }
+  return out;
+}
+
 // Pequeña señal en consola para confirmar que cargó bien
 console.log("✅ Supabase conectado:", SUPABASE_URL);

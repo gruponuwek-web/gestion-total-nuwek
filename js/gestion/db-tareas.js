@@ -61,11 +61,7 @@ function appToDbTask(t){
 
 // --- LEER todas las tareas ---
 async function dbLoadTareas(){
-  const { data, error } = await sb
-    .from('tareas')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) throw error;
+  const data = await sbAll(()=>sb.from('tareas').select('*').order('created_at',{ascending:true}).order('id',{ascending:true}));
   return (data || []).map(dbToAppTask);
 }
 
