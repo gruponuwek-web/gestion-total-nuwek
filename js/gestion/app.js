@@ -44,7 +44,7 @@ class Store{
       if(!Array.isArray(s.links)) s.links=[]; if(s.done && !s.doneAt) s.doneAt='2020-01-01T00:00:00.000Z'; });
       if(!Array.isArray(t.links)){ const col=[]; (t.subtasks||[]).forEach(s=>(s.links||[]).forEach(l=>{ if(l.url) col.push({title:l.title||'',url:l.url}); })); t.links=col; }
     });
-    if(!this.d.log){ this.d.log=[]; (this.d.tasks||[]).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(s.done) this.d.log.push({id:uid('lg_'),ts:s.doneAt||new Date().toISOString(),userId:s.personId,taskId:t.id,action:'Completó la subtarea «'+s.name+'»'+(s.timeSpent?' ('+fmtTime(s.timeSpent)+')':'')}); })); }
+    this.d.log=[];   // el log ya no se carga completo: cada tarea pide el suyo al abrir su pestaña Log
     if(!this.d.settings) this.d.settings={};
     (this.d.projects||[]).forEach(p=>{ if(!Array.isArray(p.links)) p.links=[]; if(!Array.isArray(p.scorecards)) p.scorecards=[]; });
     (this.d.services||[]).forEach(s=>{ if(s.listPrice==null) s.listPrice=0; if(s.opCost==null) s.opCost=0; });
@@ -2763,11 +2763,14 @@ function delSub(tid,sid,forced){const t0=store.task(tid);const s=t0.subtasks.fin
   if(s&&s.isSeries&&!confirm('¿Eliminar toda la serie «'+s.name+'» y sus '+nk+' repeticiones?')) return;
   if(s&&!s.isSeries&&!forced){ delAsk={tid,sid}; render(); return; }
   {const nm=s?s.name:'';trashAdd('sub',tid,sid);store.removeSubtask(tid,sid);logEvent(tid,'Eliminó la subtarea «'+nm+'»');render();}}
-function setSubView(v){subView=v;editingLink=null;render();}
+function setSubView(v){subView=v;editingLink=null; if(v==='log'&&modalTask) delete logLoad[modalTask]; render();}
 function logEvent(taskId, action){ if(!taskId||!action) return; store.d.log=store.d.log||[]; const e={id:'lg_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), ts:new Date().toISOString(), userId:currentUser, taskId, action}; store.d.log.push(e); store.save(); if(typeof dbSaveLog==='function') dbSaveLog(e); }
+let logLoad={};   // taskId -> 'cargando' | 'listo'
+function taskLogFetch(tid){ if(logLoad[tid]) return; logLoad[tid]='cargando'; dbLoadTaskLog(tid).then(rows=>{ const ids=new Set(rows.map(r=>r.id)); const recent=Date.now()-120000; store.d.log=(store.d.log||[]).filter(e=>e.taskId!==tid||ids.has(e.id)||new Date(e.ts).getTime()>recent); const have=new Set(store.d.log.map(e=>e.id)); rows.forEach(r=>{ if(!have.has(r.id)) store.d.log.push(r); }); logLoad[tid]='listo'; if(subView==='log'&&modalTask===tid) renderKeepScroll(); }).catch(e=>{ logLoad[tid]='listo'; console.warn('Log:',e&&e.message||e); }); }
 function taskLogPanel(t){
+  taskLogFetch(t.id);
   const entries=(store.d.log||[]).filter(e=>e.taskId===t.id).slice().sort((a,b)=>a.ts<b.ts?1:-1);
-  if(!entries.length) return '<div class="muted" style="padding:6px 0">Sin movimientos registrados aún.</div>';
+  if(!entries.length) return logLoad[t.id]==='cargando'?'<div class="muted" style="padding:6px 0">Cargando historial…</div>':'<div class="muted" style="padding:6px 0">Sin movimientos registrados aún.</div>';
   return `<div class="hint" style="margin-bottom:8px">📋 Historial de cambios · visible solo para PM/Gerencia</div><div class="log-list">${entries.map(e=>{const u=store.person(e.userId)||{name:'?'};const when=new Date(e.ts).toLocaleString('es-MX',{day:'2-digit',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'});
     return `<div class="log-row">${avatar(u,true)}<div class="log-b"><div class="log-a"><b>${u.name}</b> ${e.action}</div><div class="log-t">${when}</div></div></div>`;}).join('')}</div>`;
 }
@@ -3102,7 +3105,6 @@ async function boot(){
   const pTk=call(typeof dbLoadTareas==='function'&&dbLoadTareas);
   const pPf=call(typeof dbLoadPerfiles==='function'&&dbLoadPerfiles).catch(()=>null);
   const pCm=call(typeof dbLoadComentarios==='function'&&dbLoadComentarios);
-  const pLg=call(typeof dbLoadLog==='function'&&dbLoadLog);
   const pTg=call(typeof dbLoadTags==='function'&&dbLoadTags);
   const pPg=call(typeof dbLoadPagos==='function'&&dbLoadPagos);
   /* 2) pantalla de entrada temprana: clientes no necesita datos para dibujarse; el equipo, solo sus fotos */
@@ -3125,7 +3127,7 @@ async function boot(){
   }catch(e){ if(stale){ console.error('Error cargando datos desde Supabase:',e); bootStaleUI('err'); return; } bootError(e); return; }
   /* 3) lo secundario se aplica cuando llega (si falla, la sincronización automática lo vuelve a pedir) */
   const late=(p,k)=>p.then(v=>{ if(v===undefined) return; store.d[k]=v; store.save(); if(bootDone&&(session||clientSess)){ syncDirty=true; syncFlush(); } }).catch(e=>console.warn('Se cargará después:',k,e&&e.message||e));
-  late(pCm,'comments'); late(pLg,'log'); late(pTg,'tags'); late(pPg,'payments');
+  late(pCm,'comments'); late(pTg,'tags'); late(pPg,'payments');
   if(!window.CLIENT_ONLY) restoreSession(); if(!session) restoreClientSession();
   if(session){ runAllCycles(); runAllSeries(); }
   if(shareSesionAtLoad){ publicSes=shareSesionAtLoad; shareSesionAtLoad=null; }
@@ -3159,7 +3161,6 @@ async function syncTables(set){
     const jobs={}; const want=n=>set.has(n)||set.has('all');
     if(want('tareas')&&typeof dbLoadTareas==='function') jobs.tasks=dbLoadTareas();
     if(want('comentarios')&&typeof dbLoadComentarios==='function') jobs.comments=dbLoadComentarios();
-    if(want('log')&&typeof dbLoadLog==='function') jobs.log=dbLoadLog();
     if(want('pagos')&&typeof dbLoadPagos==='function') jobs.payments=dbLoadPagos();
     if(want('proyectos')&&typeof dbLoadProyectos==='function') jobs.pr=dbLoadProyectos();
     if(want('clientes')&&typeof dbLoadClientes==='function') jobs.clients=dbLoadClientes();
@@ -3170,7 +3171,7 @@ async function syncTables(set){
     if(lastLocalWrite>t0-1500) return;          // acabas de guardar algo: no lo pises, el siguiente ciclo lo trae
     let changed=false; const put=(k,v)=>{ if(JSON.stringify(store.d[k])!==JSON.stringify(v)){ store.d[k]=v; changed=true; } };
     if(got.comments){ const prev={}; (store.d.comments||[]).forEach(c=>{ if(c.attachments!==undefined) prev[c.id]=c.attachments; }); got.comments.forEach(c=>{ if(c.attachments===undefined&&prev[c.id]!==undefined) c.attachments=prev[c.id]; }); }
-    if(got.tasks) put('tasks',got.tasks); if(got.comments) put('comments',got.comments); if(got.log) put('log',got.log); if(got.payments) put('payments',got.payments);
+    if(got.tasks) put('tasks',got.tasks); if(got.comments) put('comments',got.comments); if(got.payments) put('payments',got.payments);
     if(got.pr){ put('projects',got.pr.projects); put('frentes',got.pr.frentes); put('etapas',got.pr.etapas); }
     if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags); if(got.perfiles&&!perfDirty){ const b=JSON.stringify(store.d.perfiles||[]); put('perfiles',got.perfiles); if(b!==JSON.stringify(got.perfiles)) perfVer++; }
     if(!changed) return;
@@ -3188,7 +3189,7 @@ function startSync(){
     syncTables(new Set(slow?['all']:['tareas','comentarios'])); if(session){ if(runAllCycles()) syncDirty=true; if(runAllSeries()) syncDirty=true; } syncFlush(); },SYNC_FAST_MS);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) syncTables(new Set(['all'])); });
   // Realtime (acelera la entrega si la publicación está activada en Supabase; el sondeo de arriba garantiza el máximo de 3 s)
-  try{ if(sb.channel){ rtChannel=sb.channel('nuwek-live'); ['tareas','comentarios','proyectos','frentes','etapas','pagos','clientes','personal','log','etiquetas'].forEach(tb=>{
+  try{ if(sb.channel){ rtChannel=sb.channel('nuwek-live'); ['tareas','comentarios','proyectos','frentes','etapas','pagos','clientes','personal','etiquetas'].forEach(tb=>{
       rtChannel.on('postgres_changes',{event:'*',schema:'public',table:tb},()=>{ clearTimeout(rtDebounce); rtDebounce=setTimeout(()=>syncTables(new Set([tb==='frentes'||tb==='etapas'?'proyectos':tb])),350); }); });
     rtChannel.subscribe(st=>{ if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){ try{ sb.removeChannel(rtChannel); }catch(_){} } }); } }catch(e){ console.warn('Realtime no disponible:',e&&e.message||e); }
 }
@@ -5040,17 +5041,20 @@ boot();
 
 /* ===== Círculo flotante de pendientes de minuta (F8) ===== */
 let ppOpen=false, ppMin='', ppPer='', ppShut={}, ppGeo=(()=>{ try{ return JSON.parse(localStorage.getItem('nuwekPpGeo')||'null')||{}; }catch(_){ return {}; } })();
-function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>{ const lk=g.head&&g.head.link; const lt=lk&&store.task(lk.tid); if(!pmSeesProject((lt||g.t).projectId)) return; g.items.forEach(l=>{ if(!l.done&&(l.resp===currentUser||isPM())) mine.push({g,l}); }); }); return mine; }
+let ppTeam=false;   // el PM solo ve lo suyo; con «Ver equipo» ve también lo de los demás (de sus proyectos)
+function ppTeamOn(){ return isPM()&&ppTeam; }
+function ppTeamTog(){ ppTeam=!ppTeam; ppPer=''; ppMin=''; ppRender(); }
+function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>{ const lk=g.head&&g.head.link; const lt=lk&&store.task(lk.tid); if(!pmSeesProject((lt||g.t).projectId)) return; g.items.forEach(l=>{ if(!l.done&&(l.resp===currentUser||ppTeamOn())) mine.push({g,l}); }); }); return mine; }
 function ppToggle(){ ppOpen=!ppOpen; ppRender(); }
 function ppSetPer(v){ ppPer=v||''; ppRender(); }
 function ppSetMin(v){ ppMin=(ppMin===v)?'':v; ppRender(); }
 function ppCli(k){ ppShut[k]=!ppShut[k]; ppRender(); }
 function ppRoot(){ let r=document.getElementById('pp-root'); if(!r){ r=document.createElement('div'); r.id='pp-root'; document.body.appendChild(r); } return r; }
-function ppRender(){ const r=ppRoot(); if(!session){ r.innerHTML=''; return; } const esc=mnEsc; const all=ppMine(); const me=store.person(currentUser)||{}; const mins=[]; all.filter(x=>!ppPer||(x.l.resp||'')===ppPer).forEach(x=>{ let m=mins.find(y=>y.id===x.g.m.id); if(!m){ m={id:x.g.m.id,s:x.g.s.name,d:dLabel(mnDay(x.g.m.start)),n:0,c:(SUBCOL[subTipo(x.g.s,x.g.t)]||SUBCOL.gris)[0]}; mins.push(m); } m.n++; }); if(ppMin&&!mins.some(m=>m.id===ppMin)) ppMin=''; const pers=[]; if(isPM()) all.forEach(x=>{ const id=x.l.resp||''; let p=pers.find(y=>y.id===id); if(!p){ p={id,n:0,name:id?(store.person(id).name||'—'):'Sin responsable'}; pers.push(p); } p.n++; }); if(ppPer&&!pers.some(p=>p.id===ppPer)) ppPer=''; if(ppMin&&ppPer&&!mins.some(m=>m.id===ppMin)) ppMin=''; const mine=all.filter(x=>(!ppMin||x.g.m.id===ppMin)&&(!ppPer||(x.l.resp||'')===ppPer));
+function ppRender(){ const r=ppRoot(); if(!session){ r.innerHTML=''; return; } const esc=mnEsc; const all=ppMine(); const me=store.person(currentUser)||{}; const mins=[]; all.filter(x=>!ppPer||(x.l.resp||'')===ppPer).forEach(x=>{ let m=mins.find(y=>y.id===x.g.m.id); if(!m){ m={id:x.g.m.id,s:x.g.s.name,d:dLabel(mnDay(x.g.m.start)),n:0,c:(SUBCOL[subTipo(x.g.s,x.g.t)]||SUBCOL.gris)[0]}; mins.push(m); } m.n++; }); if(ppMin&&!mins.some(m=>m.id===ppMin)) ppMin=''; const pers=[]; if(ppTeamOn()) all.forEach(x=>{ const id=x.l.resp||''; let p=pers.find(y=>y.id===id); if(!p){ p={id,n:0,name:id?(store.person(id).name||'—'):'Sin responsable'}; pers.push(p); } p.n++; }); if(ppPer&&!pers.some(p=>p.id===ppPer)) ppPer=''; if(ppMin&&ppPer&&!mins.some(m=>m.id===ppMin)) ppMin=''; const mine=all.filter(x=>(!ppMin||x.g.m.id===ppMin)&&(!ppPer||(x.l.resp||'')===ppPer));
   const cl=[]; mine.forEach(x=>{ const ci=mnCliOf(x.g.head,x.g.t); const key=ci.c||'Sin cliente'; let c=cl.find(y=>y.k===key); if(!c){ c={k:key,n:0,acts:[]}; cl.push(c); } c.n++; let a=c.acts.find(y=>y.g.m.id===x.g.m.id&&y.g.head.id===x.g.head.id); if(!a){ a={g:x.g,p:ci.p,items:[]}; c.acts.push(a); } a.items.push(x.l); });
   cl.sort((a,b)=>b.n-a.n||a.k.localeCompare(b.k));
-  const body=!mine.length?'<div class="pp-empty">🎉 No tienes pendientes de minuta.</div>':cl.map(c=>{ const shut=!!ppShut[c.k]; return `<div class="pp-cli"><div class="pp-ch" onclick="ppCli(${JSON.stringify(c.k).replace(/"/g,'&quot;')})"><span class="acc-arw" style="display:inline-block;width:14px;transform:rotate(${shut?-90:0}deg)">▾</span><b>${esc(c.k)}</b><span class="pp-n">${c.n}</span></div>${shut?'':c.acts.map(a=>`<div class="pp-act"><div class="pp-ah">${esc(a.g.head.txt)}<span class="muted"> · ${a.p?esc(a.p)+' · ':''}minuta del ${esc(dLabel(mnDay(a.g.m.start)))}</span></div>${a.items.map(l=>`<div class="pp-it"><button class="mn-mk ck" title="Palomear" onclick="mnTickRaw('${a.g.m.id}','${l.id}')">☐</button><span class="pp-tx">${esc(l.txt)}${isPM()?` <small class="pp-who">— ${esc(l.resp?respFirst(l.resp):'sin responsable')}</small>`:''}</span>${l.date?`<span class="pp-dt">${esc(dLabel(l.date))}</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; }).join('');
-  const h=`${ppOpen?`<div class="pp-panel"><div class="pp-h"><div><b>☐ Mis pendientes de minuta</b><div class="muted" style="font-size:.74rem">${mine.length} por atender · ${cl.length} cliente(s) · F8 para cerrar${isPM()?' · vista de PM: todo el equipo':''}</div></div><button class="mn-x" title="Cerrar" onclick="ppToggle()">–</button></div>${pers.length>1?`<div class="pp-mins"><select onchange="ppSetPer(this.value)" title="Filtrar por responsable"><option value="">Todo el equipo · ${all.length}</option>${pers.sort((a,b)=>b.n-a.n).map(p=>`<option value="${p.id}" ${ppPer===p.id?'selected':''}>${esc(p.id==='nuwek'?p.name:p.name.split(' ')[0])} · ${p.n}</option>`).join('')}</select></div>`:''}${mins.length>1?`<div class="pp-mins"><button class="${ppMin?'':'on'}" onclick="ppSetMin('')">Todas · ${all.length}</button>${mins.map(m=>`<button class="pp-mc ${ppMin===m.id?'on':''}" style="--pc:${m.c}" title="${esc(m.s)}" onclick="ppSetMin('${m.id}')">${esc(m.s.length>22?m.s.slice(0,21)+'…':m.s)} · ${esc(m.d)} · ${m.n}</button>`).join('')}</div>`:''}<div class="pp-body">${body}</div></div>`:''}<button class="pp-fab" title="Mis pendientes de minuta (F8)" onclick="ppToggle()"><span class="pp-ic">📋</span>${all.length?`<span class="pp-badge">${all.length}</span>`:''}</button>`;
+  const body=!mine.length?'<div class="pp-empty">🎉 No tienes pendientes de minuta.</div>':cl.map(c=>{ const shut=!!ppShut[c.k]; return `<div class="pp-cli"><div class="pp-ch" onclick="ppCli(${JSON.stringify(c.k).replace(/"/g,'&quot;')})"><span class="acc-arw" style="display:inline-block;width:14px;transform:rotate(${shut?-90:0}deg)">▾</span><b>${esc(c.k)}</b><span class="pp-n">${c.n}</span></div>${shut?'':c.acts.map(a=>`<div class="pp-act"><div class="pp-ah">${esc(a.g.head.txt)}<span class="muted"> · ${a.p?esc(a.p)+' · ':''}minuta del ${esc(dLabel(mnDay(a.g.m.start)))}</span></div>${a.items.map(l=>`<div class="pp-it"><button class="mn-mk ck" title="Palomear" onclick="mnTickRaw('${a.g.m.id}','${l.id}')">☐</button><span class="pp-tx">${esc(l.txt)}${ppTeamOn()?` <small class="pp-who">— ${esc(l.resp?respFirst(l.resp):'sin responsable')}</small>`:''}</span>${l.date?`<span class="pp-dt">${esc(dLabel(l.date))}</span>`:''}</div>`).join('')}</div>`).join('')}</div>`; }).join('');
+  const h=`${ppOpen?`<div class="pp-panel"><div class="pp-h"><div><b>☐ Mis pendientes de minuta</b><div class="muted" style="font-size:.74rem">${mine.length} por atender · ${cl.length} cliente(s) · F8 para cerrar${ppTeamOn()?' · viendo a todo el equipo':''}</div></div>${isPM()?`<button class="mn-x" style="width:auto;padding:0 8px;margin-right:4px" title="${ppTeam?'Volver a solo mis pendientes':'Ver también los pendientes del equipo'}" onclick="ppTeamTog()">${ppTeam?'👤 Solo míos':'👥 Ver equipo'}</button>`:''}<button class="mn-x" title="Cerrar" onclick="ppToggle()">–</button></div>${pers.length>1?`<div class="pp-mins"><select onchange="ppSetPer(this.value)" title="Filtrar por responsable"><option value="">Todo el equipo · ${all.length}</option>${pers.sort((a,b)=>b.n-a.n).map(p=>`<option value="${p.id}" ${ppPer===p.id?'selected':''}>${esc(p.id==='nuwek'?p.name:p.name.split(' ')[0])} · ${p.n}</option>`).join('')}</select></div>`:''}${mins.length>1?`<div class="pp-mins"><button class="${ppMin?'':'on'}" onclick="ppSetMin('')">Todas · ${all.length}</button>${mins.map(m=>`<button class="pp-mc ${ppMin===m.id?'on':''}" style="--pc:${m.c}" title="${esc(m.s)}" onclick="ppSetMin('${m.id}')">${esc(m.s.length>22?m.s.slice(0,21)+'…':m.s)} · ${esc(m.d)} · ${m.n}</button>`).join('')}</div>`:''}<div class="pp-body">${body}</div></div>`:''}<button class="pp-fab" title="Mis pendientes de minuta (F8)" onclick="ppToggle()"><span class="pp-ic">📋</span>${all.length?`<span class="pp-badge">${all.length}</span>`:''}</button>`;
   if(r.dataset.sig===h) return; const pb=r.querySelector('.pp-body'); const st=pb?pb.scrollTop:0; r.dataset.sig=h; r.innerHTML=h; const nb=r.querySelector('.pp-body'); if(nb) nb.scrollTop=st; ppGeoApply(); }
 function ppGeoApply(){ const r=document.getElementById('pp-root'); if(!r) return; if(ppGeo.x!=null){ const x=Math.max(0,Math.min(ppGeo.x,window.innerWidth-64)), y=Math.max(0,Math.min(ppGeo.y,window.innerHeight-64)); r.style.left=x+'px'; r.style.top=y+'px'; r.style.right='auto'; r.style.bottom='auto'; const left=x<window.innerWidth/2, up=y>window.innerHeight/2; r.classList.toggle('pl',left); r.classList.toggle('pd',!up); } else { r.classList.remove('pl','pd'); } }
 (function(){ let d=null;

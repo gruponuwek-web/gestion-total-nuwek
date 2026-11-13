@@ -49,18 +49,11 @@ async function dbSaveComment(c){
 /* ---------------- LOG (auditoría) ---------------- */
 function dbToAppLog(row){ return { id: row.id, ts: row.ts, userId: row.user_id, taskId: row.tarea_id, action: row.action || '' }; }
 function appToDbLog(e){ return { id: e.id, ts: e.ts, user_id: e.userId, tarea_id: e.taskId, action: e.action || '' }; }
-let _logCache=null;   // la 1.ª vez trae TODO el log (por páginas); después solo los más recientes y los junta
-async function dbLoadLog(){
-  let rows;
-  if(!_logCache){
-    rows=await sbAll(()=>sb.from('log').select('*').order('ts',{ascending:true}).order('id',{ascending:true}));
-    _logCache=new Map(); rows.forEach(r=>_logCache.set(r.id,r));
-  } else {
-    const { data, error } = await sb.from('log').select('*').order('ts',{ascending:false}).limit(1000);
-    if (error) throw error;
-    (data||[]).forEach(r=>_logCache.set(r.id,r));
-  }
-  return [..._logCache.values()].sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0).map(dbToAppLog);
+// El log se pide solo de UNA tarea, cuando se abre su pestaña Log (son más de 13 mil renglones en total).
+async function dbLoadTaskLog(tid){
+  const { data, error } = await sb.from('log').select('*').eq('tarea_id', tid).order('ts', { ascending: false }).limit(1000);
+  if (error) throw error;
+  return (data || []).map(dbToAppLog);
 }
 async function dbSaveLog(e){
   try{
