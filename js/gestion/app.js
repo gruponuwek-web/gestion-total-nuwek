@@ -1472,7 +1472,16 @@ function gestWeekView(byDay,chipFn){ chipFn=chipFn||gestChip;
     const lines=[]; for(let k=0;k<H1-H0;k++) lines.push(`<div class="gw-line" style="top:${k*rowH}px"></div>`);
     head+=`<div class="gw-dh ${day===today?'today':''}" onclick="gestGoDay('${day}')" title="Ver solo este día">${WD[i]} ${+day.split('-')[2]}</div>`;
     strip+=`<div class="gw-strip">${loose.map(it=>chipFn(it)).join('')||'<span class="gc-none">—</span>'}</div>`;
-    body+=`<div class="gw-day" style="height:${(H1-H0)*rowH}px">${lines.join('')}${blocks}</div>`;
+    let nowLine='';
+    if(day===today){
+      const ndDate=new Date();
+      const nMin=ndDate.getHours()*60+ndDate.getMinutes()+ndDate.getSeconds()/60;
+      if(nMin>=H0*60 && nMin<=H1*60){
+        const nTop=((nMin-H0*60)/60*rowH).toFixed(1);
+        nowLine=`<div class="ag-now-line" style="top:${nTop}px" onclick="agNowClick(event)" title="Hora actual · Toca para ver fecha y día"><span class="ag-now-dot"></span></div>`;
+      }
+    }
+    body+=`<div class="gw-day" style="height:${(H1-H0)*rowH}px">${lines.join('')}${blocks}${nowLine}</div>`;
   }
   return `<div class="gw" style="grid-template-columns:54px repeat(${nd},minmax(0,1fr))">${head}${strip}${body}</div>`;
 }
@@ -1555,7 +1564,16 @@ function agCalendar(days,pid){
     const load=subs.filter(x=>!x.part).reduce((a,it)=>a+(+it.s.durMin||30),0);
     const isDl=si&&si.t.dueDate===day;
     const dl=isDl?`<div class="ag-dl-lbl" title="Fecha límite de «${esc(si.t.name)}»">🏁 Deadline · ${esc(si.t.name)}</div>`:'';
-    return {day,html:(offFoot)=>`<div class="ag-day${isDl?' deadline':''}"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}${isDl?'<span class="ag-dl-flag">🏁</span>':''}</div>${adStrip(di)}<div class="ag-day-body" data-day="${day}" style="height:${slots*rowH}px" ondragover="agListOver(event)" ondragleave="agListLeave(event)" ondrop="agListDrop(event)">${lines.join('')}${dl}${blocks||''}${typeof gcalHourBlocks==='function'?gcalHourBlocks(day,pid,H0,H1,rowH):''}</div>${offFoot?`<div class="ag-off">${off.length?off.map(it=>`<div class="ag-off-it" onclick="openAgItem('${it.t.id}','${it.s.id}')" title="Fuera del horario 7:00–21:00">⏰ ${it.s.time} · ${esc(it.s.name)}</div>`).join(''):''}</div>`:''}</div>`};
+    let nowLine='';
+    if(day===today){
+      const nd=new Date();
+      const nMin=nd.getHours()*60+nd.getMinutes()+nd.getSeconds()/60;
+      if(nMin>=H0*60 && nMin<=H1*60){
+        const nTop=((nMin-H0*60)/60*rowH).toFixed(1);
+        nowLine=`<div id="ag-now-line" class="ag-now-line" style="top:${nTop}px" onclick="agNowClick(event)" title="Hora actual · Toca para ver fecha y día"><span class="ag-now-dot"></span></div>`;
+      }
+    }
+    return {day,html:(offFoot)=>`<div class="ag-day${isDl?' deadline':''}"><div class="ag-day-h ${day===today?'today':''}">${WD[isoWeekday(day)]} ${(+day.split('-')[2])} ${load?`<span class="ag-load">${fmtDurShort(load)}</span>`:''}${isDl?'<span class="ag-dl-flag">🏁</span>':''}</div>${adStrip(di)}<div class="ag-day-body" data-day="${day}" style="height:${slots*rowH}px" ondragover="agListOver(event)" ondragleave="agListLeave(event)" ondrop="agListDrop(event)">${lines.join('')}${dl}${blocks||''}${typeof gcalHourBlocks==='function'?gcalHourBlocks(day,pid,H0,H1,rowH):''}${nowLine}</div>${offFoot?`<div class="ag-off">${off.length?off.map(it=>`<div class="ag-off-it" onclick="openAgItem('${it.t.id}','${it.s.id}')" title="Fuera del horario 7:00–21:00">⏰ ${it.s.time} · ${esc(it.s.name)}</div>`).join(''):''}</div>`:''}</div>`};
   });
   const dayCols=cols.map(c=>c.html(anyOff)).join('');
   const hoursCol=`<div class="ag-hours"><div class="ag-hours-sp"></div>${adH?`<div class="ag-ad-lbl" style="height:${adH}px">Sin hora</div>`:''}${hourLabels.join('')}</div>`;
@@ -3223,7 +3241,82 @@ function nextRender(){ let pop=document.getElementById('next-pop'); if(!nextOpen
   pop.style.top=(r.bottom+8)+'px'; pop.style.right=Math.max(8,innerWidth-r.right-8)+'px'; }
 function goNext(tid,sid){ nxSel=sid; openAgItem(tid,sid); setTimeout(nextRender,60); }   // la lista se queda abierta para seguir viendo lo demás
 document.addEventListener('click',ev=>{ if(nextOpen&&!ev.target.closest('#next-pop')&&!ev.target.closest('#next-btn')){ nextOpen=false; nextRender(); } });
-function clockTick(){ const c=document.getElementById('live-clock'); if(!c) return; const d=new Date(); const t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':'); if(c.textContent!==t) c.textContent=t; }
+let _lastCalendarDay=todayISO();
+function agNowClick(ev){
+  if(ev) ev.stopPropagation();
+  const d=new Date();
+  const DIAS_FULL=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const MESES_FULL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const diaNom=DIAS_FULL[d.getDay()];
+  const fechaStr=`${d.getDate()} de ${MESES_FULL[d.getMonth()]} de ${d.getFullYear()}`;
+  const hora12=d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  const hora24=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+
+  const old=document.getElementById('ag-now-badge');
+  if(old) old.remove();
+
+  const badge=document.createElement('div');
+  badge.id='ag-now-badge';
+  badge.className='ag-now-badge';
+  badge.innerHTML=`<div class="ag-now-badge-time">🕒 ${hora12} <span style="opacity:.65;font-size:.7rem">(${hora24})</span></div><div class="ag-now-badge-date">📅 ${diaNom}, ${fechaStr}</div>`;
+
+  const target=ev?(ev.currentTarget||ev.target):null;
+  const line=target?(target.closest('.ag-now-line')||target):document.querySelector('.ag-now-line');
+  if(line&&line.parentElement){
+    line.parentElement.appendChild(badge);
+    let leftPx=ev&&typeof ev.clientX==='number'?(ev.clientX-line.parentElement.getBoundingClientRect().left):line.parentElement.offsetWidth/2;
+    leftPx=Math.max(90,Math.min(leftPx,line.parentElement.offsetWidth-90));
+    badge.style.left=leftPx+'px';
+    badge.style.top=line.style.top;
+  }
+
+  if(typeof shareToast==='function'){
+    shareToast(`🕒 ${diaNom} ${fechaStr} · ${hora12}`);
+  }
+
+  clearTimeout(agNowClick._t);
+  agNowClick._t=setTimeout(()=>{ const b=document.getElementById('ag-now-badge'); if(b) b.remove(); },5000);
+}
+document.addEventListener('pointerdown',ev=>{
+  if(!ev.target.closest('#ag-now-badge')&&!ev.target.closest('.ag-now-line')){
+    const b=document.getElementById('ag-now-badge'); if(b) b.remove();
+  }
+});
+function agNowUpdate(){
+  const lines=document.querySelectorAll('.ag-now-line');
+  if(!lines.length) return;
+  const d=new Date();
+  const min=d.getHours()*60+d.getMinutes()+d.getSeconds()/60;
+  const curTimeStr=d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  lines.forEach(line=>{
+    line.setAttribute('title',`Hora actual: ${curTimeStr} · Toca para ver fecha y día`);
+    const isGw=line.closest && line.closest('.gw');
+    const H0=isGw?8:AG.H0;
+    const H1=isGw?21:AG.H1;
+    const rowH=isGw?46:AG.rowH;
+    if(min<H0*60||min>H1*60){
+      line.style.display='none';
+    } else {
+      line.style.display='block';
+      line.style.top=((min-H0*60)/60*rowH).toFixed(1)+'px';
+    }
+  });
+}
+function clockTick(){
+  const c=document.getElementById('live-clock');
+  if(c){
+    const d=new Date();
+    const t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+    if(c.textContent!==t) c.textContent=t;
+  }
+  const curDay=todayISO();
+  if(curDay!==_lastCalendarDay){
+    _lastCalendarDay=curDay;
+    render();
+    return;
+  }
+  agNowUpdate();
+}
 setInterval(()=>{ if(!document.hidden) clockTick(); },1000); setTimeout(clockTick,0);
 setInterval(()=>{ if(session&&!document.hidden){ nextBtnUpdate(); if(nextOpen) nextRender(); } },30000);
 
