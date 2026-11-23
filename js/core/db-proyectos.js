@@ -24,11 +24,12 @@ function dbToAppProject(row){
     links: Array.isArray(row.links) ? row.links : [],
     scorecards: Array.isArray(row.scorecards) ? row.scorecards : [],
     notasCliente: Array.isArray(row.notas_cliente) ? row.notas_cliente : [],
-    pmIds: Array.isArray(row.pm_ids) ? row.pm_ids : []
+    pmIds: Array.isArray(row.pm_ids) ? row.pm_ids : [],
+    cancelacion: (row.cancelacion && typeof row.cancelacion==='object') ? row.cancelacion : null
   };
 }
 function appToDbProject(p){
-  return {
+  const r = {
     id: p.id,
     cliente_id: p.clientId || null,
     servicio_id: p.serviceId || null,
@@ -46,6 +47,8 @@ function appToDbProject(p){
     notas_cliente: p.notasCliente || [],
     pm_ids: p.pmIds || []
   };
+  if (p.cancelacion) r.cancelacion = p.cancelacion;   // solo si hay cancelación (la columna se crea con el SQL de cancelar servicio)
+  return r;
 }
 
 /* ---------- FRENTE ---------- */
@@ -86,6 +89,7 @@ async function dbSaveProject(p){
   try{
     const row = appToDbProject(p);
     let { error } = await sb.from('proyectos').upsert(row);
+    if (error && /cancelacion/i.test(error.message||'')){ delete row.cancelacion; ({ error } = await sb.from('proyectos').upsert(row)); console.warn('Falta la columna «cancelacion» en proyectos: se guardó sin fecha ni motivo.'); }
     if (error && /notas_cliente|pm_ids/i.test(error.message||'')){   // alguna columna aún no existe: guardar sin ellas
       if(/pm_ids/i.test(error.message||'')) delete row.pm_ids; if(/notas_cliente/i.test(error.message||'')) delete row.notas_cliente; ({ error } = await sb.from('proyectos').upsert(row));
       if (error && /notas_cliente|pm_ids/i.test(error.message||'')){ delete row.pm_ids; delete row.notas_cliente; ({ error } = await sb.from('proyectos').upsert(row)); }

@@ -398,6 +398,7 @@ function seriesDates(sr,start,dueDate,horizonEnd){
   return out; }
 /* crea las repeticiones que falten (idempotente; ids fijos serie+fecha para que dos usuarios no dupliquen) */
 function syncSeriesOf(t){
+  { const pr=store.project(t.projectId); if(pr&&pr.status==='cancelled') return false; }   // servicio cancelado: no se crean más repeticiones
   let changed=false; const horizon=addDaysISO(todayISO(),SERIES_HORIZON_DAYS);
   (t.subtasks||[]).filter(m=>m.isSeries&&m.series).forEach(m=>{ const sr=m.series, tp=sr.tpl||{}; const have=new Set((t.subtasks||[]).filter(x=>x.seriesId===m.id).map(x=>x.occDate)); const skip=new Set(sr.skip||[]);
     seriesDates(sr,sr.startDate,t.dueDate,horizon).forEach(d=>{ if(have.has(d)||skip.has(d)) return;
@@ -783,7 +784,7 @@ let showInactive=false;
 function viewClientes(){
   const favs=myFavClients();
   const card=c=>{
-    const n=store.projectsOf(c.id).filter(p=>p.status!=='concluded').length; const fav=favs.includes(c.id);
+    const n=store.projectsOf(c.id).filter(p=>p.status!=='concluded'&&p.status!=='cancelled').length; const fav=favs.includes(c.id);
     return `<div class="card click${fav?' is-fav':''}${c.activo===false?' cl-off':''}" onclick="openClient('${c.id}')">
       <button class="fav-btn${fav?' on':''}" title="${fav?'Quitar de favoritos':'Marcar como favorito'}" onclick="event.stopPropagation();toggleFavClient('${c.id}')">${fav?'★':'☆'}</button>
       <div class="pill ${c.tipo==='interno'?'yellow':'green'}">${c.tipo==='interno'?'Interno':'Cliente'}</div>${c.activo===false?' <span class="pill gray">Inactivo</span>':''}
@@ -852,17 +853,17 @@ function viewCliente(){
   const people=pList.map(p=>`<span class="chip tag-chip">${avatar(p,true)} ${p.portal?`<span title="Tiene acceso al portal (${esc(p.portal.user)})">🔑</span> `:''}${p.name}${p.role?' · '+p.role:''} <button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span>`).join('') || '<span class="muted" style="font-size:.85rem">Sin contactos aún</span>';
   const peopleMore=c.people.length>PEOPLE_LIM?`<button class="btn ghost sm" onclick="togglePeople('${c.id}')">${pOpen?'▴ Ver menos':'▾ Ver más ('+(c.people.length-PEOPLE_LIM)+')'}</button>`:'';
   const projCard=p=>{
-    const sv=store.service(p.serviceId); const health=projectHealth(p.id); const conc=p.status==='concluded';
-    return `<div class="card click" style="${conc?'opacity:.85':''}" onclick="openProject('${p.id}')">
+    const sv=store.service(p.serviceId); const health=projectHealth(p.id); const conc=p.status==='concluded', canc=p.status==='cancelled';
+    return `<div class="card click" style="${conc||canc?'opacity:.8':''}" onclick="openProject('${p.id}')">
       <div style="display:flex;justify-content:space-between;align-items:start">
-        <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div>${conc?' <span class="pill gray">✅ Concluido</span>':''}<h3 style="margin:8px 0 2px">${p.name}</h3></div>
+        <div><div class="pill yellow">${sv?sv.name:'Servicio'}</div>${conc?' <span class="pill gray">✅ Concluido</span>':''}${canc?' <span class="pill red">⛔ Cancelado</span>':''}<h3 style="margin:8px 0 2px">${p.name}</h3></div>
         <span style="display:flex;align-items:center;gap:6px"><span class="pill ${health.cls}" title="Puntualidad: ${health.pct}% de las actividades están hechas o por hacer dentro de su fecha (las tardías la bajan).">${health.icon} ${health.pct}%</span><span class="pill ${health.avance===100?'green':'gray'}" title="Avance: ${health.hechas} de ${health.total} actividades realizadas.">✓ ${health.avance}%</span>${canManageProject()?`<button class="btn ghost sm" title="Editar proyecto" onclick="event.stopPropagation();openProjectEdit('${p.id}')">✏️</button>`:''}</span>
       </div>
       <div class="muted" style="font-size:.85rem;margin-top:6px">${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}</div>
     </div>`;
   };
-  const allP=store.projectsOf(c.id); const projs=allP.filter(p=>p.status!=='concluded').map(projCard).join(''); const concl=allP.filter(p=>p.status==='concluded');
-  const conclHtml=concl.length?`<details class="cl-concl" style="margin-top:14px"><summary class="sec-title" style="cursor:pointer"><h2 style="display:inline">Proyectos concluidos <span class="muted" style="font-size:.85rem">· ${concl.length}</span></h2></summary><div class="grid cols-2" style="margin-top:8px">${concl.map(projCard).join('')}</div></details>`:'';
+  const allP=store.projectsOf(c.id); const projs=allP.filter(p=>p.status!=='concluded'&&p.status!=='cancelled').map(projCard).join(''); const concl=allP.filter(p=>p.status==='concluded'||p.status==='cancelled');
+  const conclHtml=concl.length?`<details class="cl-concl" style="margin-top:14px"><summary class="sec-title" style="cursor:pointer"><h2 style="display:inline">Concluidos y cancelados <span class="muted" style="font-size:.85rem">· ${concl.length}</span></h2></summary><div class="grid cols-2" style="margin-top:8px">${concl.map(projCard).join('')}</div></details>`:'';
   return `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › ${c.name}</div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px">
@@ -1709,7 +1710,8 @@ function viewProyecto(){
     : `<div class="crumb"><a onclick="go('clientes')">Clientes</a> › <a onclick="openClient('${c.id}')">${c.name}</a> › ${p.name}</div>`;
   const meta = colab ? `${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}` : `${money(p.price)} · ${p.months} meses · ${dLabel(p.startDate)}–${dLabel(p.endDate)}`;
   const hubBtns = colab ? '' : `<div style="display:flex;gap:8px">${canManageProject()?`<button class="btn ghost sm" onclick="openProjectEdit('${p.id}')">✏️ Editar</button><button class="btn ghost sm" title="Eliminar proyecto" style="color:#c0392b" onclick="openProjectDel('${p.id}')">🗑️</button>`:''}${canCopy()?`<button class="btn ghost sm" onclick="openCopy('${p.id}')">⧉ Copiar tareas</button><button class="btn ghost sm" onclick="openImport('${p.id}')">⬆ Importar</button><button class="btn ghost sm" onclick="expOpen('${p.id}')">⬇ Exportar</button>`:''}<button class="btn ghost sm" onclick="openEtapaForm('${p.id}')">+ Etapa</button><button class="btn ghost sm" onclick="openFrenteForm('${p.id}')">+ Frente</button><button class="btn ghost sm" onclick="openKbTask('${p.id}')">+ Tarea</button></div>`;
-  return `${crumb}
+  const cancBanner=p.status==='cancelled'?`<div class="card" style="border-left:4px solid #c0392b;background:#fdf1ef;margin-bottom:12px"><b>⛔ Servicio cancelado</b>${p.cancelacion&&p.cancelacion.fecha?' desde el <b>'+dLabel(p.cancelacion.fecha)+'</b>':''}${p.cancelacion&&p.cancelacion.motivo?'<div class="muted" style="margin-top:4px">Motivo: '+esc(p.cancelacion.motivo)+'</div>':''}<div class="muted" style="font-size:.8rem;margin-top:4px">Lo pendiente desde esa fecha quedó anulado (no entregado). Los pagos siguen vivos.</div></div>`:'';
+  return `${crumb}${cancBanner}
     <div class="card"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
       <div><div class="pill yellow">${sv?sv.name:''}</div><h2 style="margin:8px 0 2px;font-size:1.5rem">${p.name}</h2>
         <div class="muted" style="font-size:.86rem">${c.name} · ${meta}</div></div>
@@ -2144,6 +2146,14 @@ function quickModal(){
       <div class="field"><label>Color</label>${colorPicker(f.color)}</div>
       <div class="hint">El orden se ajusta con las flechas ↑ ↓ en el Gestor.</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveFrenteEdit()">Guardar</button></div>`;
+  } else if(qm.kind==='proyectoCancel'){
+    const p2=store.project(qm.pid);
+    inner=`<h3 style="color:#c0392b">⛔ Cancelar servicio</h3>
+      <p class="muted" style="margin-top:0">«${esc(p2.name)}» pasa a <b>Cancelado</b>. No se borra nada: tareas, minutas, comentarios y pagos se conservan.</p>
+      <div class="field"><label>Cancelado desde</label><input id="qm-cdate" type="date" value="${qm.f}" onchange="projCancelDate(this.value)"><div class="hint">Lo pendiente <b>desde esta fecha</b> queda anulado (<b id="qm-ccount">${projCancelCount(qm.pid,qm.f)}</b> actividad(es) ahora). Lo anterior se queda como está.</div></div>
+      <div class="field"><label>Motivo <span class="muted" style="text-transform:none">(obligatorio)</span></label><textarea id="qm-cmot" rows="3" style="width:100%" placeholder="Ej. El cliente decidió terminar el servicio"></textarea></div>
+      <div class="hint">Los pagos pendientes <b>no se tocan</b>: siguen vivos. Puedes reactivar el servicio cuando quieras.</div>
+      <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Volver</button><button class="btn" style="background:#c0392b;border-color:#c0392b" onclick="confirmProjectCancel()">Cancelar el servicio</button></div>`;
   } else if(qm.kind==='proyectoEdit'){
     const p2=store.project(qm.pid);
     inner=`<h3>Editar proyecto</h3>
@@ -2156,7 +2166,7 @@ function quickModal(){
         <div><label>Cierre</label><input id="qm-end" type="date" value="${p2.endDate||''}"></div></div>
       <div class="field"><label>¿Qué PM verán este proyecto?</label>${pmPickHtml(p2.pmIds,'qm-pm')}</div>
       <div class="hint">Editar el precio no toca el calendario de pagos (ese lo manejas aparte). Tip: puedes usar el total programado como precio.</div>
-      <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button><button class="btn ghost" style="color:#1f6b45;border-color:#b9e0c9" onclick="setProjectStatus('${qm.pid}','${p2.status==='concluded'?'active':'concluded'}')">${p2.status==='concluded'?'↩ Reabrir proyecto':'✅ Concluir proyecto'}</button><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
+      <div class="wiz-actions"><button class="btn ghost" style="margin-right:auto;color:#c0392b" onclick="openProjectDel('${qm.pid}')">🗑️ Eliminar proyecto</button>${p2.status==='cancelled'?(isDireccion()?`<button class="btn ghost" style="color:#1f6b45;border-color:#b9e0c9" onclick="projectReactivate('${qm.pid}')">↩ Reactivar servicio</button>`:''):`<button class="btn ghost" style="color:#1f6b45;border-color:#b9e0c9" onclick="setProjectStatus('${qm.pid}','${p2.status==='concluded'?'active':'concluded'}')">${p2.status==='concluded'?'↩ Reabrir proyecto':'✅ Concluir proyecto'}</button>${isDireccion()&&p2.status!=='concluded'?`<button class="btn ghost" style="color:#c0392b;border-color:#e3b1ab" onclick="openProjectCancel('${qm.pid}')">⛔ Cancelar servicio</button>`:''}`}<button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveProjectEdit()">Guardar</button></div>`;
   } else if(qm.kind==='proyectoDel'){
     const p2=store.project(qm.pid), st=store.projectStats(qm.pid);
     inner=`<h3 style="color:#c0392b">Eliminar proyecto</h3>
@@ -2449,6 +2459,31 @@ function delPay(payId,pid){if(confirm('¿Eliminar este pago?')){store.removePaym
 function openGenPagos(pid){qm={kind:'genPagos',pid};render();}function runGenPagos(){const freq=val('qm-freq'),count=+val('qm-count'),total=+val('qm-total'),start=val('qm-pstart');if(!count||!total||!start){alert('Completa frecuencia, número, total y fecha.');return;}if(!confirm('Esto reemplaza el calendario de pagos actual. ¿Continuar?'))return;store.generatePaymentsCustom(qm.pid,freq,count,total,start);qm=null;render();}
 function openProjectEdit(pid){ if(!canManageProject()) return; qm={kind:'proyectoEdit',pid};render();}
 function setProjectStatus(pid,st){ if(!canManageProject()) return; const p=store.project(pid); if(!p) return; if(st==='concluded'&&!confirm('¿Concluir «'+p.name+'»? No se borra nada: pasa a «Proyectos concluidos» y puedes reabrirlo cuando quieras.')) return; store.updateProject(pid,{status:st}); qm=null; shareToast(st==='concluded'?'Proyecto concluido.':'Proyecto reabierto.'); render(); }
+/* ===== CANCELAR SERVICIO (solo Dirección) =====
+   El proyecto pasa a «Cancelado». Lo pendiente desde la fecha de cancelación se marca «no entregada» (como ya hacemos al anular una tarea):
+   no sale como pendiente ni cuenta en el avance. No se borra nada, los pagos no se tocan y se puede reactivar. */
+function projVoid(pid,date){ const p=store.project(pid); if(!p||p.status!=='cancelled') return false; const f=(p.cancelacion&&p.cancelacion.fecha)||''; return !date||!f||date>=f; }
+function projCancelCount(pid,f){ let n=0; store.tasksOf(pid).forEach(t=>(t.subtasks||[]).forEach(s=>{ if(!s.isSeries&&!s.done&&!(s.date&&s.date<f)) n++; })); return n; }
+function openProjectCancel(pid){ if(!isDireccion()){ shareToast('Solo Dirección cancela servicios.'); return; } qm={kind:'proyectoCancel',pid,f:todayISO()}; render(); }
+function projCancelDate(v){ if(qm&&qm.kind==='proyectoCancel'){ qm.f=v||todayISO(); const e=document.getElementById('qm-ccount'); if(e) e.textContent=projCancelCount(qm.pid,qm.f); } }
+function confirmProjectCancel(){ if(!isDireccion()||!qm||qm.kind!=='proyectoCancel') return; const p=store.project(qm.pid); if(!p) return; const f=val('qm-cdate')||qm.f||todayISO(); const mot=(val('qm-cmot')||'').trim();
+  if(!mot){ shareToast('Escribe el motivo de la cancelación.'); return; }
+  const now=new Date().toISOString(); const tareas={}; let nSub=0;
+  store.tasksOf(p.id).forEach(t=>{ let ch=0; const subs=(t.subtasks||[]).filter(x=>!x.isSeries);
+    subs.forEach(x=>{ if(x.done||(x.date&&x.date<f)) return; x.done=true; x.noEntregada=true; x.timeSpent=0; x.doneAt=now; x.cancelAnula=true; ch++; nSub++; });
+    const pend=subs.filter(x=>!x.done);
+    if(t.status!=='done'&&!pend.length&&(subs.length?ch>0:(!t.dueDate||t.dueDate>=f))){ tareas[t.id]=t.status||'to-do'; t.status='done'; t.noEntregada=true; ch++; }
+    if(ch){ if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Servicio cancelado: lo pendiente desde el '+dLabel(f)+' quedó anulado (no entregado)'); } });
+  store.updateProject(p.id,{status:'cancelled',cancelacion:{fecha:f,motivo:mot,por:currentUser,ts:now,tareas}});
+  qm=null; shareToast('Servicio cancelado. Se anularon '+nSub+' actividad(es) pendiente(s).'); render(); }
+function projectReactivate(pid){ if(!isDireccion()){ shareToast('Solo Dirección reactiva servicios.'); return; } const p=store.project(pid); if(!p||p.status!=='cancelled') return;
+  if(!confirm('¿Reactivar «'+p.name+'»? Lo que se anuló por la cancelación vuelve a quedar pendiente.')) return;
+  const tp=(p.cancelacion&&p.cancelacion.tareas)||{};
+  store.tasksOf(pid).forEach(t=>{ let ch=0; (t.subtasks||[]).forEach(x=>{ if(x.cancelAnula){ x.done=false; x.noEntregada=false; x.doneAt=null; delete x.cancelAnula; ch++; } });
+    if(tp[t.id]!==undefined){ t.status=tp[t.id]||'to-do'; t.noEntregada=false; ch++; }
+    if(ch){ if(typeof dbSaveTask==='function') dbSaveTask(t); logEvent(t.id,'Servicio reactivado: volvió lo que se había anulado por la cancelación'); } });
+  store.updateProject(pid,{status:'active',cancelacion:{reactivado:new Date().toISOString(),por:currentUser}});
+  qm=null; shareToast('Servicio reactivado.'); render(); }
 function openProjectDel(pid){ if(!canManageProject()) return; qm={kind:'proyectoDel',pid}; render(); }
 async function confirmProjectDel(){ if(!canManageProject()||!qm||qm.kind!=='proyectoDel') return; const p=store.project(qm.pid); if(!p) return;
   if((val('qm-delname')||'').trim()!==p.name.trim()){ alert('El nombre no coincide.'); return; }
@@ -5141,7 +5176,7 @@ let ppOpen=false, ppMin='', ppPer='', ppShut={}, ppGeo=(()=>{ try{ return JSON.p
 let ppTeam=false;   // el PM solo ve lo suyo; con «Ver equipo» ve también lo de los demás (de sus proyectos)
 function ppTeamOn(){ return isPM()&&ppTeam; }
 function ppTeamTog(){ ppTeam=!ppTeam; ppPer=''; ppMin=''; ppRender(); }
-function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>{ const lk=g.head&&g.head.link; const lt=lk&&store.task(lk.tid); if(!pmSeesProject((lt||g.t).projectId)) return; g.items.forEach(l=>{ if(!l.done&&(l.resp===currentUser||ppTeamOn())) mine.push({g,l}); }); }); return mine; }
+function ppMine(){ const mine=[]; mnAllPuntos().forEach(g=>{ const lk=g.head&&g.head.link; const lt=lk&&store.task(lk.tid); if(!pmSeesProject((lt||g.t).projectId)) return; g.items.forEach(l=>{ if(projVoid((lt||g.t).projectId,l.date)) return; if(!l.done&&(l.resp===currentUser||ppTeamOn())) mine.push({g,l}); }); }); return mine; }
 function ppGoMin(tid,sid,mid){ ppOpen=false; ppRender(); mnView(tid,sid,mid); }
 function ppToggle(){ ppOpen=!ppOpen; ppRender(); }
 function ppSetPer(v){ ppPer=v||''; ppRender(); }
