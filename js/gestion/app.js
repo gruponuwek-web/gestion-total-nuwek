@@ -415,7 +415,7 @@ function subOrder(t,ignoreCollapse){ const all=t.subtasks||[]; const col=ignoreC
   all.filter(x=>!subIsChild(t,x)).forEach(m=>{ const kids=subKids(t,m.id); out.push({s:m,depth:0,kids}); if(!subCollapsedNow(m,col)) kids.forEach(k=>out.push({s:k,depth:1,kids:[]})); });
   return out; }
 let addingChild=null, subEd=null, clientPop=null, verbInfo=false;
-function openAddChild(tid,sid){ addingChild={tid,sid}; render(); setTimeout(()=>{ const el=document.getElementById('nc-name'); if(el) el.focus(); },0); }
+function openAddChild(tid,sid,at){ addingChild={tid,sid,at:at||sid}; render(); setTimeout(()=>{ const el=document.getElementById('nc-name'); if(el) el.focus(); },0); }
 function cancelAddChild(){ addingChild=null; render(); }
 function addChildSub(){ if(!addingChild) return; const {tid,sid}=addingChild; const n=(val('nc-name')||'').trim(); if(!n) return; const t=store.task(tid); const m=t.subtasks.find(x=>x.id===sid); if(!m||m.parentId) return;
   const c=subCollapsedMap(); if(c[sid]!==0){ c[sid]=0; try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} }
@@ -571,7 +571,7 @@ function render(){
 }
 function renderBase(){
   const app=document.getElementById('app');
-  if(session){ saveSession(); saveNav(); }
+  if(session){ saveSession(); saveNav(); setTimeout(syncUrl,0); }
   setTimeout(()=>{ if(document.getElementById('dir-q')) dirApply(); },0); setTimeout(mnRender,0); setTimeout(ppRender,0); setTimeout(()=>{ if(session&&!trashBusy&&typeof dbLoadTrash==='function'){ trashBusy='1'; trashLoad(); } },0); setTimeout(notifUpdate,0); setTimeout(ensureAttNow,0); setTimeout(()=>{ nextBtnUpdate(); clockTick(); if(nextOpen) nextRender(); },0);
   if(window.CLIENT_ONLY&&!session&&!publicSes&&!clientSess){ app.innerHTML=clientLoginScreen(); document.getElementById('modal-root').innerHTML=cpRecS?cpRecModal():''; return; }
   if(!session){
@@ -633,7 +633,7 @@ function whoSelector(){
 function sessionBar(){
   const u=store.person(session)||{name:'?'};
   const rl=permLabel(u.perm);
-  return `<div class="sessbar"><span id="live-clock" class="live-clock" title="Hora actual">--:--:--</span>${trashCanSee()?`<button id="trash-btn" class="next-btn trash-btn" onclick="trashOpenPanel()" title="Papelera: lo que se eliminó y se puede recuperar">🗑️${trashVisible().length?`<span class="trash-n">${trashVisible().length}</span>`:''}</button>`:''}<button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
+  return `<div class="sessbar"><span id="live-clock" class="live-clock" title="Hora actual">${clockTxt()}</span>${trashCanSee()?`<button id="trash-btn" class="next-btn trash-btn" onclick="trashOpenPanel()" title="Papelera: lo que se eliminó y se puede recuperar">🗑️${trashVisible().length?`<span class="trash-n">${trashVisible().length}</span>`:''}</button>`:''}<button id="next-btn" class="next-btn" onclick="toggleNext(event)" title="Tus siguientes actividades">⏰</button>${avatar(u,true)}<div class="sess-info"><div class="sess-nm">${u.name}</div><div class="sess-rl">${rl}</div></div><button class="sess-out" onclick="logout()">Salir</button></div>`;
 }
 /* ===== LOGIN ===== */
 function getLoginBg(){ return (store.d.settings && store.d.settings.loginBg) || LOGIN_BG; }
@@ -711,7 +711,7 @@ function pinSubmit(){
     if(typeof notionLogin==='function') notionLogin(u.id,loginPin);   // [NOTION] pase de este navegador para el puente de Apps Script
     session=u.id; currentUser=u.id; role=u.perm||'colab'; kbPerson=u.id; agPerson=u.id;
     view=(role==='colab')?'op_pendientes':'clientes';
-    selProject=null; modalTask=null; opSelTask=null;
+    selProject=null; modalTask=null; opSelTask=null; applyRoute(location.hash);   // [URL POR SECCIÓN] entra directo a la sección del link
     loginAttempts[u.id]=null; loginUser=null; loginPin=''; loginErr='';
     saveSession(); if(afterLoginTask){ openSharedTask(afterLoginTask); afterLoginTask=null; } render(); return;
   }
@@ -743,12 +743,13 @@ function restoreSession(){
       if(n.modalTask&&store.task(n.modalTask)) modalTask=n.modalTask;
       if(n.opSelTask&&store.task(n.opSelTask)) opSelTask=n.opSelTask;
       if(n.gestSub) gestSub=n.gestSub; if(n.gestScope) gestScope=n.gestScope; }
+    applyRoute(location.hash);   // [URL POR SECCIÓN] si la dirección trae una sección (#/clientes/…), manda sobre lo guardado
     return true; }catch(_){ return false; } }
 function logout(){ if(typeof gcalForget==='function') gcalForget(false); if(typeof notionForget==='function') notionForget(); session=null; loginUser=null; loginPin=''; loginErr=''; clearSession(); render(); }
 function shellOp(body){
   return `
     <div class="topbar"><div class="topbar-in">
-      <div class="brand" onclick="go('op_pendientes')"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
+      <div class="brand" onclick="go('op_pendientes')"><span class="mark">N</span> Gestión Nuwek</div>
       <div class="nav">
         <button class="${view==='op_pendientes'?'active':''}" onclick="go('op_pendientes')">Mis pendientes</button>
         <button class="${view==='op_agenda'?'active':''}" onclick="openAgenda()">Agenda</button>
@@ -763,7 +764,7 @@ function shellOp(body){
 function shell(body){
   return `
     <div class="topbar"><div class="topbar-in">
-      <div class="brand" onclick="go('clientes')"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
+      <div class="brand" onclick="go('clientes')"><span class="mark">N</span> Gestión Nuwek</div>
       <div class="nav">
         <button class="${isMiEspacio()?'active':''}" onclick="openMiEspacio()">Mi espacio</button>
         <button class="${view==='clientes'||view==='cliente'||view==='proyecto'||view==='wizard'?'active':''}" onclick="go('clientes')">Clientes</button>
@@ -2646,7 +2647,7 @@ function taskBody(t,panel){
     const donePct=kids.length?`<span class="sub-prog" title="Sub-subtareas hechas">${kids.filter(k=>k.done).length}/${kids.length}</span>`:'';
     const chev=kids.length?`<button class="sub-chev" title="Mostrar / ocultar sub-subtareas" onclick="toggleSubCollapse('${s.id}')">${subCollapsedNow(s)?'▸':'▾'}</button>`:'';
     const detail=s.isSeries?('Serie ↻ '+seriesLabel(s.series)+' · '+(_t.personId?per.name:'Sin responsable')+' · '+(_t.time||'sin hora')+' · '+(_t.durMin?fmtDurShort(_t.durMin):'sin duración')):[s.personId?per.name:'Sin responsable', s.date?dLabel(s.date):'sin fecha', s.time||'sin hora', s.durMin?fmtDurShort(s.durMin):'sin duración'].join(' · ');
-    const nextOcc=s.isSeries?(subKids(t,s.id).filter(k=>!k.done&&k.date).map(k=>k.date).sort()[0]||''):'';
+    const nextOcc=s.isSeries?(subKids(t,s.id).filter(k=>k.seriesId===s.id&&!k.done&&k.date).map(k=>k.date).sort()[0]||''):'';
     const serChip=s.isSeries?`<span class="sub-chip ser" title="Serie por calendario">↻ ${seriesLabel(s.series)}</span>${nextOcc?`<span class="sub-chip" title="Próxima repetición pendiente">Próxima: ${dLabel(nextOcc)}</span>`:''}`:'';
     const _src=s.isSeries?seriesTpl(s):s; const ackBtn=!s.seriesId&&(_src.team||[]).includes(currentUser)&&(_src.teamInfo||{})[currentUser]&&(_src.teamInfo[currentUser].by!==currentUser)&&!(_src.teamAck||{})[currentUser]&&!s.done?`<button class="ack-btn" title="${esc(store.person(_src.teamInfo[currentUser].by).name)} te agregó como participante" onclick="event.stopPropagation();ackTeam('${t.id}','${s.id}')">🫱🏽‍🫲🏾 Te agregaron · ✓ Ya la vi y la atendí</button>`:'';
     const _l=sesLast(s); const cliChip=_l?`<span class="sub-chip" style="background:${SES_ST[_l.estado].bg};color:${SES_ST[_l.estado].c};font-weight:700" title="${esc(_l.razon||'')}">${_l.estado==='confirmado'?'✅ Cliente confirmó':_l.estado==='cancelado'?'❌ Cliente canceló':'🔁 Cliente pide reprogramar'}</span>`:'';
@@ -2663,10 +2664,10 @@ function taskBody(t,panel){
       ? `<div class="sub-time"><input type="number" min="1" id="stime-${s.id}" placeholder="min"><button class="mini ok" onclick="confirmSubTime('${t.id}','${s.id}')">✓</button><button class="mini no" onclick="cancelSubTime()">×</button></div>`
       : `<div class="sub-btns">${whoName}${av}
           <button class="sub-ib${cliN?' on':''}" title="${cliN?'Participa el cliente ('+cliN+')':'Participación del cliente: nadie asignado'}" onclick="openClientPop('${t.id}','${s.id}')">🫱🏽‍🫲🏾${cliN?`<i>${cliN}</i>`:''}</button>
-          ${(depth===0&&!s.isSeries)?`<button class="sub-ib" title="Agregar sub-subtarea dentro de esta" onclick="openAddChild('${t.id}','${s.id}')">↳＋</button>`:`<span class="sub-ib-sp"></span>`}
+          ${(depth===0&&!s.parentId)?`<button class="sub-ib" title="${s.isSeries?'Agregar sub-subtarea dentro de esta serie':'Agregar sub-subtarea dentro de esta'}" onclick="openAddChild('${t.id}','${s.id}')">↳＋</button>`:(depth===1&&s.parentId)?`<button class="sub-ib" title="Agregar otra sub-subtarea en «${esc(((t.subtasks||[]).find(x=>x.id===s.parentId)||{}).name||'')}»" onclick="openAddChild('${t.id}','${s.parentId}','${s.id}')">↳＋</button>`:`<span class="sub-ib-sp"></span>`}
           <button class="sub-ib${miss.length?' bad':''}" title="${miss.length?'Falta: '+miss.join(', ')+' — clic para completar':'Editar'}" onclick="openSubEdit('${t.id}','${s.id}')">✏️</button>
           <button class="sub-ib" title="Eliminar" onclick="delSub('${t.id}','${s.id}')">🗑️</button></div>`;
-    const childForm=(addingChild&&addingChild.sid===s.id&&addingChild.tid===t.id)?`<div class="sub-addkid"><input id="nc-name" placeholder="Nueva sub-subtarea en «${esc(s.name)}»…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChildSub()}else if(event.key==='Escape'){event.stopPropagation();cancelAddChild()}"><button class="btn sm" onclick="addChildSub()">+ Agregar</button><button class="btn ghost sm" onclick="cancelAddChild()">Cancelar</button></div>`:'';
+    const childForm=(addingChild&&(addingChild.at||addingChild.sid)===s.id&&addingChild.tid===t.id)?`<div class="sub-addkid"><input id="nc-name" placeholder="Nueva sub-subtarea en «${esc(((t.subtasks||[]).find(x=>x.id===addingChild.sid)||s).name)}»…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChildSub()}else if(event.key==='Escape'){event.stopPropagation();cancelAddChild()}"><button class="btn sm" onclick="addChildSub()">+ Agregar</button><button class="btn ghost sm" onclick="cancelAddChild()">Cancelar</button></div>`:'';
     return `<div class="sub-group-item"><div class="sub-item sub2${lateD?' is-late':''}${depth?' sub-child':''}${hiSub&&hiSub.ids.includes(s.id)?' sub-hi':''}" data-sid="${s.id}" ondragover="sbOver(event,'${t.id}')" ondragleave="sbLeave(event)" ondrop="sbDrop(event,'${t.id}','${s.id}')">
       <span class="sub-grip" title="Arrastra para reordenar" draggable="true" ondragstart="sbStart(event,'${t.id}','${s.id}')" ondragend="sbEnd()">☰</span>${chev}
       <span class="check ${s.done?'done':''} ${s.noEntregada?'ne':''} ${chkClickable?'':'locked'}" ${chkClickable?`onclick="toggleSub('${t.id}','${s.id}')"`:`title="${s.isSeries?'Serie: se palomea cada repetición':(locked?'Tiempo fijo: pasaron los 10 minutos':'Solo palomeas tus subtareas')}"`}>${s.done?'✓':''}</span>
@@ -3111,7 +3112,7 @@ let shareTaskIdAtLoad=(()=>{ try{ const m=(location.hash||'').match(/^#\/tarea\/
    2) la pantalla de entrada (equipo o clientes) aparece en cuanto llega lo mínimo, sin esperar tareas ni pagos;
    3) lo secundario (comentarios, historial, etiquetas, pagos) ya no bloquea: se aplica cuando llega y,
       si se atora, la sincronización automática lo trae después;
-   4) mientras tanto se ve «Cargando portal…» en lugar de la página en blanco.
+   4) mientras tanto se ve «Cargando Gestión Nuwek…» en lugar de la página en blanco.
    Los datos que se guardan y su orden son los mismos de antes. */
 let bootDone=false;
 /* [ARRANQUE INSTANTÁNEO 2026-11-05] con sesión guardada, el portal se dibuja AL MOMENTO con la copia de este navegador
@@ -3130,7 +3131,7 @@ function bootStaleUI(st){
   if(!el){ el=document.createElement('div'); el.id='boot-stale'; document.body.appendChild(el); }
   el.innerHTML=st==='err'?'Sin conexión con la base: ves lo último guardado en este navegador (solo ver). <a href="" style="color:#cfe8d8">Reintentar</a>':'<span class="boot-spin"></span>Actualizando…';
 }
-function bootLoading(){ const app=document.getElementById('app'); if(app&&!app.firstChild) app.innerHTML='<div class="boot-loading"><span class="boot-spin"></span>Cargando portal…</div>'; }
+function bootLoading(){ const app=document.getElementById('app'); if(app&&!app.firstChild) app.innerHTML='<div class="boot-loading"><span class="boot-spin"></span>Cargando Gestión Nuwek…</div>'; }
 function bootError(e){
   console.error('Error cargando datos desde Supabase:', e);
   const app=document.getElementById('app');
@@ -3295,19 +3296,19 @@ function agNowClick(ev){
   badge.className='ag-now-badge';
   badge.innerHTML=`<div class="ag-now-badge-time">🕒 ${hora12} <span style="opacity:.65;font-size:.7rem">(${hora24})</span></div><div class="ag-now-badge-date">📅 ${diaNom}, ${fechaStr}</div>`;
 
-  const target=ev?(ev.currentTarget||ev.target):null;
-  const line=target?(target.closest('.ag-now-line')||target):document.querySelector('.ag-now-line');
-  if(line&&line.parentElement){
-    line.parentElement.appendChild(badge);
-    let leftPx=ev&&typeof ev.clientX==='number'?(ev.clientX-line.parentElement.getBoundingClientRect().left):line.parentElement.offsetWidth/2;
-    leftPx=Math.max(90,Math.min(leftPx,line.parentElement.offsetWidth-90));
-    badge.style.left=leftPx+'px';
-    badge.style.top=line.style.top;
+  /* Usar position:fixed en document.body para que sobreviva a render() */
+  document.body.appendChild(badge);
+  const line=ev?(ev.currentTarget||ev.target).closest('.ag-now-line'):document.querySelector('.ag-now-line');
+  if(line){
+    const lr=line.getBoundingClientRect();
+    let leftPx=ev&&typeof ev.clientX==='number'?ev.clientX:lr.left+lr.width/2;
+    const bw=badge.offsetWidth||200;
+    leftPx=Math.max(bw/2+8,Math.min(leftPx,innerWidth-bw/2-8));
+    badge.style.left=leftPx-bw/2+'px';
+    badge.style.top=lr.top-badge.offsetHeight-10+'px';
   }
 
-  if(typeof shareToast==='function'){
-    shareToast(`🕒 ${diaNom} ${fechaStr} · ${hora12}`);
-  }
+  /* [2026-11-19] se quitó el aviso de abajo con la fecha y hora (Carlos lo pidió); queda solo la etiqueta sobre la línea */
 
   clearTimeout(agNowClick._t);
   agNowClick._t=setTimeout(()=>{ const b=document.getElementById('ag-now-badge'); if(b) b.remove(); },5000);
@@ -3322,26 +3323,26 @@ function agNowUpdate(){
   if(!lines.length) return;
   const d=new Date();
   const min=d.getHours()*60+d.getMinutes()+d.getSeconds()/60;
-  const curTimeStr=d.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
   lines.forEach(line=>{
-    line.setAttribute('title',`Hora actual: ${curTimeStr} · Toca para ver fecha y día`);
     const isGw=line.closest && line.closest('.gw');
     const H0=isGw?8:AG.H0;
     const H1=isGw?21:AG.H1;
     const rowH=isGw?46:AG.rowH;
     if(min<H0*60||min>H1*60){
-      line.style.display='none';
+      if(line.style.display!=='none') line.style.display='none';
     } else {
-      line.style.display='block';
-      line.style.top=((min-H0*60)/60*rowH).toFixed(1)+'px';
+      const newTop=((min-H0*60)/60*rowH).toFixed(1)+'px';
+      if(line.style.display==='none') line.style.display='';
+      if(line.style.top!==newTop) line.style.top=newTop;
     }
   });
 }
+/* [RELOJ SIN PARPADEO 2026-11-19] la hora se escribe al dibujar, no un instante después */
+function clockTxt(){ const d=new Date(); return [d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':'); }
 function clockTick(){
   const c=document.getElementById('live-clock');
   if(c){
-    const d=new Date();
-    const t=[d.getHours(),d.getMinutes(),d.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+    const t=clockTxt();
     if(c.textContent!==t) c.textContent=t;
   }
   const curDay=todayISO();
@@ -4374,7 +4375,7 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
   if(mnPrompt&&!g){ h+=`<div class="mn-prompt"><b>📝 Es hora de «${esc(mnPrompt.title)}»</b><div class="muted">Abre la cita y desde ahí decides cuándo iniciar la minuta.</div><div class="mn-btns"><button class="mn-b" onclick="mnGoCita('${mnPrompt.tid}','${mnPrompt.sid}')">📅 Ir a la cita</button><button class="mn-b ghost" onclick="mnPrompt=null;mnRender()">Ahora no</button></div></div>`; }
   if(mnPre&&!g&&mnOpen) h+=mnPrePanel();
   if(g){ const rec=g.m.estado==='curso'; if(mnOpen) h+=`<div class="mn-pw"><div class="mn-panel">${mnPanelHtml(g)}</div><div class="mn-rz" title="Arrastra para cambiar el tamaño"></div></div>`;
-    h+=`<button class="mn-fab ${rec?'rec':''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}" data-pend="${rec?mnPlanEnd(g.s):''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
+    const _pc=rec?mnPillCls(mnPlanEnd(g.s),g.m.end):''; h+=`<button class="mn-fab ${rec?'rec':''}${_pc?' '+_pc:''}" title="${rec?'Minuta en curso':'Minuta'}" onclick="mnToggle()"><span class="mn-dot"></span><span class="mn-clk" data-start="${g.m.start}" data-end="${g.m.end||''}" data-pend="${rec?mnPlanEnd(g.s):''}">${mnClockTxt((g.m.end?new Date(g.m.end):new Date())-new Date(g.m.start))}</span><span class="mn-ico">📝</span></button>`; }
   r.classList.toggle('fab',!!g); r.classList.toggle('big',!!(g&&mnOpen&&mnBig)); setTimeout(()=>document.querySelectorAll('.mn-clk').forEach(mnPillClass),0);
   const sig=h.replace(/(<(?:span|div) class="mn-clk"[^>]*>)[^<]*/g,'$1');
   if(r.dataset.sig===sig&&(r.children.length||!h)){ mnGeoApply(); return; }
@@ -4384,7 +4385,8 @@ function mnRender(){ if(!session){ const r=document.getElementById('mn-root'); i
   const ni=document.getElementById('mn-in'); if(ni&&keep){ ni.value=keep.v; if(keep.f){ ni.focus(); try{ ni.setSelectionRange(keep.s,keep.s); }catch(_){} } } const nl=document.querySelector('.mn-lines'); if(nl) nl.scrollTop=lt; }
 /* Píldora del cronómetro: verde cuando faltan 20 min para que termine la cita (hora + duración planeada), amarilla a 15 y roja a 10 */
 function mnPlanEnd(s){ if(!s||s.isSeries||!s.date||!s.time||!(+s.durMin>0)) return ''; const st=new Date(s.date+'T'+s.time+':00').getTime(); return isNaN(st)?'':String(st+(+s.durMin)*60000); }
-function mnPillClass(e){ const f=e.closest('.mn-fab'); if(!f) return; const pe=+e.dataset.pend; let c=''; if(pe&&!e.dataset.end){ const left=(pe-Date.now())/60000; c=left<=10?'tm-red':left<=15?'tm-yellow':left<=20?'tm-green':''; } ['tm-red','tm-yellow','tm-green'].forEach(k=>f.classList.toggle(k,k===c)); if(c) f.title='Quedan '+Math.max(0,Math.ceil((+e.dataset.pend-Date.now())/60000))+' min de la hora planeada de la cita'; }
+function mnPillCls(pend,end){ const pe=+pend; if(!pe||end) return ''; const left=(pe-Date.now())/60000; return left<=10?'tm-red':left<=15?'tm-yellow':left<=20?'tm-green':''; }
+function mnPillClass(e){ const f=e.closest('.mn-fab'); if(!f) return; const c=mnPillCls(e.dataset.pend,e.dataset.end); ['tm-red','tm-yellow','tm-green'].forEach(k=>f.classList.toggle(k,k===c)); if(c) f.title='Quedan '+Math.max(0,Math.ceil((+e.dataset.pend-Date.now())/60000))+' min de la hora planeada de la cita'; }
 setInterval(()=>{ document.querySelectorAll('.mn-clk').forEach(e=>{ mnPillClass(e); if(e.dataset.end) return; e.textContent=mnClockTxt(Date.now()-new Date(e.dataset.start)); }); },1000);
 /* ---- Resumen imprimible, permisos y acceso por código desde el link de la sesión ---- */
 let mnSum=null, mnAuth=null; const mnFails={};
@@ -4920,7 +4922,7 @@ function sesProvider(url){ try{ const h=new URL(/^https?:\/\//i.test(url)?url:'h
 function sesAv(person,size){ person=person||{}; const st=`width:${size}px;height:${size}px`; return person.photo?`<span class="ps-av" style="${st};background-image:url('${person.photo}')"></span>`:`<span class="ps-av" style="${st};background:${person.color||'#3f7d6e'}">${mdEsc((person.name||'?')[0])}</span>`; }
 function sesClientLogo(c,size){ const st=`width:${size}px;height:${size}px`; return c.logo?`<span class="ps-av ps-logo" style="${st};background-image:url('${c.logo}')"></span>`:`<span class="ps-av" style="${st};background:#8a9a93">${mdEsc((c.name||'?')[0])}</span>`; }
 function viewPublicSession(){
-  const f=sesFind(); const _mt=session&&f&&f.ok&&mnRoleOk()?`<button class="pub-back pub-min" onclick="mnAuthOpen()">📝 ${(f.s.minutas||[]).length?'Ver minuta':'Minuta'}</button>`:''; const _au=(!session&&!clientSess&&f&&f.ok)?`<button class="pub-back pub-min" onclick="mnAuthOpen()">🔐 Acceso Nuwek</button>`:''; const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>${(session||clientSess)?`<div class="pub-acts">${_mt}<button class="pub-back" onclick="closePublicSes()">← Volver al portal</button></div>`:(_au?`<div class="pub-acts">${_au}</div>`:'')}</div>`;
+  const f=sesFind(); const _mt=session&&f&&f.ok&&mnRoleOk()?`<button class="pub-back pub-min" onclick="mnAuthOpen()">📝 ${(f.s.minutas||[]).length?'Ver minuta':'Minuta'}</button>`:''; const _au=(!session&&!clientSess&&f&&f.ok)?`<button class="pub-back pub-min" onclick="mnAuthOpen()">🔐 Acceso Nuwek</button>`:''; const top=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Gestión Nuwek</div>${(session||clientSess)?`<div class="pub-acts">${_mt}<button class="pub-back" onclick="closePublicSes()">← Volver a Gestión Nuwek</button></div>`:(_au?`<div class="pub-acts">${_au}</div>`:'')}</div>`;
   if(!f||!f.ok) return `<div class="pub-wrap">${top}<div class="pub-card"><h2>Este link no es válido</h2><p class="muted">Pudo haber cambiado o estar incompleto. Pídele a tu contacto en Nuwek que te lo vuelva a enviar.</p></div></div>`;
   const {t,s,c}=f; const ses=sesOf(s); const last=sesLast(s); const staffIds=[...new Set([s.personId,...(s.team||[])].filter(Boolean))].filter(id=>store.d.staff.some(u=>u.id===id));
   const nuwek=staffIds.map(id=>{ const u=store.person(id); return `<button class="ps-p" onclick="openSesContact('${id}')" title="${esc(u.name)} · clic para contactar">${sesAv(u,64)}<span class="ps-pn">${mdEsc((u.name||'').split(' ')[0])}</span></button>`; }).join('')||'<span class="muted">Por definir</span>';
@@ -4980,7 +4982,7 @@ function openClientLogin(){ showClientLogin=true; cpLoginErr=''; render(); setTi
 function closeClientLogin(){ showClientLogin=false; render(); }
 function clientLoginScreen(){
   return `<div class="login-wrap" style="background-image:linear-gradient(rgba(10,20,15,.45),rgba(10,20,15,.65)),url('${getLoginBg()}')"><div class="cl-card">
-    <div class="brand" style="justify-content:center;color:var(--green)"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
+    <div class="brand" style="justify-content:center;color:var(--green)"><span class="mark">N</span> Gestión Nuwek</div>
     <h2>Portal de clientes</h2><div class="muted" style="margin-bottom:14px">Entra con tu usuario y tu código de 6 cifras.</div>
     <div class="field"><label>Usuario</label><input id="cl-user" autocomplete="username" autocapitalize="off" onkeydown="if(event.key==='Enter')document.getElementById('cl-code').focus()"></div>
     <div class="field"><label>Código de 6 cifras</label><input id="cl-code" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password" placeholder="••••••" onkeydown="if(event.key==='Enter')clientLogin()"></div>
@@ -5008,7 +5010,7 @@ function renderClientPortal(){
   saveClientSession(); const secs=cpSecs(ctx); if(!secs.some(x=>x[0]===cpView)) cpView=secs[0][0];
   const {c,me}=ctx; const logo=c.logo?`<span class="cp-logo" style="background-image:url('${esc(c.logo)}')"></span>`:`<span class="cp-logo none">${esc((c.name||'?')[0])}</span>`;
   const body=({inicio:cpInicio,tareas:cpTareas,citas:cpCitas,minutas:cpMinutas,gantt:cpGantt,finanzas:cpFinanzas,tiempos:cpTiempos,notas:cpNotas,score:cpScore,usuarios:cpUsuarios})[cpView](ctx);
-  app.innerHTML=`<div class="topbar"><div class="topbar-in"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div>
+  app.innerHTML=`<div class="topbar"><div class="topbar-in"><div class="brand"><span class="mark">N</span> Gestión Nuwek</div>
       <div class="sessbar">${avatar(me,true)}<div class="sess-info"><div class="sess-nm">${esc(me.name)}</div><div class="sess-rl">${ctx.isAdmin?'Administrador':'Colaborador'} · ${esc(c.name)}</div></div><button class="sess-out cp-key" title="Cambiar mi código" onclick="cpChgOpen()">🔑<span class="hide-sm"> Cambiar código</span></button><button class="sess-out cp-out" onclick="clientLogout()">Salir</button></div></div></div>
     <div class="cp-wrap"><div class="cp-head">${logo}<div><div class="cp-eye">Portal del cliente</div><h1>${esc(c.name)}</h1></div></div>
       <div class="cp-nav2">${cpGroups(ctx).map(g=>`<div class="cp-grp">${g.t?`<div class="cp-gt">${g.t}</div>`:''}<div class="cp-gb">${g.items.map(([k,l])=>`<button class="${cpView===k?'active':''}" onclick="setCpView('${k}')">${l}</button>`).join('')}</div></div>`).join('')}</div>
@@ -5136,8 +5138,8 @@ function handleShareLink(id){ if(!id) return; if(session){ openSharedTask(id); r
 function goLoginFromShare(){ publicTaskId=null; render(); }
 function viewPublicTask(){
   const t=store.task(publicTaskId);
-  const head=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Nuwek <span class="slash">╱</span> Portal</div></div>`;
-  if(!t) return `<div class="pub-wrap">${head}<div class="pub-card"><h2>Esta tarea ya no existe</h2><p class="muted">Pudo haberse eliminado o el link está incompleto.</p><button class="btn" onclick="goLoginFromShare()">Ir al portal</button></div></div>`;
+  const head=`<div class="pub-top"><div class="brand"><span class="mark">N</span> Gestión Nuwek</div></div>`;
+  if(!t) return `<div class="pub-wrap">${head}<div class="pub-card"><h2>Esta tarea ya no existe</h2><p class="muted">Pudo haberse eliminado o el link está incompleto.</p><button class="btn" onclick="goLoginFromShare()">Ir a Gestión Nuwek</button></div></div>`;
   const p=store.project(t.projectId)||{name:''}; const c=store.client(p.clientId)||{name:''}; const f=kbFrente(t); const resp=store.person(t.responsibleId);
   const subs=subOrder(t,true).map(({s:x,depth})=>{ const per=x.personId?store.person(x.personId):null;
     return `<div class="pub-sub${x.done?' done':''}" style="${depth?'margin-left:26px;':''}"><span class="pub-chk">${x.done?'✓':''}</span><span class="pub-sn">${x.urgent?URG+' ':''}${mdEsc(x.name)}</span><span class="pub-sm">${per?mdEsc(per.name||''):'Sin responsable'}${x.date?' · '+dLabel(x.date):''}</span></div>`; }).join('');
@@ -5153,6 +5155,52 @@ function viewPublicTask(){
   </div></div>`; }
 window.addEventListener('hashchange',()=>{ const ss=takeSesionHash(); if(ss){ publicSes=ss; render(); return; } const id=takeShareHash(); if(id) handleShareLink(id); });
 
+/* ================== [URL POR SECCIÓN 2026-11-19] la dirección dice en qué sección estás ==================
+   Ejemplos: #/mis-pendientes · #/agenda · #/kanban · #/mi-desempeno · #/clientes · #/clientes/<id>/citas
+             #/proyectos/<id>/gantt · #/gestion/asig · #/catalogos · #/importar
+   - Al moverte, la URL cambia sola (sirven Atrás / Adelante del navegador).
+   - Al recargar o abrir el link (con sesión), abre esa misma sección.
+   - No toca los links compartidos #/tarea/… ni #/sesion/…, ni el portal de clientes. */
+const ROUTE_SLUG={op_pendientes:'mis-pendientes',op_agenda:'agenda',op_kanban:'kanban',op_desempeno:'mi-desempeno',clientes:'clientes',catalogos:'catalogos',importar:'importar',gestion:'gestion'};
+const ROUTE_COLAB=['op_pendientes','op_agenda','op_kanban','op_desempeno','proyecto'];
+const ROUTE_GEST=['cal','asig','citas','min','daily','dir'];
+let _routeFirst=true, _routeReplace=false;
+function routeEnc(x){ return encodeURIComponent(String(x)); }
+function routeDec(x){ try{ return decodeURIComponent(x); }catch(_){ return x; } }
+function routeHash(){
+  let v=view; if(isColab()&&!ROUTE_COLAB.includes(v)) v='op_pendientes';
+  if(v==='cliente'&&selClient) return '#/clientes/'+routeEnc(selClient)+'/'+routeEnc(clientTab);
+  if(v==='proyecto'&&selProject) return '#/proyectos/'+routeEnc(selProject)+'/'+routeEnc(selTab);
+  if(v==='gestion') return '#/gestion/'+routeEnc(gestSub);
+  return '#/'+(ROUTE_SLUG[v]||'clientes');
+}
+function applyRoute(h){
+  if(window.CLIENT_ONLY) return false;
+  const m=String(h||'').match(/^#\/(.+)$/); if(!m) return false;
+  const seg=m[1].split('/').map(routeDec); const s0=seg[0];
+  if(s0==='tarea'||s0==='sesion') return false;
+  let v=null;
+  if(s0==='clientes'&&seg[1]){ if(!store.client(seg[1])) return false; if(selClient!==seg[1]){ citaSel=null; finSel=null; } selClient=seg[1]; clientTab=seg[2]||'citas'; v='cliente'; }
+  else if(s0==='proyectos'&&seg[1]){ if(!store.project(seg[1])) return false; selProject=seg[1]; selTab=seg[2]||'gestor'; v='proyecto'; }
+  else if(s0==='gestion'){ v='gestion'; if(ROUTE_GEST.includes(seg[1])) gestSub=seg[1]; }
+  else { for(const k in ROUTE_SLUG) if(ROUTE_SLUG[k]===s0) v=k; }
+  if(!v) return false;
+  if(v==='catalogos'&&!can('catalogos')) v='clientes';
+  if(v==='importar'&&!canImport()) v='clientes';
+  if(isColab()&&!ROUTE_COLAB.includes(v)) v='op_pendientes';
+  view=v; modalTask=null; opSelTask=null;
+  return true;
+}
+function syncUrl(){
+  if(window.CLIENT_ONLY||!session||publicSes) return;
+  if(/^#\/(tarea|sesion)\//.test(location.hash||'')) return;   // link compartido aún sin leer
+  const h=routeHash(); if(location.hash===h){ _routeFirst=false; _routeReplace=false; return; }
+  try{ const url=location.pathname+location.search+h;
+    if(_routeFirst||_routeReplace) history.replaceState(null,'',url); else history.pushState(null,'',url); }catch(_){}
+  _routeFirst=false; _routeReplace=false;
+}
+window.addEventListener('popstate',()=>{ if(window.CLIENT_ONLY||!session||publicSes) return; if(applyRoute(location.hash)){ _routeReplace=true; render(); } });
+
 /* ================== AVISO DE VERSIÓN NUEVA ==================
    Cada push cambia la versión en index.html (meta app-version + ?v= en los archivos). Si alguien tiene abierta una versión
    vieja, sale un aviso para recargar y no se queda sin las mejoras. */
@@ -5160,7 +5208,7 @@ const APP_VERSION=(document.querySelector('meta[name="app-version"]')||{}).conte
 async function checkNewVersion(){
   if(!APP_VERSION||document.hidden||document.getElementById('ver-banner')) return;
   try{ const r=await fetch(location.pathname+'?_='+Date.now(),{cache:'no-store'}); const t=await r.text(); const m=t.match(/<meta name="app-version" content="([^"]*)"/);
-    if(m&&m[1]&&m[1]!==APP_VERSION){ const b=document.createElement('div'); b.id='ver-banner'; b.innerHTML='🆕 Hay una versión nueva del portal. <button onclick="location.reload()">Recargar ahora</button>'; document.body.appendChild(b); } }catch(_){}
+    if(m&&m[1]&&m[1]!==APP_VERSION){ const b=document.createElement('div'); b.id='ver-banner'; b.innerHTML='🆕 Hay una versión nueva de Gestión Nuwek. <button onclick="location.reload()">Recargar ahora</button>'; document.body.appendChild(b); } }catch(_){}
 }
 setInterval(checkNewVersion,60000); setTimeout(checkNewVersion,8000);
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) setTimeout(checkNewVersion,500); });
