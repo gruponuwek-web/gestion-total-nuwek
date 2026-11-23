@@ -1551,3 +1551,5 @@
 /* Aviso de "copiado": pequeño, visible y sin estorbar */
 .copy-toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,8px);z-index:10000;background:rgba(22,38,31,.92);color:#fff;font-size:.74rem;font-weight:600;padding:5px 12px;border-radius:999px;box-shadow:0 3px 10px rgba(0,0,0,.2);pointer-events:none;opacity:0;transition:opacity .15s,transform .15s;white-space:nowrap;font-family:'Space Grotesk',sans-serif}
 .copy-toast.show{opacity:1;transform:translate(-50%,0)}
+
+.nx-it.prev{background:#f3f3ee;opacity:.85}.nx-it.prev .nx-when{color:#7a7a70}
