@@ -841,7 +841,7 @@ function cliPeopleQ(v){ if(!cliPeople) return; cliPeople.q=v; const e=document.g
 function cliPeopleRows(){ const c=store.client(cliPeople.cid); if(!c) return ''; const q=impNz(cliPeople.q||''); const list=(c.people||[]).filter(p=>!q||impNz((p.name||'')+' '+(p.role||'')).includes(q));
   return list.map(p=>`<div class="cp-row" style="justify-content:space-between"><span style="display:flex;align-items:center;gap:8px;min-width:0">${avatar(p,true)}<span style="min-width:0"><b>${mnEsc(p.name)}</b>${p.portal?` <span title="Tiene acceso al portal (${mnEsc(p.portal.user)})">🔑</span>`:''}<br><span class="muted" style="font-size:.74rem">${mnEsc(p.role||'')}</span></span></span><span style="display:flex;gap:4px"><button class="chip-e" title="Editar" onclick="openContactEdit('${c.id}','${p.id}')">✏️</button><button class="chip-x" title="Quitar" onclick="delContact('${c.id}','${p.id}')">×</button></span></div>`).join('')||'<div class="muted" style="padding:10px">Sin coincidencias.</div>'; }
 function cliPeopleModal(){ const c=store.client(cliPeople.cid); if(!c){ cliPeople=null; return ''; }
-  return `<div class="modal active" style="z-index:100" onclick="if(event.target===this)closeCliPeople()"><div class="modal-card" style="max-width:520px"><div class="m-head"><div class="m-top"><div><div class="pill green">${mnEsc(c.name)}</div><h3 style="margin:8px 0 0">👥 Su gente · ${(c.people||[]).length}</h3></div><button class="x" onclick="closeCliPeople()">×</button></div></div><div class="m-body">
+  return `<div class="modal active" style="z-index:100" onpointerdown="this._mdown=(event.target===this)" onclick="if(event.target===this&&this._mdown&&!(window.getSelection&&window.getSelection().toString().trim()))closeCliPeople()"><div class="modal-card" style="max-width:520px"><div class="m-head"><div class="m-top"><div><div class="pill green">${mnEsc(c.name)}</div><h3 style="margin:8px 0 0">👥 Su gente · ${(c.people||[]).length}</h3></div><button class="x" onclick="closeCliPeople()">×</button></div></div><div class="m-body">
     <input id="cpl-q" class="filter-val" style="width:100%;margin-bottom:8px" placeholder="🔎 Buscar por nombre o cargo…" value="${mnEsc(cliPeople.q)}" oninput="cliPeopleQ(this.value)" autocomplete="off">
     <div id="cpl-list" class="cp-list" style="max-height:52vh;overflow:auto">${cliPeopleRows()}</div>
     <div class="wiz-actions"><span></span><button class="btn" onclick="openContactForm('${c.id}')">+ Contacto</button></div></div></div></div>`; }
@@ -2406,7 +2406,7 @@ function quickModal(){
       <div class="hint">La tarea aparecerá en la columna de su etapa (o según su fecha límite).</div>
       <div class="wiz-actions"><button class="btn ghost" onclick="closeQM()">Cancelar</button><button class="btn" onclick="saveNewTask()">Crear tarea</button></div>`;
   }
-  return `<div class="modal active" onclick="if(event.target===this)closeQM()"><div class="modal-card" style="max-width:520px"><div class="m-body">${inner}</div></div></div>`;
+  return `<div class="modal active" onpointerdown="this._mdown=(event.target===this)" onclick="if(event.target===this&&this._mdown&&!(window.getSelection&&window.getSelection().toString().trim()))closeQM()"><div class="modal-card" style="max-width:520px"><div class="m-body">${inner}</div></div></div>`;
 }
 function qmEtapaSync(){ const et=store.etapasOf(qm.pid).find(e=>e.id===val('qm-etapa')); if(et){const d=document.getElementById('qm-date'); if(d)d.value=et.start;} }
 function saveEtapa(){const n=val('qm-name'),s=val('qm-start'),e=val('qm-end');if(!n||!s||!e){alert('Nombre y fechas.');return;}store.addEtapa(qm.pid,n,s,e);qm=null;render();}
@@ -2578,7 +2578,7 @@ function saveKbTask(){
 /* ================== TASK MODAL ================== */
 function taskModal(){
   const t=store.task(modalTask); if(!t) return '';
-  return `<div class="modal active" onclick="if(event.target===this)closeTask()"><div class="modal-card">${taskBody(t,false)}</div></div>`;
+  return `<div class="modal active" onpointerdown="this._mdown=(event.target===this)" onclick="if(event.target===this&&this._mdown&&!(window.getSelection&&window.getSelection().toString().trim()))closeTask()"><div class="modal-card">${taskBody(t,false)}</div></div>`;
 }
 function taskPanel(){
   const t=opSelTask&&store.task(opSelTask);
@@ -2660,7 +2660,7 @@ function taskBody(t,panel){
     <div class="m-head">
       <div class="m-top">${(panel||editingTask===t.id)?`<div class="muted" style="font-size:.8rem;font-weight:600">${editingTask===t.id?'Editar tarea':'Detalle de tarea'}</div>`:`<div class="m-nav"><button onclick="navTask(-1)" ${idx<=0?'disabled':''}>‹</button><button onclick="navTask(1)" ${idx>=siblings.length-1?'disabled':''}>›</button><span class="muted" style="font-size:.8rem">${idx+1} de ${siblings.length}</span></div>`}
         <div style="display:flex;gap:6px;align-items:center">
-          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button>${canCopy()?`<button class="btn ghost sm" title="Copiar esta tarea (con subtareas) al mismo proyecto, a otro o a otro cliente" onclick="openCopy('${t.projectId}','${t.id}')">⧉ Copiar</button><button class="btn ghost sm" title="Mover esta tarea a otro proyecto o cliente" onclick="openMovT('${t.id}')">↦ Mover</button>`:''}${can('eliminarTareas')?`<button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}`:''}
+          ${(editingTask!==t.id)?`<button class="btn ghost sm" title="Copiar link para compartir esta tarea" onclick="copyTaskLink('${t.id}')">🔗 Link</button><button class="btn ghost sm" title="Copiar título y descripción" onclick="copyTaskFull('${t.id}')">📋 Copiar texto</button><button class="btn ghost sm" onclick="editTask('${t.id}')">✏️ Editar</button>${canCopy()?`<button class="btn ghost sm" title="Copiar esta tarea (con subtareas) al mismo proyecto, a otro o a otro cliente" onclick="openCopy('${t.projectId}','${t.id}')">⧉ Copiar</button><button class="btn ghost sm" title="Mover esta tarea a otro proyecto o cliente" onclick="openMovT('${t.id}')">↦ Mover</button>`:''}${can('eliminarTareas')?`<button class="btn ghost sm" onclick="deleteTask('${t.id}')">🗑️</button>`:''}`:''}
           ${(panel&&editingTask!==t.id)?'':`<button class="x" onclick="${editingTask===t.id?'cancelTaskEdit()':'closeTask()'}">×</button>`}
         </div></div>
       ${editingTask===t.id ? `
@@ -2680,7 +2680,7 @@ function taskBody(t,panel){
         ${can('daily')?`<div class="field"><label class="gf-opt"><input type="checkbox" id="et-daily" ${t.daily?'checked':''}> ☀️ <b>Tarea de Daily del área</b></label><div class="hint">Sus sub-subtareas son los Daily. Se inician solo desde Gestión › Daily.</div></div>`:''}
         <div class="wiz-actions"><button class="btn ghost" onclick="cancelTaskEdit()">Cancelar</button><button class="btn" onclick="saveTaskEdit('${t.id}')">Guardar</button></div>
       ` : `
-        <div class="m-title"><button class="urg-btn${t.urgent?' on':''}" title="${t.urgent?'Urgente: clic para quitar':'Marcar tarea como urgente'}" onclick="toggleTaskUrgent('${t.id}')">⚠️</button><h3>${dk(t)}${t.name}</h3></div>
+        <div class="m-title"><button class="urg-btn${t.urgent?' on':''}" title="${t.urgent?'Urgente: clic para quitar':'Marcar tarea como urgente'}" onclick="toggleTaskUrgent('${t.id}')">⚠️</button><h3>${dk(t)}${t.name}</h3><button type="button" class="copy-inline-btn" title="Copiar título" onclick="event.stopPropagation();copyTaskTitle('${t.id}')">📋 Copiar</button></div>
         <div class="m-crumb-row"><div class="m-crumb">${c.name} » ${p.name} » <span style="color:${fr.color};font-weight:600">${fr.name}</span></div>${tags?`<div class="m-tags">${tags}</div>`:''}</div>
         <div class="m-meta"><span>${avatar(resp,true)} <b>${resp.name}</b></span>${t.repeatCal?`<span class="rep-tag" title="Cada periodo se crea una tarea nueva con todas sus subtareas">↻ cada ${t.repeatCal.interval>1?t.repeatCal.interval+' ':''}${t.repeatCal.freq==='monthly'?(t.repeatCal.interval>1?'meses':'mes'):t.repeatCal.freq==='weekly'?(t.repeatCal.interval>1?'semanas':'semana'):'días'}</span>`:''}${t.repeatAfter?`<span class="rep-tag" title="Al marcarla Hecha se crea la siguiente">${repLabel(t.repeatAfter).replace('tras terminar','tras cerrarla')}</span>`:''}
           <select ${(isColab()&&!canEditTask(t))?'disabled title="Solo el responsable cambia el estado"':''} onchange="setTaskStatus('${t.id}',this.value)" style="padding:6px 10px;border-radius:7px;border:2px solid var(--line)">
@@ -2694,7 +2694,7 @@ function taskBody(t,panel){
       `}
     </div>
     <div class="m-body" ${editingTask===t.id?'style="display:none"':''}>
-      <div class="m-sec"><h4>Descripción</h4><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
+      <div class="m-sec"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><h4 style="margin:0">Descripción</h4>${t.description?`<button type="button" class="copy-inline-btn" title="Copiar descripción" onclick="event.stopPropagation();copyTaskDesc('${t.id}')">📋 Copiar</button>`:''}</div><div class="md ${t.description?'':'muted'}">${t.description?mdRender(t.description):(isColab()?'Sin descripción.':'Sin descripción. Usa ✏️ Editar para agregarla.')}</div></div>
       <div class="m-sec"><div class="subs-head"><h4 style="margin:0;display:flex;align-items:center;gap:8px">Subtareas (${workSubs(t).filter(s=>s.done).length}/${workSubs(t).length}) <button type="button" class="info-i" title="Cómo escribir subtareas y sub-subtareas" onclick="openVerbInfo()">i</button>${(nCita||subOnlyCita)?`<button type="button" class="sm-sub ${subOnlyCita?'on':''}" style="padding:3px 10px;font-size:.72rem" onclick="toggleCitaFilter()" title="Mostrar solo las subtareas con cita">📅 Con cita (${nCita})</button>`:''}</h4>
         <div class="subs-tabs"><button class="${subView==='list'?'on':''}" onclick="setSubView('list')">Subtareas</button><button class="${subView==='links'?'on':''}" onclick="setSubView('links')">🔗 Links</button>${can('log')?`<button class="${subView==='log'?'on':''}" onclick="setSubView('log')">📋 Log</button>`:''}</div></div>
         ${(subView==='log'&&can('log'))?taskLogPanel(t):(subView==='links')?taskLinksPanel(t):`${subs||'<div class="muted">Sin subtareas.</div>'}
@@ -2734,10 +2734,10 @@ function saveTaskEdit(id){
   editingTask=null;render();
 }
 function deleteTask(id,forced){ if(!can('eliminarTareas')){ shareToast('Tu perfil no puede eliminar tareas.'); return; } if(!forced){ delAsk={tid:id,sid:''}; render(); return; } { trashAdd('tarea',id); store.removeTask(id); modalTask=null; editingTask=null; render(); } }
-function openTaskHi(id,sids){ hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
+function openTaskHi(id,sids){ const sel=window.getSelection&&window.getSelection().toString(); if(sel&&sel.trim().length>0) return; hiClear(); const ids=(Array.isArray(sids)?sids:String(sids||'').split(',')).filter(Boolean); if(ids.length){ hiSub={tid:id,ids}; hiTimer=setTimeout(()=>{ hiSub=null; render(); },90000);
   const t=store.task(id); if(t){ const c=subCollapsedMap(); let ch=false; ids.forEach(sid=>{ const sb=(t.subtasks||[]).find(x=>x.id===sid); if(sb&&sb.parentId){ const par=(t.subtasks||[]).find(x=>x.id===sb.parentId); if(c[sb.parentId]===undefined?!!(par&&par.isSeries):c[sb.parentId]){ c[sb.parentId]=0; ch=true; } } }); if(ch){ try{ localStorage.setItem('subCollapsed',JSON.stringify(c)); }catch(_){} } } }
   openTask(id); if(ids.length) setTimeout(()=>{ const el=document.querySelector(`.sub-item[data-sid="${ids[0]}"]`); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); },150); }
-function openTask(id){ if(hiSub&&hiSub.tid!==id) hiClear(); modalTask=id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];subView='list';render();}
+function openTask(id){ const sel=window.getSelection&&window.getSelection().toString(); if(sel&&sel.trim().length>0) return; if(hiSub&&hiSub.tid!==id) hiClear(); modalTask=id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];subView='list';render();}
 function closeTask(){ hiClear(); modalTask=null;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];render();}
 function navTask(dir){const p=store.project(store.task(modalTask).projectId);const sib=store.tasksOf(p.id);let i=sib.findIndex(x=>x.id===modalTask);i=Math.max(0,Math.min(sib.length-1,i+dir));modalTask=sib[i].id;timingSub=null;editingTask=null;editingSub=null;draftAtt=[];draftMentions=[];render();}
 function setTaskStatus(id,s){const t=store.task(id);if(!canEditTask(t)){return;}store.updateTask(id,{status:s});logEvent(id,'Cambió el estado a '+(statusLabel[s]||s));render();}
@@ -2747,7 +2747,7 @@ function addLibLink(){const u=val('lib-url');if(!u){alert('Pon la URL del link.'
 function libraryModal(){
   const pid=libModal; const p=store.project(pid); if(!p)return '';
   const rows=store.linksOf(pid).map(l=>libCard(pid,l,false)).join('');
-  return `<div class="modal active" onclick="if(event.target===this)closeLibModal()"><div class="modal-card" style="max-width:560px">
+  return `<div class="modal active" onpointerdown="this._mdown=(event.target===this)" onclick="if(event.target===this&&this._mdown&&!(window.getSelection&&window.getSelection().toString().trim()))closeLibModal()"><div class="modal-card" style="max-width:560px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${p.name}</div><h3 style="margin:8px 0 0">📚 Biblioteca</h3></div>
       <button class="x" onclick="closeLibModal()">×</button></div></div>
     <div class="m-body">
@@ -3158,7 +3158,15 @@ async function boot(){
 /* ================== SINCRONIZACIÓN EN VIVO (máx. ~3 s) ================== */
 let syncBusy=false, syncDirty=false, syncTick=0, syncTimer=null, rtChannel=null, rtDebounce=null;
 const SYNC_FAST_MS=3000;
+/* Copiar texto: el refresco automático (cada 3 s) redibuja todo el HTML y borra cualquier selección.
+   Mientras el usuario está seleccionando (botón del mouse abajo) o tiene texto seleccionado, se pospone. */
+let _ptrDown=false;
+document.addEventListener('pointerdown',()=>{ _ptrDown=true; },true);
+['pointerup','pointercancel','dragend'].forEach(ev=>document.addEventListener(ev,()=>{ _ptrDown=false; },true));
+window.addEventListener('blur',()=>{ _ptrDown=false; });
+function selActive(){ if(_ptrDown) return true; try{ const s=window.getSelection&&window.getSelection(); return !!(s&&!s.isCollapsed&&s.toString().trim()); }catch(_){ return false; } }
 function syncIsBusy(){
+  if(selActive()) return true;
   const a=document.activeElement; if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(a.closest('#app')||a.closest('#modal-root'))) return true;
   if(tcDrag||sbDrag||agListDrag) return true;
   if(document.querySelector('.ag-block.dragging,.ag-block.resizing')) return true;
@@ -3168,6 +3176,7 @@ function syncIsBusy(){
   return false;
 }
 function renderKeepScroll(){
+  if(selActive()){ syncDirty=true; return; }   // no borrar el texto que el usuario está seleccionando/copiando
   const sel='.op-left,.op-right,.ag-left,.ag-right,.lib-det,.lib-side,.modal,.modal-card,.m-body,.gantt-wrap,.ga-scroll,.task-panel,.kb-board,.ag-cal,.gc-grid,.g-scroll';
   const y=window.scrollY; const saved=[...document.querySelectorAll(sel)].map(e=>({cls:e.className,top:e.scrollTop,left:e.scrollLeft}));
   render();
@@ -4629,7 +4638,7 @@ function subEditModal(){
   const bad=(v)=>v?'':' sm-miss'; const isPar=subIsParent(t,s0);
   const repAllowed=!s0.parentId&&!s0.seriesId; const repMode=(s0.isSeries||sr.freq)?'cal':(s.repeatAfter?'after':'none'); const missN=subMissing(s0,t).length; const tab=subEd.tab||'datos';
   const smTabsBar=`<div class="sm-tabs"><button type="button" class="sm-tab ${tab==='datos'?'on':''}" data-tab="datos" onclick="smTab('datos')">📝 Datos${missN?'<b class="sm-dot"></b>':''}</button><button type="button" class="sm-tab ${tab==='nuwek'?'on':''}" data-tab="nuwek" onclick="smTab('nuwek')">👥 Equipo Nuwek <i id="sm-n-nuwek"></i></button><button type="button" class="sm-tab ${tab==='cli'?'on':''}" data-tab="cli" onclick="smTab('cli')">🫱🏽‍🫲🏾 Cliente <i id="sm-n-cli"></i></button>${repAllowed?`<button type="button" class="sm-tab ${tab==='rep'?'on':''}" data-tab="rep" onclick="smTab('rep')">↻ Repetir <i id="sm-n-rep"></i></button>`:''}${!s0.isSeries?`<button type="button" class="sm-tab ${tab==='ses'?'on':''}" data-tab="ses" onclick="smTab('ses')">📅 Sesión</button>`:''}</div>`;
-  return `<div class="modal active" style="z-index:120" onclick="if(event.target===this)closeSubEdit()"><div class="modal-card" style="max-width:640px">
+  return `<div class="modal active" style="z-index:120" onpointerdown="this._mdown=(event.target===this)" onclick="if(event.target===this&&this._mdown&&!(window.getSelection&&window.getSelection().toString().trim()))closeSubEdit()"><div class="modal-card" style="max-width:640px">
     <div class="m-head"><div class="m-top"><div><div class="pill yellow">${esc(t.name)}</div><h3 style="margin:8px 0 0">Editar ${s.parentId?'sub-subtarea':'subtarea'}</h3></div><button class="x" onclick="closeSubEdit()">×</button></div></div>
     <div class="m-body">
       ${smTabsBar}
@@ -5085,6 +5094,55 @@ function cpQuitarAcceso(){ const ctx=cpCtx(); if(!ctx||!ctx.isAdmin||!cpUserEd||
    la dirección se limpia de inmediato; para editar o comentar hay que iniciar sesión. */
 let publicTaskId=null, afterLoginTask=null;
 function taskShareUrl(id){ return location.origin+location.pathname+'#/tarea/'+encodeURIComponent(id); }
+/* Aviso pequeño y discreto al copiar: una píldora abajo al centro que no bloquea clics y se va sola en ~1.5 s */
+function copyToast(msg){
+  let t=document.getElementById('copy-toast');
+  if(!t){ t=document.createElement('div'); t.id='copy-toast'; t.className='copy-toast'; t.setAttribute('role','status'); document.body.appendChild(t); }
+  t.textContent=msg; t.classList.remove('show'); void t.offsetWidth; t.classList.add('show');
+  clearTimeout(copyToast._t); copyToast._t=setTimeout(()=>t.classList.remove('show'),1500);
+}
+function copyTextToClipboard(text, label){
+  if(!text){ copyToast('No hay texto para copiar'); return; }
+  const done=()=>copyToast(`✓ ${label||'Texto'} copiado`);
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done,()=>legacyClipboardCopy(text,done));
+  } else {
+    legacyClipboardCopy(text,done);
+  }
+}
+function legacyClipboardCopy(text,cb){
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text;
+    ta.style.position='fixed';
+    ta.style.top='0';
+    ta.style.left='0';
+    ta.style.opacity='0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    ta.remove();
+    if(cb) cb();
+  }catch(_){
+    prompt('Copia el texto:',text);
+  }
+}
+function copyTaskTitle(id){
+  const t=store.task(id); if(!t) return;
+  copyTextToClipboard(t.name, 'Título');
+}
+function copyTaskDesc(id){
+  const t=store.task(id); if(!t) return;
+  copyTextToClipboard(t.description||'', 'Descripción');
+}
+function copyTaskFull(id){
+  const t=store.task(id); if(!t) return;
+  const p=store.project(t.projectId); const c=p?store.client(p.clientId):null;
+  const header=[c?c.name:'', p?p.name:''].filter(Boolean).join(' » ');
+  const txt=[header?`[${header}]`:null, t.name, t.description?`\n${t.description}`:''].filter(Boolean).join('\n');
+  copyTextToClipboard(txt, 'Título y descripción');
+}
 function copyTaskLink(id){ const url=taskShareUrl(id);
   const done=()=>shareToast('🔗 Link copiado. Cualquiera puede ver la tarea; para editar debe iniciar sesión.');
   if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(done,()=>prompt('Copia el link:',url));
@@ -5112,9 +5170,12 @@ function viewPublicTask(){
   const done=workSubs(t).filter(x=>x.done).length, tot=workSubs(t).length;
   return `<div class="pub-wrap">${head}<div class="pub-card">
     <div class="pub-crumb">${mdEsc(c.name)} » ${mdEsc(p.name)} » <span style="color:${f.color};font-weight:600">${mdEsc(f.name)}</span></div>
-    <h2>${urgMark(t.urgent)}${dk(t)}${mdEsc(t.name)}</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <h2 style="margin:0">${urgMark(t.urgent)}${dk(t)}${mdEsc(t.name)}</h2>
+      <button type="button" class="copy-inline-btn" title="Copiar título" onclick="copyTaskTitle('${t.id}')">📋 Copiar</button>
+    </div>
     <div class="pub-meta"><span class="badge s-${t.status}">${statusLabel[t.status]||t.status}</span>${t.dueDate?`<span>🏁 Fecha límite: <b>${dLabel(t.dueDate)}</b></span>`:''}<span>Responsable: <b>${mdEsc(resp.name||'—')}</b></span>${tags}</div>
-    ${t.description?`<div class="md pub-desc">${mdRender(t.description)}</div>`:''}
+    ${t.description?`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;margin-bottom:6px"><h4 style="margin:0">Descripción</h4><button type="button" class="copy-inline-btn" title="Copiar descripción" onclick="copyTaskDesc('${t.id}')">📋 Copiar</button></div><div class="md pub-desc">${mdRender(t.description)}</div>`:''}
     <h4 style="margin:18px 0 6px">Subtareas (${done}/${tot})</h4>${subs||'<div class="muted">Sin subtareas.</div>'}
     <div class="pub-cta"><div class="muted">Vista de solo lectura. Para editar, comentar o marcar avances, inicia sesión.</div><button class="btn" onclick="goLoginFromShare()">Iniciar sesión para editar</button></div>
   </div></div>`; }
