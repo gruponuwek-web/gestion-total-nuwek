@@ -14,7 +14,7 @@ const GCAL_SCOPE = 'https://www.googleapis.com/auth/calendar.events';   // ver y
 const GCAL_DAYS = 14;                       // cuántos días hacia adelante se muestran
 const GCAL_PUSH_DAYS = 365;                 // hasta cuántos días adelante se mandan tus actividades a Google
 const GCAL_API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
-const GCAL_EMPTY = () => ({ uid:null, token:null, exp:0, scope:'', linked:false, email:'', events:null, cal:'', loading:false, err:'', at:0, push:null });
+const GCAL_EMPTY = () => ({ uid:null, token:null, exp:0, scope:'', linked:false, email:'', events:null, cal:'', loading:false, err:'', at:0, push:null, sentSig:'', made:{} });
 let gcal = GCAL_EMPTY();
 
 /* escape completo: los títulos vienen de invitaciones de cualquiera, no solo del equipo */
@@ -107,7 +107,7 @@ async function gauthRefreshNow(st,uid){
   try{
     const r=await gauthCall({ action:'gtoken', st });
     if(gcal.uid!==uid) return false;
-    if(r&&r.linked){ const was=gcalConnected(); gauthApply(r); if(!was){ gcalLoad(true); gcalRefreshUI(); } return true; }
+    if(r&&r.linked){ const was=gcalConnected(); gauthApply(r); if(!was){ gcalLoad(true); gcalRefreshUI(); gcalPushSoon(); } return true; }   // lo que cambió mientras no había permiso sale ahora
     gauth.srv=false;
     if(r&&r.revoked){ gcal.err='Google ya no permite el acceso a tu calendario (se quitó el permiso). Presiona «Reconectar».'; gcalRefreshUI(); }
     return false;
@@ -216,12 +216,18 @@ const GCAL_MSG={
   gone:'Ese evento ya no existe en tu Google Calendar.',
   net:'Sin conexión con Google. Revisa tu internet e intenta de nuevo.'
 };
+/* [GOOGLE · SYNC 2026-11-26] una llamada que Google no contesta se corta a los GCAL_TIMEOUT_MS: antes se quedaba
+   colgada para siempre con el envío «en curso» y ya no salía nada más a Google hasta recargar la página.
+   Un POST cortado no se reintenta aquí (Google pudo haberlo creado: se duplicaría); el siguiente envío lo revisa. */
+const GCAL_TIMEOUT_MS=25000;
 async function gcalFetch(url,opt){
   opt=opt||{};
   for(let i=0;;i++){
-    let r;
-    try{ r=await fetch(url,Object.assign({},opt,{headers:Object.assign({Authorization:'Bearer '+gcal.token},opt.body?{'Content-Type':'application/json'}:{})})); }
-    catch(_){ if(i<2){ await new Promise(z=>setTimeout(z,800*2**i)); continue; } const x=new Error(GCAL_MSG.net); x.kind='net'; throw x; }
+    let r; const ac=typeof AbortController==='function'?new AbortController():null, to=ac?setTimeout(()=>ac.abort(),GCAL_TIMEOUT_MS):0;
+    try{ r=await fetch(url,Object.assign({},opt,ac?{signal:ac.signal}:{},{headers:Object.assign({Authorization:'Bearer '+gcal.token},opt.body?{'Content-Type':'application/json'}:{})})); }
+    catch(_){ clearTimeout(to); const post=opt.method==='POST'&&ac&&ac.signal.aborted;
+      if(i<2&&!post){ await new Promise(z=>setTimeout(z,800*2**i)); continue; } const x=new Error(GCAL_MSG.net); x.kind='net'; throw x; }
+    clearTimeout(to);
     if(r.ok) return r.status===204?null:r.json().catch(()=>null);
     const info=await gcalErrInfo(r), why=info.reason;
     const rate=r.status===429||(r.status===403&&/rateLimit|userRateLimit|quotaExceeded|RESOURCE_EXHAUSTED/i.test(why));
@@ -319,7 +325,7 @@ function gcalSame(ev,b){
 async function gcalPushMine(){
   if(!gcalConnected()||(gcal.push&&gcal.push.running)) return;   // nunca dos envíos a la vez (duplicarían eventos)
   gcal.autoAt=Date.now();
-  const uid=gcal.uid;
+  const uid=gcal.uid, sig=gcalActsSig(); if(!gcal.made) gcal.made={};
   const call=async(url,opt)=>{ try{ return await gcalFetch(url,opt); }catch(e){ if(e.kind==='gone'&&opt&&(opt.method==='DELETE'||opt.method==='PATCH')) return {gone:true}; throw e; } };
   gcal.push={running:true,msg:'Enviando tus actividades…'}; gcalRefreshUI();
   try{
@@ -332,11 +338,17 @@ async function gcalPushMine(){
     /* [GOOGLE · ERROR 400 2026-10-23] una actividad que Google rechaza no detiene a las demás: se cuenta, se anota en la
        consola y se sigue (antes un solo rechazo dejaba «Google respondió con un error (400)» y no se enviaba nada más) */
     const one=async fn=>{ try{ await fn(); }catch(e){ if(e.kind&&e.kind!=='http'&&e.kind!=='gone') throw e; bad++; console.warn('Google Calendar no aceptó una actividad:',e.message,e.detail||''); } };
+    /* [GOOGLE · SYNC 2026-11-26] un evento recién creado puede tardar en aparecer en la búsqueda de Google: si este
+       navegador ya lo creó, se actualiza por su id en lugar de crear otro (evita duplicados ahora que se envía más seguido) */
+    const post=async(key,b)=>{ const r=await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); if(r&&r.id) gcal.made[key]=r.id; nu++; };
     for(const a of gcalMyActs()){ if(gcal.uid!==uid) return; const b=gcalActBody(a); keep.add(a.key); const ev=mine[a.key];
-      if(!ev) await one(async()=>{ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; });
-      else if(!gcalSame(ev,b)) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); nu++; } else up++; }); }
+      if(ev) delete gcal.made[a.key];
+      if(!ev&&gcal.made[a.key]) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(gcal.made[a.key]),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ delete gcal.made[a.key]; await post(a.key,b); } else up++; });
+      else if(!ev) await one(async()=>{ await post(a.key,b); });
+      else if(!gcalSame(ev,b)) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ await post(a.key,b); } else up++; }); }
     /* terminadas, movidas fuera del rango o que ya no son tuyas: se quitan de tu calendario */
     for(const sid in mine){ if(keep.has(sid)) continue; if(gcal.uid!==uid) return; await one(async()=>{ await call(GCAL_API+'/'+encodeURIComponent(mine[sid].id),{method:'DELETE'}); del++; }); }
+    gcal.sentSig=sig;   // lo de Google ya corresponde a esta versión de tus actividades
     const parts=[nu&&nu+' nueva'+(nu>1?'s':''),up&&up+' actualizada'+(up>1?'s':''),del&&del+' quitada'+(del>1?'s':''),bad&&bad+' que Google no aceptó'].filter(Boolean);
     gcal.push={running:false,ok:true,at:Date.now(),msg:parts.length?'✓ Tus actividades: '+parts.join(' · '):(gcal.push&&gcal.push.ok&&gcal.push.msg)||'✓ Tus actividades están al día en Google'};
   }catch(e){
@@ -561,13 +573,30 @@ function gcalMoveEvent(e,day,hm,dur){
     gcalRefreshUI();
   });
 }
-/* cuando cambias tus actividades en el portal (mover, cambiar hora, terminar…), se mandan a Google a los pocos segundos */
+/* [GOOGLE · SYNC 2026-11-26] cuándo se mandan tus actividades a Google.
+   Antes solo salían cuando TÚ guardabas algo en ESTE navegador (store.save). Una sesión que te registró otra persona,
+   o que diste de alta desde otro navegador/celular, llegaba por la sincronización en vivo SIN pasar por store.save:
+   no salía a Google hasta que volvías a abrir y guardar el evento (o hasta el envío de cada 10 min, que solo corría
+   con tu Agenda a la vista). Tampoco salía lo que cambiaba mientras el permiso de Google estaba vencido.
+   Ahora:
+   - store.save y la sincronización en vivo (syncTables) llaman a gcalPushSoon;
+   - gcalPushSoon compara una «firma» de lo que debería estar en tu Google con la del último envío bueno y solo
+     envía si cambió (así las miles de sincronizaciones de otros no llaman a Google de más);
+   - cada 30 s se revisa esa firma (red de seguridad: renovación del permiso, arranque, envíos que fallaron) y
+     cada GCAL_FULL_MS se hace un envío completo aunque no cambie nada (por si borraste algo a mano en Google). */
+const GCAL_FULL_MS=10*60000;
+function gcalActsSig(){ try{ return JSON.stringify(gcalMyActs().map(a=>[a.key,gcalActBody(a)])); }catch(_){ return ''; } }
 function gcalPushSoon(){
   const who=gcalWho(); if(!who) return;   // store.save() corre al crear la app, antes de que exista «session» (gcalWho lo cuida)
-  if(!gcal.uid||gcal.uid!==who||!gcalConnected()||!gcalCanWrite()) return;
   if(window.__bootStale) return;   // [ARRANQUE INSTANTÁNEO] con la copia local no se manda nada a Google; al llegar los datos al día sí
-  clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{ if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; } gcalPushMine().then(()=>gcalLoad(true,true)); },1500);
+  if(!gcalConnected()||gcal.uid!==who||!gcalCanWrite()) return;   // sin permiso vigente: la revisión de cada 30 s lo manda al reconectar
+  clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{
+    if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; }
+    if(gcalWho()!==who||!gcalConnected()) return;
+    if(gcal.sentSig&&Date.now()-(gcal.autoAt||0)<GCAL_FULL_MS&&gcalActsSig()===gcal.sentSig) return;   // Google ya está al día
+    gcalPushMine().then(()=>gcalLoad(true,true)); },1500);
 }
+setInterval(()=>{ if(!document.hidden&&gcalWho()) gcalPushSoon(); },30000);
 
 /* al volver a esta pestaña (por ejemplo, después de crear un evento en Google) se traen tus eventos otra vez */
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gcalLiveTick(3000); });

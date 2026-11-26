@@ -3238,6 +3238,7 @@ async function syncTables(set){
     if(got.pr){ put('projects',got.pr.projects); put('frentes',got.pr.frentes); put('etapas',got.pr.etapas); }
     if(got.clients) put('clients',got.clients); if(got.staff) put('staff',got.staff); if(got.tags) put('tags',got.tags); if(got.perfiles&&!perfDirty){ const b=JSON.stringify(store.d.perfiles||[]); put('perfiles',got.perfiles); if(b!==JSON.stringify(got.perfiles)) perfVer++; }
     if(!changed) return;
+    if((got.tasks||got.pr)&&typeof gcalPushSoon==='function') gcalPushSoon();   // [GOOGLE · SYNC 2026-11-26] sesiones que te registró otra persona (u otro navegador) salen a tu Google Calendar
     if(modalTask&&!store.task(modalTask)){ modalTask=null; editingTask=null; }
     if(opSelTask&&!store.task(opSelTask)) opSelTask=null;
     if(selProject&&!store.project(selProject)){ selProject=null; if(view==='proyecto') view=isColab()?'op_pendientes':'clientes'; }
