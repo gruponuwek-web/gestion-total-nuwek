@@ -289,6 +289,12 @@ function gcalMyActs(){
     if(t.responsibleId===me&&t.dueDate&&t.dueDate>=from&&t.dueDate<=to) out.push({kind:'due',key:'due_'+t.id,t,p,c}); });
   return out;
 }
+function gcalNormTime(t){
+  const m=String(t||'').trim().match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return '';
+  const hh=+m[1], mm=+m[2];
+  return (hh>=0&&hh<24&&mm>=0&&mm<60)?String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'):'';
+}
 function gcalActBody(a){
   if(a.kind==='cita') return gcalCitaBody(a);
   const tz=(Intl.DateTimeFormat().resolvedOptions().timeZone)||'America/Mexico_City';
@@ -304,8 +310,9 @@ function gcalActBody(a){
   const meet=typeof gcalSubMeet==='function'?gcalSubMeet(a.s):'';
   const desc=[where,'Tarea: '+a.t.name,rolTx,meet?'Videollamada: '+meet:'','','Abrir en Nuwek: '+link].filter((x,i,arr)=>x||i===arr.length-2).join('\n');
   let when;
-  if(a.s.time){ const st=new Date(a.s.date+'T'+a.s.time+':00'); const en=new Date(st.getTime()+Math.max(+a.s.durMin||30,15)*60000);
-    when={start:{dateTime:a.s.date+'T'+a.s.time+':00',timeZone:tz},end:{dateTime:gcalLocalISO(en)+'T'+gcalHM(en)+':00',timeZone:tz}}; }
+  const tm=gcalNormTime(a.s.time);
+  if(tm){ const st=new Date(a.s.date+'T'+tm+':00'); const en=new Date(st.getTime()+Math.max(+a.s.durMin||30,15)*60000);
+    when={start:{dateTime:a.s.date+'T'+tm+':00',timeZone:tz},end:{dateTime:gcalLocalISO(en)+'T'+gcalHM(en)+':00',timeZone:tz}}; }
   else when=allDay(a.s.date);
   const tipo=typeof subTipo==='function'?subTipo(a.s,a.t):'';
   return Object.assign({summary:a.s.name||'(Sin nombre)',description:desc,location:meet||undefined,colorId:(typeof GCAL_SUB2G!=='undefined'&&GCAL_SUB2G[tipo])||'2',extendedProperties:{private:priv}},when);
@@ -331,9 +338,9 @@ async function gcalPushMine(){
   try{
     const t0=new Date(); t0.setHours(0,0,0,0); const lim=new Date(t0); lim.setDate(lim.getDate()+GCAL_PUSH_DAYS+1);
     /* lo que el portal ya había puesto en tu calendario */
-    const mine={}; let pageToken='';
+    const dup=[], mine={}; let pageToken='';
     do{ const q=new URLSearchParams({privateExtendedProperty:'nuwek=1',timeMin:t0.toISOString(),timeMax:lim.toISOString(),singleEvents:'true',maxResults:'250',showDeleted:'false'}); if(pageToken) q.set('pageToken',pageToken);
-      const d=await call(GCAL_API+'?'+q); (d&&d.items||[]).forEach(ev=>{ const sid=ev.extendedProperties&&ev.extendedProperties.private&&ev.extendedProperties.private.sid; if(sid&&ev.status!=='cancelled') mine[sid]=ev; }); pageToken=d&&d.nextPageToken||''; }while(pageToken);
+      const d=await call(GCAL_API+'?'+q); (d&&d.items||[]).forEach(ev=>{ const sid=ev.extendedProperties&&ev.extendedProperties.private&&ev.extendedProperties.private.sid; if(sid&&ev.status!=='cancelled'){ if(mine[sid]) dup.push(ev); else mine[sid]=ev; } }); pageToken=d&&d.nextPageToken||''; }while(pageToken);
     let nu=0, up=0, del=0, bad=0; const keep=new Set();
     /* [GOOGLE · ERROR 400 2026-10-23] una actividad que Google rechaza no detiene a las demás: se cuenta, se anota en la
        consola y se sigue (antes un solo rechazo dejaba «Google respondió con un error (400)» y no se enviaba nada más) */
@@ -341,16 +348,21 @@ async function gcalPushMine(){
     /* [GOOGLE · SYNC 2026-11-26] un evento recién creado puede tardar en aparecer en la búsqueda de Google: si este
        navegador ya lo creó, se actualiza por su id en lugar de crear otro (evita duplicados ahora que se envía más seguido) */
     const post=async(key,b)=>{ const r=await call(GCAL_API,{method:'POST',body:JSON.stringify(b)}); if(r&&r.id) gcal.made[key]=r.id; nu++; };
+    const ops=[];
     for(const a of gcalMyActs()){ if(gcal.uid!==uid) return; const b=gcalActBody(a); keep.add(a.key); const ev=mine[a.key];
       if(ev) delete gcal.made[a.key];
-      if(!ev&&gcal.made[a.key]) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(gcal.made[a.key]),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ delete gcal.made[a.key]; await post(a.key,b); } else up++; });
-      else if(!ev) await one(async()=>{ await post(a.key,b); });
-      else if(!gcalSame(ev,b)) await one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ await post(a.key,b); } else up++; }); }
+      if(!ev&&gcal.made[a.key]) ops.push(()=>one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(gcal.made[a.key]),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ delete gcal.made[a.key]; await post(a.key,b); } else up++; }));
+      else if(!ev) ops.push(()=>one(async()=>{ await post(a.key,b); }));
+      else if(!gcalSame(ev,b)) ops.push(()=>one(async()=>{ const r=await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'PATCH',body:JSON.stringify(gcalPatchWhen(b))}); if(r&&r.gone){ await post(a.key,b); } else up++; })); }
     /* terminadas, movidas fuera del rango o que ya no son tuyas: se quitan de tu calendario */
-    for(const sid in mine){ if(keep.has(sid)) continue; if(gcal.uid!==uid) return; await one(async()=>{ await call(GCAL_API+'/'+encodeURIComponent(mine[sid].id),{method:'DELETE'}); del++; }); }
-    gcal.sentSig=sig;   // lo de Google ya corresponde a esta versión de tus actividades
+    for(const sid in mine){ if(keep.has(sid)) continue; if(gcal.uid!==uid) return; ops.push(()=>one(async()=>{ await call(GCAL_API+'/'+encodeURIComponent(mine[sid].id),{method:'DELETE'}); del++; })); }
+    /* [GOOGLE · SYNC 2026-11-26] copias repetidas de la misma actividad (dos pestañas o dispositivos enviando a la vez): se quitan */
+    dup.forEach(ev=>ops.push(()=>one(async()=>{ await call(GCAL_API+'/'+encodeURIComponent(ev.id),{method:'DELETE'}); del++; })));
+    if(ops.length){ let idx=0; const run=async()=>{ while(idx<ops.length){ if(gcal.uid!==uid) return; await ops[idx++](); } }; await Promise.all(Array.from({length:Math.min(4,ops.length)},run)); }
+    if(gcal.uid!==uid) return;
+    gcal.sentSig=bad?'':sig;   // si alguna actividad falló, no se marca como al día para reintentarla después
     const parts=[nu&&nu+' nueva'+(nu>1?'s':''),up&&up+' actualizada'+(up>1?'s':''),del&&del+' quitada'+(del>1?'s':''),bad&&bad+' que Google no aceptó'].filter(Boolean);
-    gcal.push={running:false,ok:true,at:Date.now(),msg:parts.length?'✓ Tus actividades: '+parts.join(' · '):(gcal.push&&gcal.push.ok&&gcal.push.msg)||'✓ Tus actividades están al día en Google'};
+    gcal.push={running:false,ok:!bad,at:Date.now(),msg:parts.length?'✓ Tus actividades: '+parts.join(' · '):(gcal.push&&gcal.push.ok&&gcal.push.msg)||'✓ Tus actividades están al día en Google'};
   }catch(e){
     if(gcal.uid!==uid) return;
     if(e.kind==='exp'){ gcalExpired(); gcal.push={running:false,msg:GCAL_MSG.exp}; }
@@ -589,14 +601,18 @@ function gcalActsSig(){ try{ return JSON.stringify(gcalMyActs().map(a=>[a.key,gc
 function gcalPushSoon(){
   const who=gcalWho(); if(!who) return;   // store.save() corre al crear la app, antes de que exista «session» (gcalWho lo cuida)
   if(window.__bootStale) return;   // [ARRANQUE INSTANTÁNEO] con la copia local no se manda nada a Google; al llegar los datos al día sí
-  if(!gcalConnected()||gcal.uid!==who||!gcalCanWrite()) return;   // sin permiso vigente: la revisión de cada 30 s lo manda al reconectar
+  if(!gcalConnected()){ if(gauthPass()) gcalServerRefresh(false); return; }   // si el permiso venció y hay pase, se renueva de inmediato (al llegar llama a gcalPushSoon)
+  if(gcal.uid!==who||!gcalCanWrite()) return;
   clearTimeout(gcalPushSoon.t); gcalPushSoon.t=setTimeout(()=>{
+    gcalPushSoon.t=0;
     if(gcal.push&&gcal.push.running){ gcalPushSoon(); return; }
     if(gcalWho()!==who||!gcalConnected()) return;
     if(gcal.sentSig&&Date.now()-(gcal.autoAt||0)<GCAL_FULL_MS&&gcalActsSig()===gcal.sentSig) return;   // Google ya está al día
-    gcalPushMine().then(()=>gcalLoad(true,true)); },1500);
+    /* [GOOGLE · SYNC 2026-11-26] con varias pestañas abiertas solo una envía a la vez (si no, crearían duplicados) */
+    const go=()=>gcalPushMine().then(()=>gcalLoad(true,true));
+    if(navigator.locks&&navigator.locks.request) navigator.locks.request('nuwek-gcal-push',{ifAvailable:true},l=>l?go():null); else go(); },1500);
 }
-setInterval(()=>{ if(!document.hidden&&gcalWho()) gcalPushSoon(); },30000);
+setInterval(()=>{ if(!document.hidden&&gcalWho()&&!gcalPushSoon.t) gcalPushSoon(); },30000);
 
 /* al volver a esta pestaña (por ejemplo, después de crear un evento en Google) se traen tus eventos otra vez */
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) gcalLiveTick(3000); });
@@ -754,8 +770,9 @@ function gcalCitaBody(a){
   const dir=ses.lugar&&ses.lugar.tipo==='presencial'?(ses.lugar.direccion||''):'';
   const desc=['Cita con Nuwek · '+a.p.name, ses.objetivo?'Objetivo: '+ses.objetivo:'', meet?'Videollamada: '+meet:'', dir?'Lugar: '+dir:''].filter(Boolean).join('\n');
   let when;
-  if(a.s.time){ const st=new Date(a.s.date+'T'+a.s.time+':00'); const en=new Date(st.getTime()+Math.max(+a.s.durMin||60,15)*60000);
-    when={start:{dateTime:a.s.date+'T'+a.s.time+':00',timeZone:tz},end:{dateTime:gcalLocalISO(en)+'T'+gcalHM(en)+':00',timeZone:tz}}; }
+  const tm=gcalNormTime(a.s.time);
+  if(tm){ const st=new Date(a.s.date+'T'+tm+':00'); const en=new Date(st.getTime()+Math.max(+a.s.durMin||60,15)*60000);
+    when={start:{dateTime:a.s.date+'T'+tm+':00',timeZone:tz},end:{dateTime:gcalLocalISO(en)+'T'+gcalHM(en)+':00',timeZone:tz}}; }
   else { const n=new Date(a.s.date+'T00:00:00'); n.setDate(n.getDate()+1); when={start:{date:a.s.date},end:{date:gcalLocalISO(n)}}; }
   return Object.assign({summary:'Nuwek · '+(a.s.name||'Cita'),description:desc,location:meet||dir||undefined,colorId:'7',extendedProperties:{private:{nuwek:'1',sid:a.key,tid:a.t.id}}},when);
 }

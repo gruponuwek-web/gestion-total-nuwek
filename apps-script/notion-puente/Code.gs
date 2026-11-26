@@ -545,3 +545,102 @@ function probarGoogle() {
   const n = Object.keys(PropertiesService.getScriptProperties().getProperties()).filter((k) => k.indexOf('GTOKEN:') === 0).length;
   Logger.log('Personas con Google Calendar vinculado: ' + n);
 }
+
+// ---------- [GOOGLE · ENVÍO DESDE EL SERVIDOR 2026-11-26] ----------
+// Cada minuto (disparador) crea en el Google Calendar de cada persona conectada las actividades que le falten.
+// Solo crea; actualizar / quitar lo sigue haciendo el portal al abrirse (gcalPushMine).
+const GS_TZ = 'America/Mexico_City', GS_DAYS = 365;
+const GS_API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+
+function sbAll_(path) {
+  const out = [];
+  for (let off = 0; ; off += 1000) {
+    const r = UrlFetchApp.fetch(SB_URL + '/rest/v1/' + path + '&limit=1000&offset=' + off,
+      { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY }, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) throw new Error('Supabase ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+    const a = JSON.parse(r.getContentText()) || [];
+    out.push.apply(out, a);
+    if (a.length < 1000) return out;
+  }
+}
+const gsPad_ = (n) => String(n).padStart(2, '0');
+function gsAddMin_(date, hh, mm, min) {   // fecha+hora local + minutos → 'yyyy-MM-ddTHH:mm:ss' (sin zona; la zona va en timeZone)
+  const p = date.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], hh, mm) + min * 60000);
+  return Utilities.formatDate(d, 'UTC', "yyyy-MM-dd'T'HH:mm:ss");
+}
+const gsNextDay_ = (date) => gsAddMin_(date, 0, 0, 1440).slice(0, 10);
+
+function gsBody_(a) {
+  const priv = { nuwek: '1', sid: a.key, tid: a.t.id };
+  if (a.due) return { summary: '🏁 Fecha límite: ' + (a.t.name || '(Sin nombre)'), description: a.p.name + '\nFecha límite de la tarea (eres responsable)',
+    colorId: '11', start: { date: a.t.due_date }, end: { date: gsNextDay_(a.t.due_date) }, extendedProperties: { private: priv } };
+  const s = a.s, m = String(s.time || '').trim().match(/^(\d{1,2}):(\d{2})/);
+  const b = { summary: s.name || '(Sin nombre)', description: a.p.name + '\nTarea: ' + a.t.name, colorId: '2', extendedProperties: { private: priv } };
+  if (m && +m[1] < 24 && +m[2] < 60) {
+    const hh = +m[1], mm = +m[2], dur = Math.max(+s.durMin || 30, 15);
+    b.start = { dateTime: s.date + 'T' + gsPad_(hh) + ':' + gsPad_(mm) + ':00', timeZone: GS_TZ };
+    b.end = { dateTime: gsAddMin_(s.date, hh, mm, dur), timeZone: GS_TZ };
+  } else { b.start = { date: s.date }; b.end = { date: gsNextDay_(s.date) }; }
+  return b;
+}
+
+function gsPersona_(who, acts, hoy) {
+  if (!acts.length) return;
+  const row = gGet_(who); if (!row || !row.refresh_token) return;
+  let tok;
+  try { tok = gToken_({ refresh_token: row.refresh_token, grant_type: 'refresh_token' }).access_token; }
+  catch (e) { if (e.code === 'invalid_grant') gDel_(who); console.warn('Google ' + who + ': sin permiso (' + e.message + ')'); return; }
+  const H = { Authorization: 'Bearer ' + tok };
+  // lo que el portal ya puso en su calendario (desde hoy)
+  const ya = {}; let page = '';
+  const t0 = new Date(hoy + 'T00:00:00-06:00').toISOString();
+  do {
+    const q = 'privateExtendedProperty=' + encodeURIComponent('nuwek=1') + '&timeMin=' + encodeURIComponent(t0) +
+      '&singleEvents=true&maxResults=250&showDeleted=false' + (page ? '&pageToken=' + encodeURIComponent(page) : '');
+    const r = UrlFetchApp.fetch(GS_API + '?' + q, { headers: H, muteHttpExceptions: true });
+    if (r.getResponseCode() !== 200) { console.warn('Google ' + who + ' lista ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200)); return; }
+    const d = JSON.parse(r.getContentText()) || {};
+    (d.items || []).forEach((ev) => { const sid = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.sid; if (sid) ya[sid] = 1; });
+    page = d.nextPageToken || '';
+  } while (page);
+  // lo que falta se crea (máx. 40 por persona por vuelta para no pasar el tiempo límite del disparador)
+  acts.filter((a) => !ya[a.key]).slice(0, 40).forEach((a) => {
+    const r = UrlFetchApp.fetch(GS_API, { method: 'post', contentType: 'application/json', headers: H, payload: JSON.stringify(gsBody_(a)), muteHttpExceptions: true });
+    if (r.getResponseCode() >= 300) console.warn('Google ' + who + ' no aceptó «' + (a.s ? a.s.name : a.t.name) + '»: ' + r.getContentText().slice(0, 200));
+  });
+}
+
+/* función del disparador (cada minuto) */
+function gcalServidor() {
+  if (!gSecret_()) return;
+  const lock = LockService.getScriptLock(); if (!lock.tryLock(1000)) return;   // nunca dos vueltas a la vez (duplicarían)
+  try {
+    const props = PropertiesService.getScriptProperties().getProperties();
+    const whos = Object.keys(props).filter((k) => k.indexOf('GTOKEN:') === 0).map((k) => k.slice(7));
+    if (!whos.length) return;
+    const hoy = Utilities.formatDate(new Date(), GS_TZ, 'yyyy-MM-dd');
+    const lim = Utilities.formatDate(new Date(Date.now() + GS_DAYS * 86400000), GS_TZ, 'yyyy-MM-dd');
+    const proys = {}; sbAll_('proyectos?select=id,name').forEach((p) => { proys[p.id] = p; });
+    const por = {}; whos.forEach((w) => { por[w] = []; });
+    sbAll_('tareas?select=id,name,proyecto_id,status,responsible_id,due_date,subtasks').forEach((t) => {
+      const p = proys[t.proyecto_id]; if (!p || t.status === 'done') return;
+      (t.subtasks || []).forEach((s) => {
+        if (s.done || s.isSeries || !s.date || s.date < hoy || s.date > lim) return;
+        whos.forEach((w) => {
+          const rol = s.personId === w ? 'resp' : (s.team || []).indexOf(w) >= 0 ? 'equipo' : (s.invitados || []).indexOf(w) >= 0 ? 'invitado' : '';
+          if (rol) por[w].push({ key: s.id, s, t, p, rol });
+        });
+      });
+      if (t.responsible_id && por[t.responsible_id] && t.due_date && t.due_date >= hoy && t.due_date <= lim)
+        por[t.responsible_id].push({ key: 'due_' + t.id, due: true, t, p });
+    });
+    whos.forEach((w) => { try { gsPersona_(w, por[w], hoy); } catch (e) { console.warn('Google ' + w + ': ' + e.message); } });
+  } finally { lock.releaseLock(); }
+}
+
+/* correr UNA vez a mano para crear el disparador */
+function instalarDisparadorGoogle() {
+  ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'gcalServidor').forEach((t) => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('gcalServidor').timeBased().everyMinutes(1).create();
+}
