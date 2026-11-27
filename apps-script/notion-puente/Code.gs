@@ -546,9 +546,12 @@ function probarGoogle() {
   Logger.log('Personas con Google Calendar vinculado: ' + n);
 }
 
-// ---------- [GOOGLE · ENVÍO DESDE EL SERVIDOR 2026-11-26] ----------
-// Cada minuto (disparador) crea en el Google Calendar de cada persona conectada las actividades que le falten.
-// Solo crea; actualizar / quitar lo sigue haciendo el portal al abrirse (gcalPushMine).
+// ---------- [GOOGLE · ENVÍO DESDE EL SERVIDOR 2026-11-27 v2] ----------
+// Cada minuto (disparador) revisa el Google Calendar de cada persona conectada:
+//  - crea las actividades que le falten;
+//  - si cambió la fecha, la hora o el nombre en el portal, mueve/renombra el evento (no toca la descripción);
+//  - si la actividad se terminó (o su tarea), quita el evento.
+// Así ya no hace falta abrir el portal ni «volver a guardar» para que Google quede al día.
 const GS_TZ = 'America/Mexico_City', GS_DAYS = 365;
 const GS_API = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 
@@ -564,7 +567,7 @@ function sbAll_(path) {
   }
 }
 const gsPad_ = (n) => String(n).padStart(2, '0');
-function gsAddMin_(date, hh, mm, min) {   // fecha+hora local + minutos → 'yyyy-MM-ddTHH:mm:ss' (sin zona; la zona va en timeZone)
+function gsAddMin_(date, hh, mm, min) {   // fecha+hora local + minutos → 'yyyy-MM-ddTHH:mm:ss' (la zona va en timeZone)
   const p = date.split('-').map(Number);
   const d = new Date(Date.UTC(p[0], p[1] - 1, p[2], hh, mm) + min * 60000);
   return Utilities.formatDate(d, 'UTC', "yyyy-MM-dd'T'HH:mm:ss");
@@ -584,31 +587,85 @@ function gsBody_(a) {
   } else { b.start = { date: s.date }; b.end = { date: gsNextDay_(s.date) }; }
   return b;
 }
+/* inicio/fin comparables: 'yyyy-MM-dd' (todo el día) o 'yyyy-MM-ddTHH:mm' en hora de México */
+function gsWhen_(x) {
+  if (!x) return '';
+  if (x.date) return x.date;
+  if (!x.dateTime) return '';
+  if (x.timeZone === GS_TZ && !/[zZ]|[+-]\d\d:\d\d$/.test(x.dateTime)) return x.dateTime.slice(0, 16);
+  return Utilities.formatDate(new Date(x.dateTime), GS_TZ, "yyyy-MM-dd'T'HH:mm");
+}
 
-function gsPersona_(who, acts, hoy) {
-  if (!acts.length) return;
-  const row = gGet_(who); if (!row || !row.refresh_token) return;
+/* actividades pendientes por persona + ids de actividades terminadas (para quitarlas de Google) */
+function gsActs_(whos) {
+  const hoy = Utilities.formatDate(new Date(), GS_TZ, 'yyyy-MM-dd');
+  const lim = Utilities.formatDate(new Date(Date.now() + GS_DAYS * 86400000), GS_TZ, 'yyyy-MM-dd');
+  const proys = {}; sbAll_('proyectos?select=id,name').forEach((p) => { proys[p.id] = p; });
+  const tareas = sbAll_('tareas?select=id,name,proyecto_id,status,responsible_id,due_date,subtasks');
+  const por = {}, hechas = {}; whos.forEach((w) => { por[w] = []; });
+  tareas.forEach((t) => {
+    const p = proys[t.proyecto_id];
+    const cerrada = t.status === 'done';
+    if (cerrada) hechas['due_' + t.id] = 1;
+    (t.subtasks || []).forEach((s) => {
+      if (s.done || cerrada) { hechas[s.id] = 1; return; }
+      if (!p || s.isSeries || !s.date || s.date < hoy || s.date > lim) return;
+      whos.forEach((w) => {
+        const rol = s.personId === w ? 'resp' : (s.team || []).indexOf(w) >= 0 ? 'equipo' : (s.invitados || []).indexOf(w) >= 0 ? 'invitado' : '';
+        if (rol) por[w].push({ key: s.id, s, t, p, rol });
+      });
+    });
+    if (p && !cerrada && t.responsible_id && por[t.responsible_id] && t.due_date && t.due_date >= hoy && t.due_date <= lim)
+      por[t.responsible_id].push({ key: 'due_' + t.id, due: true, t, p });
+  });
+  return { hoy, por, hechas, nTareas: tareas.length };
+}
+
+/* devuelve {creadas, movidas, quitadas, errores} — dry=true solo cuenta (para el diagnóstico) */
+function gsPersona_(who, acts, hechas, hoy, dry) {
+  const res = { creadas: 0, movidas: 0, quitadas: 0, errores: 0, pendientes: acts.length };
+  const row = gGet_(who); if (!row || !row.refresh_token) { res.sinVinculo = true; return res; }
   let tok;
   try { tok = gToken_({ refresh_token: row.refresh_token, grant_type: 'refresh_token' }).access_token; }
-  catch (e) { if (e.code === 'invalid_grant') gDel_(who); console.warn('Google ' + who + ': sin permiso (' + e.message + ')'); return; }
+  catch (e) {
+    // OJO: ya NO se borra el vínculo aquí (antes un fallo pasajero dejaba a la persona desconectada para siempre)
+    console.warn('Google ' + who + ': sin permiso (' + e.message + '). Debe reconectar Google en el portal.');
+    res.sinPermiso = e.message; return res;
+  }
   const H = { Authorization: 'Bearer ' + tok };
-  // lo que el portal ya puso en su calendario (desde hoy)
   const ya = {}; let page = '';
   const t0 = new Date(hoy + 'T00:00:00-06:00').toISOString();
   do {
     const q = 'privateExtendedProperty=' + encodeURIComponent('nuwek=1') + '&timeMin=' + encodeURIComponent(t0) +
       '&singleEvents=true&maxResults=250&showDeleted=false' + (page ? '&pageToken=' + encodeURIComponent(page) : '');
     const r = UrlFetchApp.fetch(GS_API + '?' + q, { headers: H, muteHttpExceptions: true });
-    if (r.getResponseCode() !== 200) { console.warn('Google ' + who + ' lista ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200)); return; }
+    if (r.getResponseCode() !== 200) { console.warn('Google ' + who + ' lista ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200)); res.errores++; return res; }
     const d = JSON.parse(r.getContentText()) || {};
-    (d.items || []).forEach((ev) => { const sid = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.sid; if (sid) ya[sid] = 1; });
+    (d.items || []).forEach((ev) => { const sid = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.sid; if (sid && ev.status !== 'cancelled' && !ya[sid]) ya[sid] = ev; });
     page = d.nextPageToken || '';
   } while (page);
-  // lo que falta se crea (máx. 40 por persona por vuelta para no pasar el tiempo límite del disparador)
-  acts.filter((a) => !ya[a.key]).slice(0, 40).forEach((a) => {
-    const r = UrlFetchApp.fetch(GS_API, { method: 'post', contentType: 'application/json', headers: H, payload: JSON.stringify(gsBody_(a)), muteHttpExceptions: true });
-    if (r.getResponseCode() >= 300) console.warn('Google ' + who + ' no aceptó «' + (a.s ? a.s.name : a.t.name) + '»: ' + r.getContentText().slice(0, 200));
+  const call = (method, url, body) => {
+    if (dry) return true;
+    const o = { method, headers: H, muteHttpExceptions: true }; if (body) { o.contentType = 'application/json'; o.payload = JSON.stringify(body); }
+    const r = UrlFetchApp.fetch(url, o), c = r.getResponseCode();
+    if (c >= 300 && c !== 404 && c !== 410) { console.warn('Google ' + who + ' ' + method + ' ' + c + ': ' + r.getContentText().slice(0, 200)); res.errores++; return false; }
+    return true;
+  };
+  let n = 0;   // máx. 60 cambios por persona por vuelta (el resto sale en el siguiente minuto)
+  acts.forEach((a) => {
+    if (n >= 60) return;
+    const b = gsBody_(a), ev = ya[a.key];
+    if (!ev) { if (call('post', GS_API, b)) res.creadas++; n++; return; }
+    if (gsWhen_(ev.start) !== gsWhen_(b.start) || gsWhen_(ev.end) !== gsWhen_(b.end) || (ev.summary || '') !== b.summary) {
+      const fix = (x) => (x.dateTime ? Object.assign({ date: null }, x) : Object.assign({ dateTime: null, timeZone: null }, x));
+      if (call('patch', GS_API + '/' + encodeURIComponent(ev.id), { summary: b.summary, start: fix(b.start), end: fix(b.end) })) res.movidas++; n++;
+    }
   });
+  Object.keys(ya).forEach((sid) => {   // solo se quita lo que el portal marca como TERMINADO (nunca por falta de datos)
+    if (n >= 60 || !hechas[sid]) return;
+    if (call('delete', GS_API + '/' + encodeURIComponent(ya[sid].id))) res.quitadas++; n++;
+  });
+  return res;
 }
 
 /* función del disparador (cada minuto) */
@@ -619,23 +676,12 @@ function gcalServidor() {
     const props = PropertiesService.getScriptProperties().getProperties();
     const whos = Object.keys(props).filter((k) => k.indexOf('GTOKEN:') === 0).map((k) => k.slice(7));
     if (!whos.length) return;
-    const hoy = Utilities.formatDate(new Date(), GS_TZ, 'yyyy-MM-dd');
-    const lim = Utilities.formatDate(new Date(Date.now() + GS_DAYS * 86400000), GS_TZ, 'yyyy-MM-dd');
-    const proys = {}; sbAll_('proyectos?select=id,name').forEach((p) => { proys[p.id] = p; });
-    const por = {}; whos.forEach((w) => { por[w] = []; });
-    sbAll_('tareas?select=id,name,proyecto_id,status,responsible_id,due_date,subtasks').forEach((t) => {
-      const p = proys[t.proyecto_id]; if (!p || t.status === 'done') return;
-      (t.subtasks || []).forEach((s) => {
-        if (s.done || s.isSeries || !s.date || s.date < hoy || s.date > lim) return;
-        whos.forEach((w) => {
-          const rol = s.personId === w ? 'resp' : (s.team || []).indexOf(w) >= 0 ? 'equipo' : (s.invitados || []).indexOf(w) >= 0 ? 'invitado' : '';
-          if (rol) por[w].push({ key: s.id, s, t, p, rol });
-        });
-      });
-      if (t.responsible_id && por[t.responsible_id] && t.due_date && t.due_date >= hoy && t.due_date <= lim)
-        por[t.responsible_id].push({ key: 'due_' + t.id, due: true, t, p });
+    const A = gsActs_(whos);
+    if (!A.nTareas) { console.warn('Supabase devolvió 0 tareas: no se toca nada.'); return; }
+    whos.forEach((w) => {
+      try { const r = gsPersona_(w, A.por[w], A.hechas, A.hoy, false); if (r.creadas || r.movidas || r.quitadas || r.errores) console.log(w + ': ' + JSON.stringify(r)); }
+      catch (e) { console.warn('Google ' + w + ': ' + e.message); }
     });
-    whos.forEach((w) => { try { gsPersona_(w, por[w], hoy); } catch (e) { console.warn('Google ' + w + ': ' + e.message); } });
   } finally { lock.releaseLock(); }
 }
 
@@ -643,4 +689,28 @@ function gcalServidor() {
 function instalarDisparadorGoogle() {
   ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'gcalServidor').forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('gcalServidor').timeBased().everyMinutes(1).create();
+  Logger.log('Disparador listo: gcalServidor corre cada minuto.');
+}
+
+/* ▶ diagnosticoGoogle: dice quién está conectado, quién no, y qué le falta a cada quien en Google (no cambia nada) */
+function diagnosticoGoogle() {
+  Logger.log('GOOGLE_CLIENT_SECRET: ' + (gSecret_() ? 'OK' : 'FALTA'));
+  const trig = ScriptApp.getProjectTriggers().filter((t) => t.getHandlerFunction() === 'gcalServidor').length;
+  Logger.log('Disparador de gcalServidor: ' + (trig ? 'instalado ✔' : 'NO instalado ✘ (ejecuta instalarDisparadorGoogle)'));
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const whos = Object.keys(props).filter((k) => k.indexOf('GTOKEN:') === 0).map((k) => k.slice(7));
+  const gente = sbAll_('personal?select=id,name,active');
+  const nombre = {}; gente.forEach((u) => { nombre[u.id] = u.name || u.id; });
+  const sin = gente.filter((u) => u.active !== false && whos.indexOf(u.id) < 0).map((u) => u.name || u.id);
+  Logger.log('Conectadas al Puente (' + whos.length + '): ' + whos.map((w) => nombre[w] || w).join(', '));
+  Logger.log('SIN conectar al Puente (' + sin.length + '), a ellas NO les llega nada si no tienen el portal abierto: ' + sin.join(', '));
+  if (!whos.length) return;
+  const A = gsActs_(whos);
+  whos.forEach((w) => {
+    let r; try { r = gsPersona_(w, A.por[w], A.hechas, A.hoy, true); } catch (e) { r = { error: e.message }; }
+    const msg = r.sinPermiso ? 'PERMISO VENCIDO o quitado → debe Desconectar y volver a Conectar Google en el portal (' + r.sinPermiso + ')'
+      : r.error ? 'error: ' + r.error
+      : 'pendientes ' + r.pendientes + ' · faltan en Google ' + r.creadas + ' · con hora/nombre distinto ' + r.movidas + ' · terminadas que siguen en Google ' + r.quitadas;
+    Logger.log((nombre[w] || w) + ': ' + msg);
+  });
 }
